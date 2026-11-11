@@ -4,7 +4,9 @@
   "private": true,
   "description": "An Android-first autonomous software development agent.",
   "type": "module",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "eve dev",
     "build": "eve build",
@@ -13,8 +15,10 @@
   },
   "dependencies": {
     "eve": "^1.0.0-rc.6",
-    "ai": "^6.0.0",
+    "ai": "^7.0.137",
     "zod": "^4.0.0"
   },
-  "devDependencies": { "typescript": "^5.9.0" }
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  }
 }
