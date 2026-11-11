@@ -27,7 +27,7 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Generate official Eve Web Chat scaffold for inspection
-        if: github.head_ref == 'docs/android-web-chat-design'
+        if: (github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design'
         run: npx --no-install eve add channel/web --non-interactive --yes
 
       - name: Archive generated Web Chat scaffold
