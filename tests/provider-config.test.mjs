@@ -10,8 +10,8 @@ const packageJson = JSON.parse(
 test("Cloudflare Workers AI is the only configured model provider", () => {
   assert.match(agent, /createOpenAICompatible/);
   assert.match(agent, /cloudflare\.chatModel\("@cf\/zai-org\/glm-4\.7-flash"\)/);
-  assert.match(agent, /CLOUDFLARE_ACCOUNT_ID/);
-  assert.match(agent, /CLOUDFLARE_API_TOKEN/);
+  assert.match(agent, /env\.CLOUDFLARE_ACCOUNT_ID/);
+  assert.match(agent, /env\.CLOUDFLARE_API_TOKEN/);
   assert.doesNotMatch(agent, /openai\/|anthropic\/|gateway/i);
   assert.equal(packageJson.dependencies["@ai-sdk/openai-compatible"], "^3.0.87");
 });
