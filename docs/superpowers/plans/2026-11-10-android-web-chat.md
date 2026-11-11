@@ -186,7 +186,7 @@ Remaining work: verify real streaming and durable session restoration with an ap
 - [x] Configure a direct provider; do not use AI Gateway or paid fallback.
 - [x] Ensure absent credentials resolve to invalid placeholders instead of silently routing to another provider.
 - [x] Add source-contract tests for provider/model selection, environment variable names, and absence of fallback.
-- [ ] Run CI to update the npm lockfile and verify the Eve build and TypeScript check.
+- [x] Run CI to update the npm lockfile and verify the Eve build and TypeScript check (CI run 43007285397 passed).
 - [ ] Store user-created Cloudflare credentials as runtime secrets only after the user completes setup; do not ask for the token in chat.
 - [ ] Verify a live streamed response and confirm the Cloudflare account is on Workers Free before making any model request.
 
