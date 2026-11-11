@@ -8,7 +8,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
@@ -58,6 +58,23 @@ jobs:
           // The Next.js app is a peer under apps/web; the Eve agent is at the repo root.
           export default withEve(nextConfig, { eveRoot: "../.." });
           EOF
+
+      - name: Commit generated Web Chat source to the feature branch
+        if: (github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web package.json package-lock.json
+          if git diff --cached --quiet; then
+            echo "Generated Web Chat source is already committed."
+          else
+            git commit -m "feat: add official Eve Web Chat scaffold"
+            git push origin "HEAD:${TARGET_BRANCH}"
+          fi
 
       - name: Archive generated Web Chat scaffold
         if: (github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design'
