@@ -1,8 +1,9 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { defineAgent } from "eve";
+import { env } from "node:process";
 
-const accountId = process.env.CLOUDFLARE_ACCOUNT_ID ?? "missing-account-id";
-const apiToken = process.env.CLOUDFLARE_API_TOKEN ?? "missing-api-token";
+const accountId = env.CLOUDFLARE_ACCOUNT_ID ?? "missing-account-id";
+const apiToken = env.CLOUDFLARE_API_TOKEN ?? "missing-api-token";
 
 const cloudflare = createOpenAICompatible({
   name: "cloudflare-workers-ai",
