@@ -21,6 +21,15 @@
 - Production browser access must fail closed unless a real authentication mechanism is configured.
 - Preserve existing agent instructions and CI behavior while making type-checking unconditional once TypeScript source exists.
 
+## Model provider decision (approved)
+
+- Provider: Cloudflare Workers AI, called directly through the OpenAI-compatible chat-completions API; no Vercel AI Gateway or third-party paid fallback.
+- Model: `@cf/zai-org/glm-4.7-flash` (131,072-token context, function calling, reasoning, and zero data retention per Cloudflare's model page).
+- Package: `@ai-sdk/openai-compatible`.
+- Free-tier boundary: Cloudflare Workers Free currently includes 10,000 Neurons/day; after the allowance is exhausted, requests fail on Workers Free. Workers Paid charges above the allowance, so the user must keep the account on Workers Free. The app does not upgrade plans or configure paid fallback.
+- Credentials: `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` must be stored as runtime secrets. No token is requested in chat or committed to Git.
+- No Cloudflare account resources, tokens, billing settings, deployment, or secret storage have been changed by this implementation.
+
 ## Review Focus
 
 - Missing or malformed model configuration: show a safe actionable error and never expose credentials.
@@ -162,3 +171,23 @@ The personal-funds prohibition takes precedence over all agent goals, tools, pro
 - No Vercel project was linked, no provider credentials were added, no deployment occurred, and no paid model usage was triggered.
 
 Remaining work: verify real streaming and durable session restoration with an approved no-cost model/auth setup; add invalid-session and interrupted-stream integration tests; verify the UI at a 360 CSS-pixel viewport on an actual Android browser; and complete production authentication before any deployment.
+
+
+### Task 6: Configure the first free-tier model provider
+
+**Files:**
+- Create: `agent/agent.ts` with the Cloudflare Workers AI direct provider.
+- Modify: root `package.json` and lockfile for `@ai-sdk/openai-compatible`.
+- Create: `tests/provider-config.test.mjs`.
+- Modify: `README.md` with credential and free-tier setup boundaries.
+
+- [x] Select Cloudflare Workers AI after explicit user approval.
+- [x] Select GLM-4.7-Flash based on its documented free-plan eligibility, function calling, reasoning, 131,072-token context, and zero-data-retention property.
+- [x] Configure a direct provider; do not use AI Gateway or paid fallback.
+- [x] Ensure absent credentials resolve to invalid placeholders instead of silently routing to another provider.
+- [x] Add source-contract tests for provider/model selection, environment variable names, and absence of fallback.
+- [ ] Run CI to update the npm lockfile and verify the Eve build and TypeScript check.
+- [ ] Store user-created Cloudflare credentials as runtime secrets only after the user completes setup; do not ask for the token in chat.
+- [ ] Verify a live streamed response and confirm the Cloudflare account is on Workers Free before making any model request.
+
+**Verification:** CI build/type-check/tests must pass. A source configuration is not evidence of live model connectivity or a verified free-plan account. No provider request is permitted until the user has confirmed the account remains on Workers Free and the runtime secrets are set.
