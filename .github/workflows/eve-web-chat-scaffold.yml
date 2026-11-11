@@ -1,8 +1,8 @@
 name: Eve Web Chat scaffold inspection
 
 on:
-  pull_request:
-    branches: [main]
+  push:
+    branches: [docs/android-web-chat-design]
     paths:
       - ".github/workflows/eve-web-chat-scaffold.yml"
 
