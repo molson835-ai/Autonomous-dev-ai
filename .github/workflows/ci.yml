@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     name: Build and type-check
@@ -17,6 +21,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -73,8 +79,10 @@ jobs:
             echo "Generated Web Chat source is already committed."
           else
             git commit -m "feat: add official Eve Web Chat scaffold"
-            git push origin "HEAD:${TARGET_BRANCH}"
           fi
+          git fetch origin "${TARGET_BRANCH}"
+          git rebase "origin/${TARGET_BRANCH}"
+          git push origin "HEAD:${TARGET_BRANCH}"
 
       - name: Archive generated Web Chat scaffold
         if: (github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design'
