@@ -33,6 +33,7 @@ import { Trace, TraceIcon, TraceLine, TraceTitle } from "@/components/ui/trace";
 import { cn } from "@/lib/utils";
 import { AgentMessage } from "./agent-message";
 import { WEB_CHAT_AGENT } from "@/app/eve-agent";
+import { getAgentAuthHeaders } from "@/app/agent-auth";
 
 const DEFAULT_AGENT_NAME = "eve-agent";
 const AGENT_NAME = WEB_CHAT_AGENT ?? DEFAULT_AGENT_NAME;
@@ -59,6 +60,7 @@ export function AgentChat({
     );
   };
   const agent = useEveAgent({
+    headers: getAgentAuthHeaders,
     agent: WEB_CHAT_AGENT,
     prewarm: hasInputText,
     initialSession:
