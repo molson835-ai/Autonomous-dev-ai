@@ -114,3 +114,6 @@ jobs:
           else
             echo "No TypeScript source files yet; type-check will run when the first agent tool is added."
           fi
+
+      - name: Test planning and financial safety contract
+        run: node --test tests/*.test.mjs
