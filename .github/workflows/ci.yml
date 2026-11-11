@@ -8,7 +8,11 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   verify:
@@ -17,6 +21,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -25,6 +31,86 @@ jobs:
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+
+      - name: Generate official Eve Web Chat scaffold for inspection
+        id: scaffold
+        if: ((github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design') && hashFiles('apps/web/app/page.tsx') == ''
+        shell: bash
+        run: |
+          set +e
+          npx --no-install eve add channel/web --non-interactive --yes 2>&1 | tee /tmp/eve-web-chat-scaffold.log
+          command_status=${PIPESTATUS[0]}
+          set -e
+          if [ "$command_status" -eq 2 ] && grep -q '"status":"prerequisite_required"' /tmp/eve-web-chat-scaffold.log; then
+            echo "Scaffold files were generated; Vercel sign-in provisioning is deferred until a project is explicitly approved."
+            exit 0
+          fi
+          exit "$command_status"
+
+      - name: Complete local Next.js agent wiring
+        if: (github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design'
+        shell: bash
+        run: |
+          mkdir -p apps/web/app
+          cat > apps/web/app/eve-agent.ts <<'EOF'
+          /** Named workspace agent selected by the Web Chat installer. */
+          export const WEB_CHAT_AGENT: string | undefined = undefined;
+          EOF
+          cat > apps/web/next.config.ts <<'EOF'
+          import type { NextConfig } from "next";
+          import { withEve } from "eve/next";
+
+          const nextConfig: NextConfig = {};
+
+          // The Next.js app is a peer under apps/web; the Eve agent is at the repo root.
+          export default withEve(nextConfig, { eveRoot: "../.." });
+          EOF
+
+      - name: Commit generated Web Chat source to the feature branch
+        if: (github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web package.json package-lock.json
+          if git diff --cached --quiet; then
+            echo "Generated Web Chat source is already committed."
+          else
+            git commit -m "feat: add official Eve Web Chat scaffold"
+          fi
+          git fetch origin "${TARGET_BRANCH}"
+          git rebase "origin/${TARGET_BRANCH}"
+          git push origin "HEAD:${TARGET_BRANCH}"
+
+      - name: Archive generated Web Chat scaffold
+        if: (github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design'
+        run: |
+          tar -czf /tmp/eve-web-chat-scaffold.tar.gz \
+            --exclude='./.git' \
+            --exclude='./node_modules' \
+            --exclude='./.env' \
+            --exclude='./.env.*' \
+            .
+
+      - name: Upload generated Web Chat scaffold
+        if: (github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design'
+        uses: actions/upload-artifact@v4
+        with:
+          name: eve-web-chat-scaffold
+          path: /tmp/eve-web-chat-scaffold.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Install generated Web Chat dependencies
+        if: (github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design'
+        run: npm install --no-audit --no-fund
+
+      - name: Production-build generated Next.js Web Chat
+        if: (github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design'
+        run: npm run build:web
 
       - name: Build Eve agent
         run: npm run build
@@ -37,3 +123,6 @@ jobs:
           else
             echo "No TypeScript source files yet; type-check will run when the first agent tool is added."
           fi
+
+      - name: Test planning and financial safety contract
+        run: node --test tests/*.test.mjs
