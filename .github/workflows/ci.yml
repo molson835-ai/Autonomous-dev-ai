@@ -59,6 +59,14 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+      - name: Install generated Web Chat dependencies
+        if: (github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design'
+        run: npm install --no-audit --no-fund
+
+      - name: Production-build generated Next.js Web Chat
+        if: (github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design'
+        run: npm run build:web
+
       - name: Build Eve agent
         run: npm run build
 
