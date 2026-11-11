@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Build and type-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build Eve agent
+        run: npm run build
+
+      - name: Type-check authored TypeScript
+        shell: bash
+        run: |
+          if find agent -type f -name '*.ts' -print -quit | grep -q .; then
+            npm run typecheck
+          else
+            echo "No TypeScript source files yet; type-check will run when the first agent tool is added."
+          fi
