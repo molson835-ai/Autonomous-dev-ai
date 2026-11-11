@@ -26,6 +26,29 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Generate official Eve Web Chat scaffold for inspection
+        if: github.head_ref == 'docs/android-web-chat-design'
+        run: npx --no-install eve add channel/web --non-interactive --yes
+
+      - name: Archive generated Web Chat scaffold
+        if: github.head_ref == 'docs/android-web-chat-design'
+        run: |
+          tar -czf /tmp/eve-web-chat-scaffold.tar.gz \
+            --exclude='./.git' \
+            --exclude='./node_modules' \
+            --exclude='./.env' \
+            --exclude='./.env.*' \
+            .
+
+      - name: Upload generated Web Chat scaffold
+        if: github.head_ref == 'docs/android-web-chat-design'
+        uses: actions/upload-artifact@v4
+        with:
+          name: eve-web-chat-scaffold
+          path: /tmp/eve-web-chat-scaffold.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+
       - name: Build Eve agent
         run: npm run build
 
