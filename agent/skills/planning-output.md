@@ -21,7 +21,7 @@ Give a short, ordered sequence of concrete steps. Each step should name the inte
 Identify blockers, external dependencies, cost exposure, security concerns, and anything that requires user action or approval. Prefer open-source and free options. If a free quota is exhausted, pause or propose a no-cost alternative; never silently incur charges.
 
 ## Acceptance criteria
-List observable outcomes that can be checked. Distinguish automated checks from manual device, live-provider, or production verification.
+Acceptance criteria must be observable and testable. List outcomes that can be checked. Distinguish automated checks from manual device, live-provider, or production verification.
 
 # Capability and truthfulness limits
 
