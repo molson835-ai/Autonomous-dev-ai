@@ -28,10 +28,20 @@ jobs:
 
       - name: Generate official Eve Web Chat scaffold for inspection
         if: (github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design'
-        run: npx --no-install eve add channel/web --non-interactive --yes
+        shell: bash
+        run: |
+          set +e
+          npx --no-install eve add channel/web --non-interactive --yes 2>&1 | tee /tmp/eve-web-chat-scaffold.log
+          command_status=${PIPESTATUS[0]}
+          set -e
+          if [ "$command_status" -eq 2 ] && grep -q '"status":"prerequisite_required"' /tmp/eve-web-chat-scaffold.log; then
+            echo "Scaffold files were generated; Vercel sign-in provisioning is deferred until a project is explicitly approved."
+            exit 0
+          fi
+          exit "$command_status"
 
       - name: Archive generated Web Chat scaffold
-        if: github.head_ref == 'docs/android-web-chat-design'
+        if: (github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design'
         run: |
           tar -czf /tmp/eve-web-chat-scaffold.tar.gz \
             --exclude='./.git' \
