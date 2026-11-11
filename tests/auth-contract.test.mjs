@@ -8,17 +8,18 @@ const authModule = readFileSync("apps/web/app/agent-auth.ts", "utf8");
 const chat = readFileSync("apps/web/app/_components/agent-chat.tsx", "utf8");
 const layout = readFileSync("apps/web/app/layout.tsx", "utf8");
 
-test("Eve session routes require configured owner credentials", () => {
-  assert.match(channel, /httpBasic\(\{ username, password \}/);
+test("Eve session routes require configured owner credentials without a browser Basic challenge", () => {
+  assert.match(channel, /verifyHttpBasic\(/);
   assert.match(channel, /ROUTE_AUTH_BASIC_USER/);
   assert.match(channel, /ROUTE_AUTH_BASIC_PASSWORD/);
-  assert.match(channel, /: async \(\) => null/);
-  assert.match(channel, /auth: \[ownerAuth, localDev\(\)\]/);
+  assert.match(channel, /principalType:\s*["']service["']/);
+  assert.match(channel, /auth:\s*\[ownerAuth,\s*localDev\(\)\]/);
+  assert.doesNotMatch(channel, /\bhttpBasic\s*\(/);
   assert.doesNotMatch(channel, /\bnone\s*\(/);
 });
 
-test("browser sign-in verifies credentials before showing the chat", () => {
-  assert.match(access, /fetch\("\/eve\/v1\/info"/);
+test("browser sign-in verifies credentials against the protected operator info route", () => {
+  assert.match(access, /fetch\(["']\/eve\/v1\/info["']/);
   assert.match(access, /setAgentCredentials\(\{ username, password \}\)/);
   assert.match(access, /That username or password was not accepted/);
   assert.match(layout, /<AgentAccess>\{children\}<\/AgentAccess>/);
