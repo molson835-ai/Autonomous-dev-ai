@@ -43,3 +43,20 @@ test("planning contract requires verifiable acceptance criteria", () => {
   assert.match(planningContract, /Acceptance criteria must be observable and testable/i);
   assert.match(planningContract, /Distinguish automated checks from manual device/i);
 });
+
+const sessionPage = readFileSync("apps/web/app/s/[sessionId]/page.tsx", "utf8");
+const newSessionPage = readFileSync("apps/web/app/s/page.tsx", "utf8");
+const chatClient = readFileSync("apps/web/app/_components/agent-chat.tsx", "utf8");
+
+test("session URL route passes its session ID into the chat client", () => {
+  assert.match(sessionPage, /params: Promise<\{ readonly sessionId: string \}>/);
+  assert.match(sessionPage, /<AgentChat sessionId=\{sessionId\} \/>/);
+});
+
+test("chat client configures Eve session resume and preserves the session URL", () => {
+  assert.match(chatClient, /initialSession:[\s\S]*sessionId,[\s\S]*streamIndex: 0/);
+  assert.match(chatClient, /resume: sessionId !== undefined/);
+  assert.match(chatClient, /replaceState/);
+  assert.match(chatClient, /\/s\/\$\{encodeURIComponent\(nextSessionId\)\}/);
+  assert.match(newSessionPage, /<AgentChat sessionless \/>/);
+});
