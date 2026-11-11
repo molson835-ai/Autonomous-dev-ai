@@ -1,0 +1,49 @@
+name: Eve Web Chat scaffold inspection
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/eve-web-chat-scaffold.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  scaffold:
+    name: Generate and inspect official Eve Web Chat scaffold
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out pull request branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install existing project dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run official Eve Web Chat installer non-interactively
+        run: npx --no-install eve add channel/web --non-interactive --yes
+
+      - name: Archive generated scaffold for review
+        run: |
+          tar -czf /tmp/eve-web-chat-scaffold.tar.gz \
+            --exclude='./.git' \
+            --exclude='./node_modules' \
+            --exclude='./.env' \
+            --exclude='./.env.*' \
+            .
+
+      - name: Upload generated scaffold
+        uses: actions/upload-artifact@v4
+        with:
+          name: eve-web-chat-scaffold
+          path: /tmp/eve-web-chat-scaffold.tar.gz
+          if-no-files-found: error
+          retention-days: 3
