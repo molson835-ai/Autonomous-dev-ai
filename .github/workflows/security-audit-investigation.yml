@@ -1,9 +1,9 @@
 name: Temporary dependency audit investigation
 
 on:
-  push:
+  pull_request:
     branches:
-      - security/npm-audit-investigation
+      - main
 
 permissions:
   contents: read
