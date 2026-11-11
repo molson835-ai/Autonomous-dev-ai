@@ -51,7 +51,7 @@ jobs:
             .
 
       - name: Upload generated Web Chat scaffold
-        if: github.head_ref == 'docs/android-web-chat-design'
+        if: (github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design'
         uses: actions/upload-artifact@v4
         with:
           name: eve-web-chat-scaffold
