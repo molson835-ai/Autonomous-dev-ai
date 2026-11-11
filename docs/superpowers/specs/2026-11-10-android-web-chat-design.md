@@ -1,6 +1,6 @@
 # Android-First Web Chat Design
 
-**Status:** Proposed; implementation requires user approval.
+**Status:** Approved by the user on 2026-11-10; implementation is governed by the companion plan.
 
 ## Intent
 
