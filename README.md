@@ -63,7 +63,7 @@ npm run build
 node --test tests/*.test.mjs
 ```
 
-The production build and contract tests are verified in GitHub Actions. Local development-server startup and live model interaction have not yet been verified. The Cloudflare provider source is configured, but no credentials have been supplied and no live request has been made. The web app is not deployed and does not yet have production sign-in configured.
+The production build and contract tests are verified in GitHub Actions. Local development-server startup and live model interaction have not yet been verified. The Cloudflare provider source is configured and passes CI type-checking. No credentials have been supplied and no live request has been made. The web app is not deployed and does not yet have production sign-in configured.
 
 ## Verification status
 
@@ -71,7 +71,7 @@ The current CI workflow:
 - generates the official Web Chat scaffold when it is not already present;
 - commits generated source to the feature branch;
 - builds the Next.js app and Eve workspace;
-- runs planning, financial-safety, and session-route source-contract tests.
+- runs planning, financial-safety, session-route, and provider-configuration source-contract tests, plus the authored agent TypeScript type-check.
 
 The tests verify source-level contracts. They do not establish that a real model provider is configured, that live streaming works, that sessions persist across a deployed restart, or that the layout has been tested on a physical Android device.
 
