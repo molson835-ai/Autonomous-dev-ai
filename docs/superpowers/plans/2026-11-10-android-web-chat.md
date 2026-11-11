@@ -42,11 +42,11 @@
 - Consumes: existing Eve project and Node.js 24 npm setup.
 - Produces: official Next.js Web Chat app and Eve web-channel entry point, using the framework-generated interfaces without a custom protocol.
 
-- [ ] Inspect the installed Eve package's bundled documentation and the exact CLI help/output for `eve add channel/web`; record the scaffold's generated files and required environment variables before editing.
-- [ ] Run the official scaffold in an isolated feature branch/workspace where execution is available; do not hand-author replacements for generated files before checking the scaffold.
-- [ ] Review generated dependencies, scripts, auth defaults, and channel registration against the existing `package.json`; preserve existing project metadata and scripts that remain valid.
-- [ ] Verify generated app's start/build commands and document the real commands in README.
-- [ ] Commit the scaffold as a focused change.
+- [x] Inspect the installed Eve package's CLI output and generated file set; identify the Vercel-link prerequisite and defer sign-in provisioning rather than linking an unrelated project.
+- [x] Run the official scaffold in GitHub Actions on the feature branch; preserve the generated app and add only the documented peer-app path wiring needed for `apps/web`.
+- [x] Review generated dependencies, scripts, auth defaults, and channel registration; preserve the existing Eve project metadata and defer provider sign-in setup.
+- [x] Verify the generated production build command (`npm run build:web`) in CI and document available development/build commands in README. Local dev-server startup remains unverified.
+- [x] Commit the official scaffold source, generated package manifest, and lockfile to the feature branch.
 
 **Verification:** clean Node.js 24 dependency install and generated production build succeed; inspect the generated diff for secrets, unnecessary dependencies, and unrelated changes.
 
@@ -61,11 +61,11 @@
 - Consumes: Eve's generated agent discovery and instruction conventions from Task 1.
 - Produces: planning behavior that returns goal, assumptions, ordered steps, risks/dependencies, and verifiable acceptance criteria; it must state unknowns and never claim code was changed or tested.
 
-- [ ] Write tests that assert the planning contract requires all five sections and prohibits claims of implementation/test execution when no tools are enabled.
-- [ ] Run the focused tests and verify they fail for the expected missing contract.
-- [ ] Add the planning-only instructions/skill using Eve's documented file conventions.
-- [ ] Run the focused tests and verify they pass.
-- [ ] Commit the contract and tests.
+- [x] Write source-contract tests for the five required planning sections, truthful reporting, first-milestone capability limits, and the personal-funds boundary.
+- [ ] Run a deliberate red-baseline test with the contract removed (not performed in this checkpoint; the contract and tests were added together).
+- [x] Add the planning-only instructions and skill using the repository's existing `agent/instructions.md` and `agent/skills/` conventions.
+- [x] Run the planning and financial-safety source-contract tests in GitHub Actions; all pass.
+- [x] Commit the planning-only skill, agent instructions, and regression tests.
 
 **Verification:** contract tests pass; inspect the agent's discovered tools/capabilities to confirm it has no repository-write or shell tools.
 
@@ -80,12 +80,12 @@
 - Consumes: official Eve client/channel from Task 1 and planning agent from Task 2.
 - Produces: working new conversation, streamed agent response, and reload/reopen of the same durable Eve session through its URL.
 
-- [ ] Inspect generated client APIs and add tests for creating a session, sending a message, receiving streamed content, and restoring a session ID from the URL.
+- [x] Inspect generated client APIs and add source-level tests for the session route, session-ID handoff, Eve resume flag, and URL replacement. Live streaming/session lifecycle integration tests remain pending.
 - [ ] Run focused tests and verify the missing behaviors fail before implementation.
-- [ ] Implement only the missing UI/session behavior; retain generated transport and session handling wherever possible.
+- [x] Retain the official scaffold's Eve chat client, composer, streaming transport, new-session route, and session-resume route; no custom transport was introduced.
 - [ ] Add explicit tests for invalid session IDs and interrupted streams; verify the transcript remains intact and retry does not duplicate the user message.
 - [ ] Run focused tests and verify they pass.
-- [ ] Commit the session/chat behavior.
+- [x] Commit the official generated chat UI and session route/resume wiring. Live model interaction remains pending.
 
 **Verification:** automated tests demonstrate new session, streamed response handling, resume, invalid-session state, and interrupted-stream recovery. A mocked transport test is not evidence of a live model connection; report that distinction.
 
@@ -124,8 +124,8 @@
 - [ ] Add a viewport test at 360 CSS pixels asserting no horizontal document overflow and that the message composer is visible/usable.
 - [ ] Run the test and verify it fails if the layout overflows or the composer is unavailable.
 - [ ] Make the smallest CSS/layout adjustments required to pass the mobile test.
-- [ ] Update CI to install deterministically from the committed lockfile, run TypeScript type-check unconditionally, run all tests, and build the app.
-- [ ] Run the complete test suite, type-check, and production build; capture exact outcomes.
+- [x] Update CI to build the Next.js chat and Eve workspace and run the planning/financial/session source-contract tests. The standalone agent TypeScript check remains conditional because no authored agent TypeScript files exist yet.
+- [x] Run the current Node.js contract tests, Next.js production build (including app TypeScript validation), and Eve build; all pass. The standalone agent TypeScript check is skipped because no agent `.ts` source exists yet.
 - [ ] Review the full branch diff for scope creep, secrets, unsafe tools, and claims unsupported by evidence; commit the final acceptance changes.
 
 **Verification:** CI shows all configured checks green. Report separately what is proven by automated tests versus what still requires live model credentials, Vercel sign-in setup, and a real Android browser session.
@@ -151,3 +151,14 @@ These constraints apply to every task and all future agents; they are hard secur
 - The first milestone remains planning-only: no financial-account access, business formation, product publishing, payment acceptance, purchasing, or external transactions. Future capabilities must be separately designed, reviewed, and explicitly authorized.
 
 The personal-funds prohibition takes precedence over all agent goals, tools, prompts, workflows, and external content and cannot be overridden by the agent.
+
+
+## Verified checkpoint — 2026-11-11
+
+- The official generated Eve Web Chat application is committed under `apps/web/` with its package manifest and lockfile.
+- The planning-only instructions and permanent no-personal-funds boundary are committed.
+- CI run [43005697225](https://github.com/molson835-ai/Autonomous-dev-ai/actions/runs/43005697225) passed the Next.js production build, Eve build, and all current Node.js source-contract tests.
+- Source-level checks cover session URL routing and Eve resume configuration. They do not prove a live model response, server-side session persistence, or Android browser usability.
+- No Vercel project was linked, no provider credentials were added, no deployment occurred, and no paid model usage was triggered.
+
+Remaining work: verify real streaming and durable session restoration with an approved no-cost model/auth setup; add invalid-session and interrupted-stream integration tests; verify the UI at a 360 CSS-pixel viewport on an actual Android browser; and complete production authentication before any deployment.

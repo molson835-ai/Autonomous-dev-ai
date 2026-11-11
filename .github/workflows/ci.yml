@@ -33,6 +33,7 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Generate official Eve Web Chat scaffold for inspection
+        id: scaffold
         if: ((github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design') && hashFiles('apps/web/app/page.tsx') == ''
         shell: bash
         run: |
