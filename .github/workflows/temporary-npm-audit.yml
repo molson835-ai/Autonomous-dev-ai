@@ -1,0 +1,31 @@
+name: Temporary dependency audit
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Capture npm audit report
+        run: npm audit --json > npm-audit.json || true
+      - name: Print audit summary
+        run: |
+          node -e 'const a=require("./npm-audit.json"); console.log(JSON.stringify(a.metadata?.vulnerabilities ?? {}, null, 2)); for (const [name,v] of Object.entries(a.vulnerabilities ?? {})) console.log(name + ": " + v.severity + " | direct=" + v.isDirect + " | fixAvailable=" + JSON.stringify(v.fixAvailable));'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: temporary-npm-audit-report
+          path: npm-audit.json
+          retention-days: 1
