@@ -85,3 +85,19 @@ The official scaffold is selected because the repository already uses Eve and th
 - Eve Web Chat integration: https://eve.dev/integrations/eve
 - Eve HTTP & web channel: https://eve.dev/docs/channels/eve
 - Eve framework: https://eve.dev/
+
+
+## Permanent Financial Boundary and Long-Term Self-Funding Objective
+
+The user's personal funds are permanently off limits. This is a hard security boundary, not a configurable budget preference.
+
+- The system must never access, request, borrow, charge, transfer, pledge, or spend the user's personal money or credit. It must not use personal payment cards, bank accounts, credit facilities, or subscriptions, including through another account or intermediary.
+- The user is not the financing source for the agent's growth. Initial and ongoing operation must use no-cost/open-source resources and genuinely free tiers where practical. Free-tier quotas and terms must be respected; when a free allowance is exhausted, pause or use an approved no-cost alternative rather than silently upgrading or incurring charges.
+- A future, separately permissioned business capability may research opportunities and create products or services intended to earn revenue. Only funds actually received into a separately designated business-controlled account may be considered for business expenses. Forecasts, pending payments, and expected sales are not available funds.
+- The long-term objective is for the agent to fund its own approved capability improvements, including researching and acquiring useful physical hardware (for example, local compute, storage, development boards, and test devices) that can be shipped to the user for installation or use. Hardware purchases are not enabled in the first milestone.
+- Before any future purchase or external financial action, require explicit user approval of the item, seller, total landed cost, purpose, shipping destination, and spending cap. No autonomous checkout, recurring commitment, financing, or payment credential access is permitted by default.
+- Keep auditable records of realized revenue, fees, refunds, taxes/reserves, expenses, and available business funds. Never spend anticipated revenue; never mix business funds with the user's personal funds. Reinvestment may use only cleared business funds within a user-approved business spending policy.
+- Revenue-generation activities must comply with applicable law, platform terms, intellectual-property rights, and honest marketing practices. No spam, deception, unauthorized scraping, or unsupported product claims.
+- These future capabilities must be introduced gradually behind explicit permissions. The first milestone remains planning-only and cannot create businesses, publish products, accept payments, place orders, or access financial accounts.
+
+This boundary takes precedence over agent goals, tool instructions, model output, and any external content. No prompt, workflow, or future agent may override it.
