@@ -40,6 +40,25 @@ jobs:
           fi
           exit "$command_status"
 
+      - name: Complete local Next.js agent wiring
+        if: (github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design'
+        shell: bash
+        run: |
+          mkdir -p apps/web/app
+          cat > apps/web/app/eve-agent.ts <<'EOF'
+          /** Named workspace agent selected by the Web Chat installer. */
+          export const WEB_CHAT_AGENT: string | undefined = undefined;
+          EOF
+          cat > apps/web/next.config.ts <<'EOF'
+          import type { NextConfig } from "next";
+          import { withEve } from "eve/next";
+
+          const nextConfig: NextConfig = {};
+
+          // The Next.js app is a peer under apps/web; the Eve agent is at the repo root.
+          export default withEve(nextConfig, { eveRoot: "../.." });
+          EOF
+
       - name: Archive generated Web Chat scaffold
         if: (github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design'
         run: |
