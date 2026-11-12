@@ -127,5 +127,8 @@ jobs:
       - name: Test planning and financial safety contract
         run: node --test tests/*.test.mjs
 
+      - name: Test persistent memory policy
+        run: node --test tests/memory-policy.test.mjs
+
       - name: Test research safeguards and calculator evaluation
         run: node --test tests/research/*.test.mjs
