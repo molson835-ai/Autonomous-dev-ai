@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { isSafeMemoryText, normalizeMemoryQuery } from "../../../agent/lib/memory-policy.mjs";
+import { ensureExperienceExternalIdColumn, findExperienceByExternalId } from "../../../agent/lib/memory-schema.mjs";
 
 interface Env {
   MEMORY: DurableObjectNamespace<MemoryStore>;
@@ -11,7 +12,7 @@ type MemoryRow = {
   confidence: number; status: string; created_at: string; updated_at: string;
 };
 type ExperienceRow = {
-  id: string; task: string; outcome: string; result: string;
+  id: string; external_id: string | null; task: string; outcome: string; result: string;
   evidence: string; created_at: string;
 };
 
@@ -55,12 +56,22 @@ export class MemoryStore extends DurableObject<Env> {
         "CREATE TABLE IF NOT EXISTS experiences (id TEXT PRIMARY KEY, task TEXT NOT NULL, outcome TEXT NOT NULL, result TEXT NOT NULL CHECK (result IN ('success', 'failure', 'partial')), evidence TEXT NOT NULL, created_at TEXT NOT NULL)"
       );
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS experiences_created ON experiences(created_at DESC)");
+      ensureExperienceExternalIdColumn(ctx.storage.sql);
     });
   }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const now = new Date().toISOString();
+
+    if (request.method === "GET" && url.pathname === "/v1/experiences") {
+      const externalId = url.searchParams.get("external_id");
+      if (!externalId || externalId.length > 200) {
+        return json({ error: "A valid external_id is required." }, 400);
+      }
+      const experience = findExperienceByExternalId(this.ctx.storage.sql, externalId);
+      return json({ experience });
+    }
 
     if (request.method === "GET" && url.pathname === "/v1/recall") {
       const query = normalizeMemoryQuery(url.searchParams.get("q") ?? "");
@@ -90,7 +101,8 @@ export class MemoryStore extends DurableObject<Env> {
       const body = await readBody(request);
       if (!body || !isSafeMemoryText(body.task, 1000) ||
           !isSafeMemoryText(body.outcome, 2000) ||
-          !["success", "failure", "partial"].includes(String(body.result))) {
+          !["success", "failure", "partial"].includes(String(body.result)) ||
+          (body.external_id !== undefined && !isSafeMemoryText(body.external_id, 200))) {
         return json({ error: "Invalid or unsafe experience record." }, 400);
       }
       const evidence = body.evidence === undefined ? "" : body.evidence;
@@ -98,14 +110,22 @@ export class MemoryStore extends DurableObject<Env> {
         return json({ error: "Invalid or unsafe evidence." }, 400);
       }
       const id = crypto.randomUUID();
-      this.ctx.storage.sql.exec(
-        "INSERT INTO experiences (id, task, outcome, result, evidence, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-        id, String(body.task).trim(), String(body.outcome).trim(), String(body.result), evidence.trim(), now
-      );
+      const externalId = typeof body.external_id === "string" ? body.external_id.trim() : null;
+      try {
+        this.ctx.storage.sql.exec(
+          "INSERT INTO experiences (id, external_id, task, outcome, result, evidence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          id, externalId, String(body.task).trim(), String(body.outcome).trim(), String(body.result), evidence.trim(), now
+        );
+      } catch (error) {
+        if (externalId && String(error).includes("experiences.external_id")) {
+          return json({ error: "An experience with this external_id already exists." }, 409);
+        }
+        throw error;
+      }
       this.ctx.storage.sql.exec(
         "DELETE FROM experiences WHERE id IN (SELECT id FROM experiences ORDER BY created_at DESC LIMIT -1 OFFSET 500)"
       );
-      return json({ id, stored: true }, 201);
+      return json({ id, external_id: externalId, stored: true }, 201);
     }
 
     if (request.method === "POST" && url.pathname === "/v1/proposals") {
