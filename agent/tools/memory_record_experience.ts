@@ -1,6 +1,6 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { memoryRequest } from "../memory/client";
+import { memoryRequest } from "../lib/memory-client";
 
 export default defineTool({
   description:
