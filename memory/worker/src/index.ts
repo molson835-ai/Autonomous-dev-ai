@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { isSafeMemoryText, normalizeMemoryQuery } from "../../../agent/memory/policy.mjs";
+import { isSafeMemoryText, normalizeMemoryQuery } from "../../../agent/lib/memory-policy.mjs";
 
 interface Env {
   MEMORY: DurableObjectNamespace<MemoryStore>;
