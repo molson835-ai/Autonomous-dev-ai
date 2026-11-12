@@ -75,6 +75,8 @@ export function extractPageText(source: string, contentType: string): {
   const text = decodeEntities(
     source
       .replace(/<!--[\s\S]*?-->/g, " ")
+      .replace(/<head\b[^>]*>[\s\S]*?<\/head\s*>/gi, " ")
+      .replace(/<title\b[^>]*>[\s\S]*?<\/title\s*>/gi, " ")
       .replace(/<(script|style|noscript|template|svg|nav|footer)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, " ")
       .replace(/<[^>]+>/g, " "),
   )
