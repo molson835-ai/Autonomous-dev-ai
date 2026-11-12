@@ -3,7 +3,7 @@ name: CI
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main]
+    branches: [main, feat/eve-earned-growth-foundation]
   push:
     branches: [main]
 
