@@ -1,13 +1,14 @@
-import { localDev, verifyHttpBasic, type AuthFn } from "eve/channels/auth";
+import { localDev, none, verifyHttpBasic, type AuthFn } from "eve/channels/auth";
 import { eveChannel } from "eve/channels/eve";
 import { env } from "node:process";
 
 const username = env.ROUTE_AUTH_BASIC_USER;
 const password = env.ROUTE_AUTH_BASIC_PASSWORD;
 
-// Use a custom verifier so failed credentials return an API 401 rather than
-// triggering the browser's native HTTP Basic sign-in dialog. The operator
-// principal can also read /eve/v1/info, which the browser uses to verify sign-in.
+// Anonymous access is intentionally limited to Vercel Preview deployments.
+// Production retains the existing owner-only Basic authentication.
+const isPreview = env.VERCEL_ENV === "preview";
+
 const ownerAuth: AuthFn<Request> = async (request) => {
   if (!username || !password) return null;
 
@@ -25,5 +26,5 @@ const ownerAuth: AuthFn<Request> = async (request) => {
 };
 
 export default eveChannel({
-  auth: [ownerAuth, localDev()],
+  auth: isPreview ? [none()] : [ownerAuth, localDev()],
 });
