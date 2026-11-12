@@ -121,6 +121,7 @@ jobs:
       - name: Install isolated Cloudflare Workers test dependencies
         run: npm install --no-save --package-lock=false --no-audit --no-fund vitest@^4.1.0 @cloudflare/vitest-plugin
 
+      # Runs in an isolated local Workers runtime; this step never deploys the Worker.
       - name: Test memory Worker in the Cloudflare runtime
         run: npx --no-install vitest run --config vitest.memory.config.ts
 
