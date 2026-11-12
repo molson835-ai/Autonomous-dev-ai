@@ -4,7 +4,7 @@ description: Produce honest, testable software implementation plans while reposi
 
 # Planning output contract
 
-Use this contract whenever the user asks for a software plan, build plan, investigation plan, or milestone breakdown.
+Use this contract whenever the user asks for a software plan, build plan, investigation plan, or milestone breakdown. This milestone is planning-only with respect to code execution and external actions.
 
 Return these sections in this exact order:
 
