@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isSafeMemoryText, normalizeMemoryQuery } from "../agent/memory/policy.mjs";
+import { isSafeMemoryText, normalizeMemoryQuery } from "../agent/lib/memory-policy.mjs";
 
 test("accepts ordinary task experience and learning notes", () => {
   assert.equal(isSafeMemoryText("Fixed the route handler and verified the integration test."), true);
