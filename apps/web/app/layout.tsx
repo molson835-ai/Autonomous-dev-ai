@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import type { ReactNode } from "react";
-import { AgentAccess } from "@/app/_components/agent-access";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import "./globals.css";
@@ -21,15 +20,15 @@ const mono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "eve Next.js Starter",
-  description: "A Next.js starter for eve agents with AI Elements.",
+  title: "Autonomous Dev AI",
+  description: "Development workspace for the Eve agent.",
 };
 
 export default function RootLayout({ children }: { readonly children: ReactNode }) {
   return (
     <html className={cn(sans.variable, mono.variable)} lang="en">
       <body>
-        <TooltipProvider><AgentAccess>{children}</AgentAccess></TooltipProvider>
+        <TooltipProvider>{children}</TooltipProvider>
       </body>
     </html>
   );
