@@ -127,4 +127,94 @@ describe("persistent memory Worker HTTP contract", () => {
     }>();
     expect(result.experience?.task).toBe("First write");
   });
+
+  it("keeps pending proposals separate from approved recall until explicit approval", async () => {
+    const marker = `CONTEXT-RECALL-PENDING-${crypto.randomUUID()}`;
+    const create = await request("/v1/proposals", {
+      method: "POST",
+      body: JSON.stringify({
+        kind: "lesson",
+        content: `Persistent learning test ${marker}`,
+        source: "Isolated Worker integration test",
+        confidence: 0.95,
+      }),
+    });
+    expect(create.status).toBe(201);
+    const created = await create.json<{ id: string; status: string; stored: boolean }>();
+    expect(created).toMatchObject({ status: "pending", stored: true });
+
+    const pendingList = await request("/v1/proposals?limit=20");
+    expect(pendingList.status).toBe(200);
+    const pending = await pendingList.json<{ proposals: Array<{ id: string; content: string; status: string }> }>();
+    expect(pending.proposals.some((item) => item.id === created.id && item.status === "pending")).toBe(true);
+
+    const beforeApproval = await request(`/v1/recall?q=${encodeURIComponent(marker)}`);
+    const before = await beforeApproval.json<{ memories: Array<{ id: string }>; experiences: unknown[] }>();
+    expect(before.memories.some((item) => item.id === created.id)).toBe(false);
+
+    const decision = await request(`/v1/proposals/${created.id}/decision`, {
+      method: "POST",
+      body: JSON.stringify({ decision: "approve" }),
+    });
+    expect(decision.status).toBe(200);
+    expect(await decision.json()).toMatchObject({ id: created.id, status: "approved" });
+
+    const afterApproval = await request(`/v1/recall?q=${encodeURIComponent(marker)}`);
+    const after = await afterApproval.json<{ memories: Array<{ id: string; status: string }> }>();
+    expect(after.memories.some((item) => item.id === created.id && item.status === "approved")).toBe(true);
+  });
+
+  it("keeps rejected proposals out of approved recall", async () => {
+    const marker = `CONTEXT-RECALL-REJECTED-${crypto.randomUUID()}`;
+    const create = await request("/v1/proposals", {
+      method: "POST",
+      body: JSON.stringify({
+        kind: "lesson",
+        content: `Rejected learning test ${marker}`,
+        source: "Isolated Worker integration test",
+        confidence: 0.8,
+      }),
+    });
+    expect(create.status).toBe(201);
+    const created = await create.json<{ id: string }>();
+
+    const decision = await request(`/v1/proposals/${created.id}/decision`, {
+      method: "POST",
+      body: JSON.stringify({ decision: "reject" }),
+    });
+    expect(decision.status).toBe(200);
+    expect(await decision.json()).toMatchObject({ id: created.id, status: "rejected" });
+
+    const recall = await request(`/v1/recall?q=${encodeURIComponent(marker)}`);
+    const result = await recall.json<{ memories: Array<{ id: string }> }>();
+    expect(result.memories.some((item) => item.id === created.id)).toBe(false);
+  });
+
+  it("stores and exactly retrieves success, failure, and partial experiences", async () => {
+    for (const result of ["success", "failure", "partial"] as const) {
+      const externalId = `RESULT-${result.toUpperCase()}-${crypto.randomUUID()}`;
+      const write = await request("/v1/experiences", {
+        method: "POST",
+        body: JSON.stringify({
+          task: `Verify ${result} experience retrieval`,
+          outcome: `Observed ${result} outcome in isolated Worker test.`,
+          result,
+          external_id: externalId,
+          evidence: "HTTP response from isolated Cloudflare Worker runtime",
+        }),
+      });
+      expect(write.status).toBe(201);
+      const saved = await write.json<{ id: string; external_id: string }>();
+
+      const recall = await request(`/v1/experiences?external_id=${encodeURIComponent(externalId)}`);
+      expect(recall.status).toBe(200);
+      const found = await recall.json<{ experience: { id: string; result: string; external_id: string } | null }>();
+      expect(found.experience).toMatchObject({
+        id: saved.id,
+        external_id: externalId,
+        result,
+      });
+    }
+  });
+
 });
