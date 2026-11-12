@@ -129,7 +129,7 @@ describe("persistent memory Worker HTTP contract", () => {
   });
 
   it("keeps pending proposals separate from approved recall until explicit approval", async () => {
-    const marker = `CONTEXT-RECALL-PENDING-${crypto.randomUUID()}`;
+    const marker = `PENDING-${crypto.randomUUID().slice(0, 8)}`;
     const create = await request("/v1/proposals", {
       method: "POST",
       body: JSON.stringify({
@@ -165,7 +165,7 @@ describe("persistent memory Worker HTTP contract", () => {
   });
 
   it("keeps rejected proposals out of approved recall", async () => {
-    const marker = `CONTEXT-RECALL-REJECTED-${crypto.randomUUID()}`;
+    const marker = `REJECTED-${crypto.randomUUID().slice(0, 8)}`;
     const create = await request("/v1/proposals", {
       method: "POST",
       body: JSON.stringify({
