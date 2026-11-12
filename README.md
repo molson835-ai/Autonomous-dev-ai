@@ -10,11 +10,12 @@ An Android-first software development agent intended to turn requests into resea
 - [x] Enforce HTTPS host allowlisting, redirect revalidation, request timeout, response-size limits, and content-type checks.
 - [x] Add automated retrieval-security tests.
 - [x] Add calculator repeated-equals reference cases as the first learning/evaluation fixture.
+- [x] Add a persistent memory foundation with experience records, approved recall, and owner-reviewed learning proposals.
 - [ ] Verify the research tool in a live Eve session against current public documentation.
 - [ ] Add a separately reviewed free search-discovery method; the current tool fetches supplied URLs and is not a general web search engine.
 - [ ] Add explicit review/promotion workflow for proposed knowledge records.
 
-The research capability is read-only. It does not write to the repository, execute downloaded code, run shell commands, deploy, or automatically promote knowledge.
+The research capability is read-only. It does not write to the repository, execute downloaded code, run shell commands, deploy, or automatically promote knowledge. Persistent memory is a separate opt-in subsystem and remains unavailable until its Worker is configured.
 
 ## Architecture
 
@@ -29,6 +30,8 @@ The research capability is read-only. It does not write to the repository, execu
 - Source retrieval: direct HTTPS GET only; every redirect is revalidated; maximum five unique URLs; 8-second request timeout; 120 KB response cap; HTML/plain-text extraction; 6,000-character excerpt cap.
 - Evidence handling: fetched text is untrusted reference material. The agent must cite final URLs, distinguish facts from inference, and surface uncertainty.
 - Knowledge: proposed records live under `agent/knowledge/proposed/`; nothing is automatically trusted or promoted.
+- Persistent memory: `memory/worker/` contains an authenticated Cloudflare Worker backed by a single-owner SQLite Durable Object; `agent/tools/memory_*.ts` exposes recall, experience recording, proposal review, and explicit approval/rejection.
+- Memory is retrieval-based learning, not model-weight fine-tuning. It requires a separately configured Cloudflare Worker URL and shared secret; see `docs/persistent-memory-setup.md`.
 - Costs: no paid APIs or new paid services are introduced. Existing Cloudflare Workers AI usage remains subject to the configured free-tier allowance; pause if the free quota is exhausted.
 
 ## Development commands

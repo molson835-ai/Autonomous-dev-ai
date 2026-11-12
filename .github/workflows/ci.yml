@@ -115,6 +115,9 @@ jobs:
       - name: Build Eve agent
         run: npm run build
 
+      - name: Bundle Cloudflare memory Worker without deploying
+        run: npx --yes wrangler@4 deploy --dry-run --config memory/worker/wrangler.jsonc
+
       - name: Type-check authored TypeScript
         shell: bash
         run: |
@@ -126,6 +129,9 @@ jobs:
 
       - name: Test planning and financial safety contract
         run: node --test tests/*.test.mjs
+
+      - name: Test persistent memory policy
+        run: node --test tests/memory-policy.test.mjs
 
       - name: Test research safeguards and calculator evaluation
         run: node --test tests/research/*.test.mjs
