@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 const schedule = await readFile(new URL("../../agent/schedules/owner-approved-work-loop.ts", import.meta.url), "utf8");
 
 test("scheduled work loop uses the Hobby-safe 15-minute cadence", () => {
-  assert.match(schedule, /cron:\s*"\\*\\/15 \\* \\* \\* \\*"/);
+  assert.ok(schedule.includes('cron: "*/15 * * * *"'));
 });
 
 test("scheduled work claims at most one owner-approved task and checkpoints across fresh sessions", () => {
