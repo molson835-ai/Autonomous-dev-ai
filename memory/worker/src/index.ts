@@ -98,6 +98,23 @@ export class MemoryStore extends DurableObject<Env> {
       return json({ tasks: rows.map(taskFromRow) });
     }
 
+    if (request.method === "GET" && url.pathname === "/v1/owner/tasks") {
+      const limit = boundedLimit(url.searchParams.get("limit"), 20);
+      const rows = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks ORDER BY created_at DESC LIMIT ?", limit).toArray();
+      return json({ tasks: rows.map(taskFromRow) });
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/owner/proposals") {
+      const limit = boundedLimit(url.searchParams.get("limit"), 20);
+      const proposals = this.ctx.storage.sql.exec<MemoryRow>(
+        "SELECT * FROM memories WHERE status = 'pending' ORDER BY created_at ASC LIMIT ?",
+        limit
+      ).toArray();
+      return json({ proposals });
+    }
+
+
+
     const taskMatch = url.pathname.match(/^\/v1\/tasks\/([0-9a-f-]{36})$/i);
     if (request.method === "GET" && taskMatch) {
       const row = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE id = ? LIMIT 1", taskMatch[1]).toArray()[0];
@@ -300,12 +317,30 @@ export default {
     const ownerApprovalRoute = request.method === "POST" && /^\/v1\/tasks\/[0-9a-f-]{36}\/approve$/i.test(url.pathname);
     const ownerControlRoute = request.method === "POST" && /^\/v1\/tasks\/[0-9a-f-]{36}\/owner-control$/i.test(url.pathname);
     const ownerMemoryDecisionRoute = request.method === "POST" && /^\/v1\/proposals\/[0-9a-f-]{36}\/decision$/i.test(url.pathname);
-    const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute || ownerMemoryDecisionRoute;
+    const ownerReadRoute = request.method === "GET" && ["/v1/owner/tasks", "/v1/owner/proposals"].includes(url.pathname);
+    const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute || ownerMemoryDecisionRoute || ownerReadRoute;
+    const ownerOrigin = "https://autonomous-dev-ai.vercel.app";
+    const origin = request.headers.get("origin");
+    const withOwnerCors = (response: Response) => {
+      if (origin !== ownerOrigin) return response;
+      const headers = new Headers(response.headers);
+      headers.set("access-control-allow-origin", ownerOrigin);
+      headers.set("access-control-allow-methods", "GET, POST, OPTIONS");
+      headers.set("access-control-allow-headers", "Authorization, Content-Type");
+      headers.set("access-control-max-age", "86400");
+      headers.append("vary", "Origin");
+      return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    };
+    if (origin && origin !== ownerOrigin) return json({ error: "Origin not allowed." }, 403);
+    if (request.method === "OPTIONS") {
+      if (origin !== ownerOrigin) return json({ error: "Origin not allowed." }, 403);
+      return withOwnerCors(new Response(null, { status: 204 }));
+    }
     const expectedToken = ownerOnlyRoute ? (env.TASK_OWNER_APPROVAL_TOKEN ?? "") : env.MEMORY_API_TOKEN;
-    if (ownerOnlyRoute && (!expectedToken || expectedToken === env.MEMORY_API_TOKEN)) return json({ error: "Owner approval is not configured." }, 503);
-    if (!expectedToken || !constantTimeEqual(supplied, expectedToken)) return json({ error: "Unauthorized." }, 401);
-    if (!url.pathname.startsWith("/v1/")) return json({ error: "Not found." }, 404);
+    if (ownerOnlyRoute && (!expectedToken || expectedToken === env.MEMORY_API_TOKEN)) return withOwnerCors(json({ error: "Owner approval is not configured." }, 503));
+    if (!expectedToken || !constantTimeEqual(supplied, expectedToken)) return withOwnerCors(json({ error: "Unauthorized." }, 401));
+    if (!url.pathname.startsWith("/v1/")) return withOwnerCors(json({ error: "Not found." }, 404));
     const id = env.MEMORY.idFromName("single-owner-memory");
-    return env.MEMORY.get(id).fetch(request);
+    return withOwnerCors(await env.MEMORY.get(id).fetch(request));
   },
 };
