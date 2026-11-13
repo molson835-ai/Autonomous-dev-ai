@@ -63,10 +63,10 @@ export default function OwnerConsole() {
   const [busy, setBusy] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<boolean> => {
     if (!token.trim()) {
       setMessage("Enter the owner-only token to load pending reviews.");
-      return;
+      return false;
     }
     setBusy("load");
     setMessage("");
@@ -79,9 +79,11 @@ export default function OwnerConsole() {
       setProposals(proposalData.proposals);
       setLoaded(true);
       setMessage("Owner review data loaded. The token remains in this page's memory only.");
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Owner request failed.");
       setLoaded(false);
+      return false;
     } finally {
       setBusy(null);
     }
@@ -92,8 +94,7 @@ export default function OwnerConsole() {
     setMessage("");
     try {
       await ownerRequest(token, path, method, body);
-      await load();
-      setMessage("Owner action confirmed.");
+      if (await load()) setMessage("Owner action confirmed.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Owner action failed.");
     } finally {
