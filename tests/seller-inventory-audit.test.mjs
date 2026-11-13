@@ -53,8 +53,8 @@ test("accepts common Seller Hub header aliases", () => {
 });
 
 test("accepts the official eBay Active Listings report header names", () => {
-  const active = "Item number,Title,Variation,Custom label,Available quantity\\n123456789012,Widget,,SKU-42,4";
-  const inventory = "SKU,Title,Quantity,Location\\nSKU-42,Widget,4,Shelf A";
+  const active = "Item number,Title,Variation,Custom label,Available quantity\n123456789012,Widget,,SKU-42,4";
+  const inventory = "SKU,Title,Quantity,Location\nSKU-42,Widget,4,Shelf A";
   const result = reconcileCsv(active, inventory);
   assert.equal(result.summary.matchedSkus, 1);
   assert.equal(result.issues.length, 0);
