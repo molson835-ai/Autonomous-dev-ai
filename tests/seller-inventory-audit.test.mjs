@@ -68,3 +68,15 @@ test("exports issue reports with safe CSV escaping", () => {
   assert.match(csv, /"Lantern, ""large"""/);
   assert.match(csv, /"Review, then correct"/);
 });
+
+test("neutralizes spreadsheet formulas in untrusted exported text fields", () => {
+  const csv = issuesToCsv([{
+    severity: "warning", type: "data-quality", sku: "=HYPERLINK(\"https://bad.example\",\"click\")",
+    title: "  +SUM(1,1)", activeQuantity: 0, stockQuantity: 0,
+    location: "@cmd", details: "-1+2"
+  }]);
+  assert.match(csv, /'=HYPERLINK/);
+  assert.match(csv, /"'  \+SUM/);
+  assert.match(csv, /'@cmd/);
+  assert.match(csv, /'-1\+2/);
+});
