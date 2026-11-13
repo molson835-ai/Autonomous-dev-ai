@@ -119,11 +119,14 @@ export class MemoryStore extends DurableObject<Env> {
     if (request.method === "POST" && url.pathname === "/v1/tasks/claim-next") {
       const running = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='running'").one().count;
       if (running > 0) return json({ task: null });
-      const rows = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE status='queued' AND owner_approved=1 AND attempt_count<max_attempts ORDER BY created_at ASC LIMIT 500").toArray();
+      const rows = this.ctx.storage.sql.exec<TaskRow>(
+        "SELECT * FROM tasks WHERE owner_approved=1 AND attempt_count<max_attempts AND ((status='queued' AND (next_run_at IS NULL OR next_run_at<=?)) OR (status='waiting' AND next_run_at IS NOT NULL AND next_run_at<=?)) ORDER BY COALESCE(next_run_at,created_at) ASC LIMIT 500",
+        now, now
+      ).toArray();
       const selected = selectNextTask(rows.map(taskFromRow), { now: Date.parse(now) });
       if (!selected) return json({ task: null });
       const claimed = transitionTask(selected, "running", { now });
-      const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status='running', attempt_count=?, updated_at=?, started_at=COALESCE(started_at,?) WHERE id=? AND status='queued' AND owner_approved=1 AND attempt_count<max_attempts RETURNING id", claimed.attempt_count, now, now, selected.id).toArray();
+      const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status='running', attempt_count=?, updated_at=?, started_at=COALESCE(started_at,?), next_run_at=NULL WHERE id=? AND status=? AND owner_approved=1 AND attempt_count<max_attempts RETURNING id", claimed.attempt_count, now, now, selected.id, selected.status).toArray();
       if (updated.length !== 1) return json({ error: "Task claim state conflict." }, 409);
       return json({ task: claimed });
     }
@@ -149,16 +152,17 @@ export class MemoryStore extends DurableObject<Env> {
     const transitionMatch = url.pathname.match(/^\/v1\/tasks\/([0-9a-f-]{36})\/transition$/i);
     if (request.method === "POST" && transitionMatch) {
       const body = await readBody(request);
-      if (!body || Object.keys(body).some(key => !["status","checkpoint_summary","result_summary","evidence_refs"].includes(key)) || !TASK_STATUS_VALUES.includes(String(body.status))) return json({ error: "Invalid task transition." }, 400);
+      if (!body || Object.keys(body).some(key => !["status","checkpoint_summary","result_summary","evidence_refs","next_run_at"].includes(key)) || !TASK_STATUS_VALUES.includes(String(body.status))) return json({ error: "Invalid task transition." }, 400);
       if (body.checkpoint_summary !== undefined && body.checkpoint_summary !== null && !isSafeMemoryText(body.checkpoint_summary, 2000)) return json({ error: "Invalid checkpoint summary." }, 400);
       if (body.result_summary !== undefined && body.result_summary !== null && !isSafeMemoryText(body.result_summary, 4000)) return json({ error: "Invalid result summary." }, 400);
       if (body.evidence_refs !== undefined && (!Array.isArray(body.evidence_refs) || body.evidence_refs.length > 20 || !body.evidence_refs.every(item => typeof item === "string" && isSafeMemoryText(item, 500)))) return json({ error: "Invalid evidence references." }, 400);
+      if (body.next_run_at !== undefined && body.next_run_at !== null && (typeof body.next_run_at !== "string" || !Number.isFinite(Date.parse(body.next_run_at)))) return json({ error: "Invalid next_run_at timestamp." }, 400);
       const row = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE id=? LIMIT 1", transitionMatch[1]).toArray()[0];
       if (!row) return json({ error: "Task not found." }, 404);
       const current = taskFromRow(row);
       if (current.status === "paused" && body.status === "queued") return json({ error: "Owner approval is required to resume a paused task." }, 409);
       let next;
-      try { next = transitionTask(current, String(body.status), { now, checkpointSummary: body.checkpoint_summary, resultSummary: body.result_summary, evidenceRefs: body.evidence_refs }); }
+      try { next = transitionTask(current, String(body.status), { now, checkpointSummary: body.checkpoint_summary, resultSummary: body.result_summary, evidenceRefs: body.evidence_refs, nextRunAt: body.next_run_at }); }
       catch (error) { return json({ error: String(error).includes("owner_approval_required") ? "Owner approval is required." : "Invalid task state transition." }, 409); }
       const update = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status=?,owner_approved=?,updated_at=?,attempt_count=?,next_run_at=?,checkpoint_summary=?,result_summary=?,evidence_refs=?,started_at=?,finished_at=? WHERE id=? AND status=? RETURNING id", next.status, next.owner_approved ? 1 : 0, next.updated_at, next.attempt_count, next.next_run_at, next.checkpoint_summary, next.result_summary, JSON.stringify(next.evidence_refs), next.started_at ?? null, next.finished_at ?? null, current.id, current.status).toArray();
       if (update.length !== 1) return json({ error: "Task state conflict." }, 409);
