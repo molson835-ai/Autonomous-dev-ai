@@ -25,7 +25,7 @@ Active listings: `SKU,Title,Quantity`
 
 Physical inventory: `SKU,Title,Quantity,Location`
 
-The parser recognizes common aliases such as `Custom label`, `Item title`, `Available quantity`, and `Bin`. It does not yet guarantee compatibility with every current eBay Seller Hub export variant. If a report uses different column labels, rename the header row to the required names before importing.
+The parser recognizes eBay Active Listings report fields such as `Custom label` (the seller's SKU) and `Available quantity`, plus common aliases such as `Custom label (SKU)`, `Item title`, and `Bin`. eBay's report guide lists these active-listing columns: https://ir.ebaystatic.com/cr/v/c1/rsc/feeds/v1/guide-downloadable-reports.pdf. It does not yet guarantee compatibility with every current Seller Hub export variant. If a report uses different column labels, rename the header row to the required names before importing.
 
 ## Privacy and safety
 
