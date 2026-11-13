@@ -26,6 +26,39 @@ describe("persistent memory Worker HTTP contract", () => {
     expect(response.status).toBe(401);
   });
 
+  it("restricts owner review lists and browser access to the owner token and canonical app origin", async () => {
+    const normalTaskList = await request("/v1/owner/tasks");
+    expect(normalTaskList.status).toBe(401);
+    const ownerTasks = await request("/v1/owner/tasks?limit=5", {}, ownerToken);
+    expect(ownerTasks.status).toBe(200);
+    expect(Array.isArray((await ownerTasks.json<{ tasks: unknown[] }>()).tasks)).toBe(true);
+
+    const normalProposalList = await request("/v1/owner/proposals");
+    expect(normalProposalList.status).toBe(401);
+    const ownerProposals = await request("/v1/owner/proposals?limit=5", {}, ownerToken);
+    expect(ownerProposals.status).toBe(200);
+    expect(Array.isArray((await ownerProposals.json<{ proposals: unknown[] }>()).proposals)).toBe(true);
+
+    const preflight = await exports.default.fetch(new Request(new URL("/v1/owner/tasks", endpoint), {
+      method: "OPTIONS",
+      headers: {
+        origin: "https://autonomous-dev-ai.vercel.app",
+        "access-control-request-method": "GET",
+        "access-control-request-headers": "authorization",
+      },
+    }));
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("access-control-allow-origin")).toBe("https://autonomous-dev-ai.vercel.app");
+
+    const blockedOrigin = await exports.default.fetch(new Request(new URL("/v1/owner/tasks", endpoint), {
+      headers: {
+        authorization: `Bearer ${ownerToken}`,
+        origin: "https://evil.example",
+      },
+    }));
+    expect(blockedOrigin.status).toBe(403);
+  });
+
   it("stores an experience and retrieves it by exact external ID", async () => {
     const externalId = `MEMORY-CONNECTION-TEST-${crypto.randomUUID()}`;
     const record = {
