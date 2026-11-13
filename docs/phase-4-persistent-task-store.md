@@ -18,6 +18,10 @@ The Worker owns a dedicated `tasks` SQL table, separate from `memories` and `exp
 
 Normal Eve API access uses `MEMORY_API_TOKEN`. Task approval, task pause/resume, and memory-proposal approval/rejection require a separate `TASK_OWNER_APPROVAL_TOKEN`. If that separate secret is missing or equals the Eve API token, owner-only routes return unavailable. It must be configured out-of-band by the owner before any task can be approved or owner-controlled. This change does not set or rotate any production secret.
 
+## Owner review console
+
+The Next.js `/owner` page is a separate owner-side interface for reviewing tasks and pending memory proposals. It requires the separate `TASK_OWNER_APPROVAL_TOKEN`, held only in page memory and never saved to browser storage or exposed to Eve. The Worker exposes owner-token-only list endpoints and allows browser CORS only from `https://autonomous-dev-ai.vercel.app`. The token must be provisioned out-of-band before the console can operate.
+
 ## Eve task tools
 
 - `task_propose`: create an unapproved proposal; cannot approve or activate it.
