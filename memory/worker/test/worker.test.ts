@@ -1,5 +1,5 @@
 import { exports } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const token = "local-vitest-only-token";
 const endpoint = "https://memory-test.invalid";
@@ -294,6 +294,29 @@ describe("persistent memory Worker HTTP contract", () => {
     const queued = await request(`/v1/tasks/${task.id}/transition`, { method: "POST", body: JSON.stringify({ status: "queued" }) });
     expect(queued.status).toBe(409);
     expect(await (await request("/v1/tasks/claim-next", { method: "POST" })).json()).toEqual({ task: null });
+  });
+
+  it("recovers an expired running task lease and retries within its attempt budget", async () => {
+    const create = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
+      idempotency_key: `TASK-LEASE-RECOVERY-${crypto.randomUUID()}`, task_type: "repo_maintenance",
+      title: "Lease recovery test", goal: "Verify stale run recovery", approved_scope: "Isolated test only"
+    }) });
+    const { task } = await create.json<{ task: { id: string } }>();
+    await request(`/v1/tasks/${task.id}/approve`, { method: "POST" }, ownerToken);
+    const firstClaim = await request("/v1/tasks/claim-next", { method: "POST" });
+    expect((await firstClaim.json<{ task: { status: string; attempt_count: number } }>()).task)
+      .toMatchObject({ status: "running", attempt_count: 1 });
+
+    const future = Date.now() + 31 * 60 * 1000;
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(future);
+      const recovered = await request("/v1/tasks/claim-next", { method: "POST" });
+      expect((await recovered.json<{ task: { id: string; status: string; attempt_count: number } }>()).task)
+        .toMatchObject({ id: task.id, status: "running", attempt_count: 2 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does not claim a waiting task that has no scheduled continuation", async () => {
