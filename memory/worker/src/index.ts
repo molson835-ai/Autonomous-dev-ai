@@ -128,6 +128,24 @@ export class MemoryStore extends DurableObject<Env> {
       return json({ task: claimed });
     }
 
+    const ownerControlMatch = url.pathname.match(/^\/v1\/tasks\/([0-9a-f-]{36})\/owner-control$/i);
+    if (request.method === "POST" && ownerControlMatch) {
+      const body = await readBody(request);
+      if (!body || Object.keys(body).some(key => key !== "action") || !["pause", "resume"].includes(String(body.action))) {
+        return json({ error: "Invalid owner task control." }, 400);
+      }
+      const row = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE id=? LIMIT 1", ownerControlMatch[1]).toArray()[0];
+      if (!row) return json({ error: "Task not found." }, 404);
+      const current = taskFromRow(row);
+      const nextStatus = body.action === "pause" ? "paused" : "queued";
+      let next;
+      try { next = transitionTask(current, nextStatus, { now, ownerApproved: body.action === "resume" }); }
+      catch { return json({ error: "Invalid task state transition." }, 409); }
+      const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status=?, owner_approved=?, updated_at=?, next_run_at=NULL WHERE id=? AND status=? RETURNING id", next.status, next.owner_approved ? 1 : 0, now, current.id, current.status).toArray();
+      if (updated.length !== 1) return json({ error: "Task state conflict." }, 409);
+      return json({ task: next });
+    }
+
     const transitionMatch = url.pathname.match(/^\/v1\/tasks\/([0-9a-f-]{36})\/transition$/i);
     if (request.method === "POST" && transitionMatch) {
       const body = await readBody(request);
@@ -257,8 +275,10 @@ export default {
     const supplied = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
     const url = new URL(request.url);
     const ownerApprovalRoute = request.method === "POST" && /^\/v1\/tasks\/[0-9a-f-]{36}\/approve$/i.test(url.pathname);
-    const expectedToken = ownerApprovalRoute ? (env.TASK_OWNER_APPROVAL_TOKEN ?? "") : env.MEMORY_API_TOKEN;
-    if (ownerApprovalRoute && (!expectedToken || expectedToken === env.MEMORY_API_TOKEN)) return json({ error: "Owner approval is not configured." }, 503);
+    const ownerControlRoute = request.method === "POST" && /^\/v1\/tasks\/[0-9a-f-]{36}\/owner-control$/i.test(url.pathname);
+    const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute;
+    const expectedToken = ownerOnlyRoute ? (env.TASK_OWNER_APPROVAL_TOKEN ?? "") : env.MEMORY_API_TOKEN;
+    if (ownerOnlyRoute && (!expectedToken || expectedToken === env.MEMORY_API_TOKEN)) return json({ error: "Owner approval is not configured." }, 503);
     if (!expectedToken || !constantTimeEqual(supplied, expectedToken)) return json({ error: "Unauthorized." }, 401);
     if (!url.pathname.startsWith("/v1/")) return json({ error: "Not found." }, 404);
     const id = env.MEMORY.idFromName("single-owner-memory");
