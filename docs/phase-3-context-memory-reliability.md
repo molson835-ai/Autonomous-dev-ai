@@ -49,3 +49,20 @@ Record the prompt, raw output, tool result, and independent assessment. A model 
 - No memory-record migration beyond the already implemented additive nullable column.
 - No new paid services, billing, purchases, customer contact, payment processing, or Production deployment.
 - No changes to Coastline.
+
+## Live deployment gate — required before Phase 3 can pass
+
+The repository implementation already includes the nullable `experiences.external_id` schema migration, a unique partial index, the `POST /v1/experiences` write response containing `external_id`, and the exact-match `GET /v1/experiences?external_id=...` endpoint. The isolated Worker tests verify these code paths. Do not describe these source files as absent from the repository.
+
+A green local Worker test does **not** prove that the deployed Cloudflare Worker is running the same source revision. The CI workflow intentionally bundles and tests the Worker without deploying it. The November 12 live Eve test reported a write response containing only `id` and `stored`, followed by a 404 on exact-ID recall. That is evidence of a live code/configuration mismatch, but the 404 alone does not establish whether the deployed Worker is old or Eve is configured with a different base URL.
+
+Before marking live persistent recall as passed:
+
+1. Confirm Eve's configured `MEMORY_API_URL` points to the intended `autonomous-dev-memory` Worker. Never print or expose `MEMORY_API_TOKEN`.
+2. Obtain explicit owner approval before deploying a Worker version to Production. No PR merge or CI run should implicitly deploy it.
+3. After an approved deployment, create a **new** unique external ID. Confirm the write response includes that exact `external_id` and `stored: true`.
+4. In a genuinely new Eve session, retrieve that exact ID. Confirm the returned record's external ID, task, outcome, and result match the write.
+5. If either response is missing or erroneous, report the observed HTTP status and response shape. Do not retry an existing external ID as a new write; duplicate IDs are intentionally rejected. Do not delete or rewrite existing records.
+
+Until these live checks pass, report Phase 3 as **automated tests passed; live deployment/recall pending or failed**. The current 404 test remains a failure, not a successful acceptance result.
+
