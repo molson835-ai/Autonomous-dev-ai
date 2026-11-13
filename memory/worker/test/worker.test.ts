@@ -347,6 +347,10 @@ describe("persistent memory Worker HTTP contract", () => {
       const recovered = await request("/v1/tasks/claim-next", { method: "POST" });
       expect((await recovered.json<{ task: { id: string; status: string; attempt_count: number } }>()).task)
         .toMatchObject({ id: task.id, status: "running", attempt_count: 2 });
+      const finish = await request(`/v1/tasks/${task.id}/transition`, {
+        method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Lease recovery verified" })
+      });
+      expect(finish.status).toBe(200);
     } finally {
       vi.useRealTimers();
     }
@@ -359,7 +363,8 @@ describe("persistent memory Worker HTTP contract", () => {
     }) });
     const { task } = await create.json<{ task: { id: string } }>();
     await request(`/v1/tasks/${task.id}/approve`, { method: "POST" }, ownerToken);
-    await request("/v1/tasks/claim-next", { method: "POST" });
+    const claimed = await request("/v1/tasks/claim-next", { method: "POST" });
+    expect((await claimed.json<{ task: { id: string } }>()).task.id).toBe(task.id);
     const waiting = await request(`/v1/tasks/${task.id}/transition`, {
       method: "POST", body: JSON.stringify({ status: "waiting", checkpoint_summary: "Needs owner input" })
     });
@@ -374,7 +379,8 @@ describe("persistent memory Worker HTTP contract", () => {
     }) });
     const { task } = await create.json<{ task: { id: string } }>();
     await request(`/v1/tasks/${task.id}/approve`, { method: "POST" }, ownerToken);
-    await request("/v1/tasks/claim-next", { method: "POST" });
+    const claimed = await request("/v1/tasks/claim-next", { method: "POST" });
+    expect((await claimed.json<{ task: { id: string } }>()).task.id).toBe(task.id);
     const waiting = await request(`/v1/tasks/${task.id}/transition`, { method: "POST", body: JSON.stringify({
       status: "waiting", checkpoint_summary: "First test stage complete",
       evidence_refs: ["ci://test/1"], next_run_at: new Date(Date.now() - 1000).toISOString()
