@@ -52,8 +52,9 @@ test("selector returns one due approved task and blocks while another task runs"
 });
 
 test("selector skips unapproved, invalid, exhausted, and not-yet-due tasks", () => {
-  const dueLater = transitionTask(queued(), "waiting", { now });
-  const scheduled = Object.freeze({ ...transitionTask(dueLater, "queued", { now }), next_run_at: "2026-11-14T00:00:00.000Z" });
+  const claimed = transitionTask(queued(), "running", { now });
+  const waiting = transitionTask(claimed, "waiting", { now });
+  const scheduled = Object.freeze({ ...transitionTask(waiting, "queued", { now }), next_run_at: "2026-11-14T00:00:00.000Z" });
   const exhausted = Object.freeze({ ...queued({ id: "task-x", idempotency_key: "x" }), attempt_count: 3 });
   assert.equal(selectNextTask([scheduled, exhausted], { now: Date.parse(now) }), null);
 });
