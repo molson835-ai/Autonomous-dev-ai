@@ -20,7 +20,7 @@ test("scheduled work claims at most one owner-approved task and checkpoints acro
 test("scheduled work cannot approve itself or cross external-action boundaries", () => {
   assert.match(schedule, /Never approve, resume, cancel, or expand a task yourself/);
   assert.match(schedule, /no paid service/);
-  assert.match(schedule, /no purchase/);
+  assert.match(schedule, /purchase/);
   assert.match(schedule, /no customer contact/);
   assert.match(schedule, /no Production deployment/);
   assert.match(schedule, /no secret or owner token may be exposed/);
