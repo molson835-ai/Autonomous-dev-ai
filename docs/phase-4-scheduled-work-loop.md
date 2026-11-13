@@ -8,7 +8,7 @@ This adds one Eve-native schedule at `agent/schedules/owner-approved-work-loop.t
 - Each invocation starts a fresh Eve session; it does not resume the prior chat.
 - The session claims at most one due owner-approved task through `task_claim_next`. Queue read/write tools are disabled outside Vercel Production; Preview schedule invocations return a no-op without contacting the Production task store.
 - It performs one bounded step, then records success, failure, or a checkpoint through `task_transition`.
-- A safe continuation is scheduled by setting `waiting` with `resume_after_minutes`; the tool computes `next_run_at`.
+- A safe continuation is scheduled by setting `waiting` with `resume_after_minutes: 1320` (22 hours), leaving a two-hour margin before the next daily run; the tool computes `next_run_at`.
 - A waiting task without a continuation time remains blocked for owner input or a capability change.
 - The task store's 30-minute stale-running lease recovers crashed or abandoned invocations, subject to the three-attempt limit.
 
