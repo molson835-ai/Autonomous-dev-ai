@@ -18,11 +18,11 @@ This Eve integration emits Vercel Cron Jobs, not the separate Vercel Schedules b
 
 
 
-Eve's current schedule documentation states that hosted Vercel builds run schedules in UTC, Hobby permits at most one run every 15 minutes, each schedule is an independent invocation, and failed invocations are not automatically retried. Vercel Schedules is in public beta on all plans; the current Hobby allowance is 5,000 runs and 500 schedule creations per month. The hourly cadence uses about 720 runs/month in each environment that carries the schedule. Each run relies on the durable task store rather than session continuity.
+Eve's schedule documentation confirms UTC execution, independent invocations, and no automatic retry after failed invocations. This project-specific Vercel deployment explicitly enforces the stricter Hobby daily limit. A continuation uses `resume_after_minutes: 1440`, and the next daily run reads the durable checkpoint. One daily schedule uses about 30 runs/month in each environment that carries it.
 
 Sources:
 - https://eve.dev/docs/schedules
-- https://vercel.com/changelog/vercel-schedules-is-now-in-public-beta
+- https://vercel.com/docs/cron-jobs/usage-and-pricing
 
 ## Capability limits
 
