@@ -67,6 +67,8 @@ export class MemoryStore extends DurableObject<Env> {
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS experiences_created ON experiences(created_at DESC)");
       ensureExperienceExternalIdColumn(ctx.storage.sql);
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE, task_type TEXT NOT NULL, title TEXT NOT NULL, goal TEXT NOT NULL, approved_scope TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('proposed','queued','running','waiting','paused','succeeded','failed','cancelled')), owner_approved INTEGER NOT NULL CHECK (owner_approved IN (0,1)), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, attempt_count INTEGER NOT NULL, max_attempts INTEGER NOT NULL CHECK (max_attempts BETWEEN 1 AND 3), next_run_at TEXT, checkpoint_summary TEXT, result_summary TEXT, evidence_refs TEXT NOT NULL DEFAULT '[]', started_at TEXT, finished_at TEXT)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS task_control (id INTEGER PRIMARY KEY CHECK (id=1), queue_paused INTEGER NOT NULL CHECK (queue_paused IN (0,1)), reason TEXT, updated_at TEXT NOT NULL)");
+      ctx.storage.sql.exec("INSERT OR IGNORE INTO task_control (id,queue_paused,reason,updated_at) VALUES (1,0,NULL,?)", new Date().toISOString());
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS tasks_status_created ON tasks(status, created_at)");
     });
   }
@@ -96,6 +98,26 @@ export class MemoryStore extends DurableObject<Env> {
       const limit = boundedLimit(url.searchParams.get("limit"), 20);
       const rows = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks ORDER BY created_at DESC LIMIT ?", limit).toArray();
       return json({ tasks: rows.map(taskFromRow) });
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/owner/status") {
+      const control = this.ctx.storage.sql.exec<{ queue_paused: number; reason: string | null; updated_at: string }>("SELECT queue_paused,reason,updated_at FROM task_control WHERE id=1").one();
+      const running = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='running'").one().count;
+      const queued = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='queued' AND owner_approved=1").one().count;
+      return json({ queue_paused: control.queue_paused === 1, reason: control.reason, updated_at: control.updated_at, running_tasks: running, queued_tasks: queued });
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/owner/control") {
+      const body = await readBody(request);
+      if (!body || Object.keys(body).some(key => !["action","reason"].includes(key)) || !["pause","resume"].includes(body.action)) return json({ error: "Invalid owner control action." }, 400);
+      if (body.reason !== undefined && body.reason !== null && !isSafeMemoryText(body.reason, 500)) return json({ error: "Invalid pause reason." }, 400);
+      const paused = body.action === "pause";
+      const updated = this.ctx.storage.sql.exec<{ id: number }>(
+        "UPDATE task_control SET queue_paused=?,reason=?,updated_at=? WHERE id=1 RETURNING id",
+        paused ? 1 : 0, paused ? (body.reason ?? "Paused by owner") : null, now
+      ).toArray();
+      if (updated.length !== 1) return json({ error: "Owner control state unavailable." }, 503);
+      return json({ queue_paused: paused, reason: paused ? (body.reason ?? "Paused by owner") : null });
     }
 
     if (request.method === "GET" && url.pathname === "/v1/owner/tasks") {
@@ -134,6 +156,8 @@ export class MemoryStore extends DurableObject<Env> {
     }
 
     if (request.method === "POST" && url.pathname === "/v1/tasks/claim-next") {
+      const control = this.ctx.storage.sql.exec<{ queue_paused: number; reason: string | null }>("SELECT queue_paused,reason FROM task_control WHERE id=1").one();
+      if (control.queue_paused === 1) return json({ task: null, paused: true, reason: control.reason });
       const runningRow = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE status='running' ORDER BY updated_at ASC LIMIT 1").toArray()[0];
       if (runningRow) {
         const runningTask = taskFromRow(runningRow);
@@ -317,8 +341,9 @@ export default {
     const ownerApprovalRoute = request.method === "POST" && /^\/v1\/tasks\/[0-9a-f-]{36}\/approve$/i.test(url.pathname);
     const ownerControlRoute = request.method === "POST" && /^\/v1\/tasks\/[0-9a-f-]{36}\/owner-control$/i.test(url.pathname);
     const ownerMemoryDecisionRoute = request.method === "POST" && /^\/v1\/proposals\/[0-9a-f-]{36}\/decision$/i.test(url.pathname);
-    const ownerReadRoute = request.method === "GET" && ["/v1/owner/tasks", "/v1/owner/proposals"].includes(url.pathname);
-    const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute || ownerMemoryDecisionRoute || ownerReadRoute;
+    const ownerReadRoute = request.method === "GET" && ["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status"].includes(url.pathname);
+    const ownerQueueControlRoute = request.method === "POST" && url.pathname === "/v1/owner/control";
+    const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute || ownerMemoryDecisionRoute || ownerReadRoute || ownerQueueControlRoute;
     const ownerOrigin = "https://autonomous-dev-ai.vercel.app";
     const origin = request.headers.get("origin");
     const withOwnerCors = (response: Response) => {
