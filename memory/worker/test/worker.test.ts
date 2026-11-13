@@ -329,6 +329,39 @@ describe("persistent memory Worker HTTP contract", () => {
     expect(await (await request("/v1/tasks/claim-next", { method: "POST" })).json()).toEqual({ task: null });
   });
 
+  it("lets the owner pause the global queue and blocks claims until resumed", async () => {
+    const create = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
+      idempotency_key: `TASK-GLOBAL-PAUSE-${crypto.randomUUID()}`, task_type: "repo_maintenance",
+      title: "Global pause test", goal: "Verify owner queue pause", approved_scope: "Isolated test only"
+    }) });
+    const { task } = await create.json<{ task: { id: string } }>();
+    await request(`/v1/tasks/${task.id}/approve`, { method: "POST" }, ownerToken);
+
+    const denied = await request("/v1/owner/control", { method: "POST", body: JSON.stringify({ action: "pause" }) });
+    expect(denied.status).toBe(401);
+    const paused = await request("/v1/owner/control", {
+      method: "POST", body: JSON.stringify({ action: "pause", reason: "CI emergency-stop test" })
+    }, ownerToken);
+    expect(paused.status).toBe(200);
+    expect(await (await request("/v1/owner/status", {}, ownerToken)).json())
+      .toMatchObject({ queue_paused: true, reason: "CI emergency-stop test" });
+
+    const blocked = await request("/v1/tasks/claim-next", { method: "POST" });
+    expect(await blocked.json()).toMatchObject({ task: null, paused: true });
+
+    const resumed = await request("/v1/owner/control", {
+      method: "POST", body: JSON.stringify({ action: "resume" })
+    }, ownerToken);
+    expect(resumed.status).toBe(200);
+    const claimed = await request("/v1/tasks/claim-next", { method: "POST" });
+    expect((await claimed.json<{ task: { id: string; status: string } }>()).task)
+      .toMatchObject({ id: task.id, status: "running" });
+    const finish = await request(`/v1/tasks/${task.id}/transition`, {
+      method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Global pause test completed" })
+    });
+    expect(finish.status).toBe(200);
+  });
+
   it("recovers an expired running task lease and retries within its attempt budget", async () => {
     const create = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
       idempotency_key: `TASK-LEASE-RECOVERY-${crypto.randomUUID()}`, task_type: "repo_maintenance",
