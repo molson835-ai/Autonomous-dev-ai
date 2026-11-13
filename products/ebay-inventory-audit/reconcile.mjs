@@ -6,7 +6,7 @@ const HEADER_ALIASES = Object.freeze({
 });
 
 function normalizeHeader(value) {
-  return String(value ?? "").replace(/^\uFEFF/, "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ");
+  return String(value ?? "").replace(/^\uFEFF/, "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 export function parseCsv(text) {
