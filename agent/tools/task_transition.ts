@@ -1,6 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { memoryRequest } from "../lib/memory-client";
+import { assertProductionTaskRuntime } from "../lib/task-runtime.mjs";
 
 export default defineTool({
   description:
@@ -14,6 +15,7 @@ export default defineTool({
     resume_after_minutes: z.number().int().min(15).max(1440).optional(),
   }),
   async execute({ id, resume_after_minutes, ...body }) {
+    assertProductionTaskRuntime();
     if (resume_after_minutes !== undefined && body.status !== "waiting") {
       throw new Error("resume_after_minutes is only valid when status is waiting.");
     }
