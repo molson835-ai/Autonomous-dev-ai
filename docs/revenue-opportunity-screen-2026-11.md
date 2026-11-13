@@ -1,0 +1,66 @@
+# Initial revenue opportunity screen — 12 November 2026
+
+## Decision
+
+Build a narrowly scoped, local-first **listing-to-stock CSV reconciliation utility** as a testable MVP. It compares a seller's active listing export with a separate stock CSV and flags missing SKU matches, quantity differences, duplicate SKUs, blank SKUs, and invalid quantities.
+
+This is an experiment, not a validated business. No customer interviews, paid conversions, sales, or willingness-to-pay evidence have been obtained. Do not publish an offer, contact sellers, collect payments, or represent the product as eBay-approved without owner authorization.
+
+## Evidence and market signals
+
+1. Sellers describe inventory, cost/profit tracking, and listing upkeep as recurring pain. A recent r/eBaySellerAdvice thread asks what tools help with those tasks; replies mention custom spreadsheets, SKU databases, and difficulty maintaining inventory data: https://www.reddit.com/r/eBaySellerAdvice/comments/1x5srv1/what-tools-are-actually-useful-for-staying-organized/
+2. A high-volume eBay seller described around 4,000 listings and 9,000 units, relying on Excel and struggling to detect listings that disappear: https://www.reddit.com/r/Ebay/comments/1u9fsbv/ebay_management_4k_listings_9000qty_and_growing/
+3. eBay officially offers Seller Hub Reports and CSV/XLS bulk listing workflows. Its documentation says reports can support manual audits, and its Sell Feed API can expose active inventory reports, but API integration is out of scope for this MVP: https://www.ebay.com/sellercenter/listings/ebay-bulk-listing-tools
+4. Competition is real. SellerAider lists plans around $12.99–$29.99/month; SixBit lists plans from $29.99/month; existing reseller profit spreadsheets are available free and at one-time prices such as $14.99, $19, $24–$29: https://selleraider.com/pricing/ ; https://www.sixbitsoftware.com/pricing/ ; https://www.profitstamp.com/products/profit-tracker/ ; https://www.etsy.com/listing/4612281545/ebay-seller-spreadsheet-fee-calculator
+5. Existing paid products mostly bundle crosslisting, relisting, bulk editing, fee/profit reporting, and inventory management. A smaller local reconciliation tool could differentiate on no login, no subscription, local file processing, and one narrow job—but that positioning remains untested.
+
+## Five candidate opportunities
+
+Scores are preliminary judgment, not measured market size. Scale 1–5. For competitive pressure, 5 means lower competition / more room to differentiate. Total is the unweighted average of demand, competitive room, buildability, free-tier affordability, and path-to-delivery.
+
+| Opportunity | Demand signal | Competitive room | Buildability | Free-tier affordability | Delivery path | Average |
+|---|---:|---:|---:|---:|---:|---:|
+| Listing-to-stock CSV reconciliation for small sellers | 4 | 3 | 5 | 5 | 4 | 4.2 |
+| Multi-marketplace profit/inventory spreadsheet | 4 | 1 | 5 | 5 | 5 | 4.0 |
+| Local website accessibility/performance audit report | 3 | 2 | 4 | 4 | 3 | 3.2 |
+| Invoice/packing-slip to inventory CSV converter | 3 | 3 | 3 | 4 | 3 | 3.2 |
+| AI listing title/description generator | 3 | 1 | 5 | 5 | 3 | 3.4 |
+
+### Why this candidate
+
+- It addresses a concrete seller workflow: reconciling listings with actual shelf stock.
+- The official marketplace has CSV/XLS report workflows, so the MVP can avoid account credentials and paid APIs.
+- It is technically feasible as a static browser tool; uploaded files stay local.
+- Existing software is often a larger subscription product; a one-time lightweight utility may be easier to test.
+- The evidence is anecdotal and competitors exist. A usable MVP is only the first step; willingness to pay remains unknown.
+
+## MVP acceptance criteria
+
+- Accept two CSV files without uploading them.
+- Parse quoted CSV fields, escaped quotes, CRLF, and BOM.
+- Match by SKU and compare integer quantities.
+- Flag active listing without stock, stock without active listing, quantity mismatch, duplicate SKU, blank SKU, and invalid quantity.
+- Export issue report as CSV.
+- Explain that incomplete source exports can create false positives.
+- Do not connect to eBay or modify listings.
+- Tests cover parsing, matching, duplicate aggregation, blank identifiers, malformed data, and CSV export.
+
+## Monetization hypothesis (not an offer)
+
+If seller tests show clear value, test a one-time $9–$19 downloadable utility or a free tool with a paid batch/report feature. This is a proposed experiment only; no pricing has been validated. A public offer, customer contact, payment setup, or launch requires owner approval.
+
+## Validation plan
+
+1. Run the sample CSV test and automated unit tests.
+2. Obtain consented, anonymized sample exports from 2–3 sellers only after the owner approves outreach or supplies volunteers.
+3. Measure import success, false-positive rate, time saved, and whether each seller would pay at a stated price.
+4. Stop or redesign if exports are too inconsistent or the tool does not catch actionable issues.
+5. Only after positive validation, prepare a launch proposal and explicit approval request.
+
+## Current blockers
+
+- No verified seller willingness to pay.
+- No authorized channel for customer outreach or public offer publication.
+- No payment processor configured.
+- CSV formats need validation against real, consented Seller Hub exports.
+- Public deployment of this product is not approved.
