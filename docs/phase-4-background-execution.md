@@ -78,6 +78,16 @@ Persist progress after every completed turn/step boundary. Each task must expose
 
 The UI may poll on demand. Background execution must not depend on an open browser, active chat, or user polling. On the next Eve visit, show a concise completion/failure summary. Push notifications are a separate future feature.
 
+## Important session-continuity constraint
+
+Eve's schedule documentation states that a scheduled run starts a new session by default. A handler schedule also starts a new session unless it sends to an existing conversation/channel address. Therefore, do not assume that a schedule can resume a prior task session merely because a session ID was stored.
+
+Before implementing the selector, prove the exact continuation mechanism against the installed Eve version (`1.0.0-rc.9`):
+- If an existing stable conversation/channel handle can safely receive the next task turn, test that the same session ID and checkpoint continue.
+- Otherwise, treat the task-store checkpoint as the source of truth and start a fresh bounded session that receives only the approved task scope and checkpoint summary. Do not depend on previous chat history being present.
+- In either case, persist the returned session/run identifiers and verify recovery after a process interruption.
+- A development schedule dispatch test is required before choosing the production architecture. Never infer continuation from a successful schedule invocation alone.
+
 ## Safety and resource controls
 
 - Free-tier-only operation. Track actual quota/limit errors and pause cleanly; never upgrade a plan or incur charges.
