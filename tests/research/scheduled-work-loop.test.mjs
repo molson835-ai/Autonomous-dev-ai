@@ -13,7 +13,7 @@ test("scheduled work claims at most one owner-approved task and checkpoints acro
   assert.match(schedule, /already approved by the owner/);
   assert.match(schedule, /fresh session/);
   assert.match(schedule, /task_transition\(status="waiting"\)/);
-  assert.match(schedule, /resume_after_minutes of at least 1440/);
+  assert.match(schedule, /resume_after_minutes of at least 1320/);
   assert.match(schedule, /Process one task only/);
 });
 
