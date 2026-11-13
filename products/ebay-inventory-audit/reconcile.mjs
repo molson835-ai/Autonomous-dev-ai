@@ -175,7 +175,9 @@ export function reconcileCsv(activeCsv, inventoryCsv) {
 export function issuesToCsv(issues) {
   const headers = ["severity", "issue", "sku", "title", "active_quantity", "stock_quantity", "location", "source_rows", "details"];
   const quote = value => {
-    const text = String(value ?? "");
+    const raw = String(value ?? "");
+    // Prevent spreadsheet formula execution when users open exported issue reports.
+    const text = /^[\\t\\r\\n ]*[=+\\-@]/.test(raw) ? `'${raw}` : raw;
     return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
   };
   return [headers, ...issues.map(issue => [
