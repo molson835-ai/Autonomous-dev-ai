@@ -12,17 +12,23 @@ function normalizeHeader(value) {
 export function parseCsv(text) {
   if (typeof text !== "string" || !text.trim()) throw new Error("The CSV file is empty.");
   const rows = [];
-  let row = [], cell = "", quoted = false;
+  let row = [], cell = "", quoted = false, closedQuote = false;
   for (let i = 0; i < text.length; i += 1) {
     const char = text[i];
     if (quoted) {
       if (char === '"' && text[i + 1] === '"') { cell += '"'; i += 1; }
-      else if (char === '"') quoted = false;
+      else if (char === '"') { quoted = false; closedQuote = true; }
       else cell += char;
-    } else if (char === '"' && cell.length === 0) quoted = true;
-    else if (char === ",") { row.push(cell); cell = ""; }
+      continue;
+    }
+    if (closedQuote && char !== "," && char !== "\n" && char !== "\r") {
+      throw new Error("The CSV contains unexpected characters after a closing quote.");
+    }
+    if (char === '"' && cell.length === 0 && !closedQuote) quoted = true;
+    else if (char === '"' ) throw new Error("The CSV contains a quote inside an unquoted field.");
+    else if (char === ",") { row.push(cell); cell = ""; closedQuote = false; }
     else if (char === "\n" || char === "\r") {
-      row.push(cell); cell = "";
+      row.push(cell); cell = ""; closedQuote = false;
       if (row.some(value => value.trim() !== "")) rows.push(row);
       row = [];
       if (char === "\r" && text[i + 1] === "\n") i += 1;
