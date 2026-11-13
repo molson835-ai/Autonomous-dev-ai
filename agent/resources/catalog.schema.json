@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autonomous-dev-ai.local/schemas/resource-catalog.schema.json",
+  "title": "Eve Resource Catalog Entry",
+  "description": "Provenance-first metadata for a skill, reference, tool, model, dataset, benchmark, or hardware resource. Catalog entries are inert metadata; they do not authorize installation or execution.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "name",
+    "summary",
+    "resource_type",
+    "skill_tags",
+    "source_url",
+    "maintainer",
+    "license",
+    "version_or_revision",
+    "cost_model",
+    "dependencies",
+    "permissions",
+    "network_or_execution_requirements",
+    "trust_state",
+    "security_notes",
+    "retrieved_at",
+    "last_verified_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[a-z0-9][a-z0-9._:-]*$"
+    },
+    "name": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "resource_type": {
+      "enum": ["documentation", "tutorial", "skill", "repository", "tool", "model", "dataset", "benchmark", "hardware_reference"]
+    },
+    "skill_tags": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 100 },
+      "uniqueItems": true,
+      "maxItems": 50
+    },
+    "source_url": { "type": "string", "format": "uri" },
+    "maintainer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "description": "Use an explicit value such as 'unknown' when not established."
+    },
+    "license": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "description": "Exact license identifier/name or 'unknown'; never infer from public availability."
+    },
+    "version_or_revision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "description": "Pinned version, release, commit, or 'unknown'."
+    },
+    "cost_model": {
+      "enum": ["free_open_source", "free_tier_limited", "paid", "unknown"]
+    },
+    "cost_notes": { "type": "string", "maxLength": 2000 },
+    "dependencies": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 300 },
+      "maxItems": 100
+    },
+    "permissions": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 300 },
+      "maxItems": 100
+    },
+    "network_or_execution_requirements": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 300 },
+      "maxItems": 100
+    },
+    "trust_state": {
+      "enum": ["discovered", "quarantined", "reviewed", "approved", "rejected", "stale"]
+    },
+    "security_notes": { "type": "string", "maxLength": 4000 },
+    "reviewer": { "type": ["string", "null"], "maxLength": 200 },
+    "reviewed_at": { "type": ["string", "null"], "format": "date-time" },
+    "review_evidence": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 2000 },
+      "maxItems": 50
+    },
+    "retrieved_at": { "type": "string", "format": "date-time" },
+    "last_verified_at": { "type": "string", "format": "date-time" },
+    "freshness_policy": { "type": "string", "maxLength": 1000 }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "trust_state": { "const": "approved" } },
+        "required": ["trust_state"]
+      },
+      "then": {
+        "properties": {
+          "reviewer": { "type": "string", "minLength": 1 },
+          "reviewed_at": { "type": "string", "format": "date-time" },
+          "review_evidence": { "type": "array", "minItems": 1 }
+        },
+        "required": ["reviewer", "reviewed_at", "review_evidence"]
+      }
+    }
+  ]
+}
