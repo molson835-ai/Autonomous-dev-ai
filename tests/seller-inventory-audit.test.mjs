@@ -44,6 +44,14 @@ test("flags blank SKUs and invalid quantities without silently matching them", (
   assert.ok(result.issues.some(issue => issue.type === "invalid-inventory-quantity"));
 });
 
+test("recognizes normalized aliases with punctuation in the original header", () => {
+  const active = "Custom label (SKU),Item title,Available quantity\nX-2,Widget,4";
+  const inventory = "SKU,Title,Quantity,Location\nX-2,Widget,4,Shelf B";
+  const result = reconcileCsv(active, inventory);
+  assert.equal(result.summary.matchedSkus, 1);
+  assert.equal(result.issues.length, 0);
+});
+
 test("accepts common Seller Hub header aliases", () => {
   const active = "Custom label (SKU),Item title,Available quantity\nX-1,Widget,4";
   const inventory = "Seller SKU,Product title,Qty,Bin\nX-1,Widget,4,Top shelf";
