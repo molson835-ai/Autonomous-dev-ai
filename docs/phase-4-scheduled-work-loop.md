@@ -34,7 +34,7 @@ The schedule only uses tools available in the deployed Eve runtime. At this stag
 
 ## Safety
 
-No task is automatically approved. The schedule cannot approve, resume, cancel, or expand task scope. It cannot contact customers, publish offers, create accounts, accept payments, purchase hardware, change billing, access personal financial accounts, merge code, or deploy Production. It pauses on missing usage measurements, quota exhaustion, or unavailable capabilities.
+No task is automatically approved. The schedule cannot approve, resume, cancel, or expand task scope. It cannot contact customers, publish offers, create accounts, accept payments, purchase hardware, change billing, access personal financial accounts, merge code, or deploy Production. It pauses on explicit provider quota/rate-limit errors or unavailable capabilities. Runtime-wide model/tool usage metering is not yet wired into this schedule; the existing resource-budget module is policy-only. Therefore this PR does not claim hard per-turn token/tool-call enforcement or live Vercel/Cloudflare quota monitoring.
 
 ## Activation
 
