@@ -18,11 +18,11 @@ Vercel Schedules is in public beta on all plans. The current Hobby allowance inc
 
 
 
-Eve's current schedule documentation states that hosted Vercel builds run schedules in UTC, Hobby permits at most one run every 15 minutes, each schedule is an independent invocation, and failed invocations are not automatically retried. Each run therefore relies on the durable task store rather than session continuity.
+Eve's current schedule documentation states that hosted Vercel builds run schedules in UTC, Hobby permits at most one run every 15 minutes, each schedule is an independent invocation, and failed invocations are not automatically retried. Vercel Schedules is in public beta on all plans; the current Hobby allowance is 5,000 runs and 500 schedule creations per month. The hourly cadence uses about 720 runs/month in each environment that carries the schedule. Each run relies on the durable task store rather than session continuity.
 
 Sources:
 - https://eve.dev/docs/schedules
-- https://vercel.com/docs/cron-jobs/usage-and-pricing
+- https://vercel.com/changelog/vercel-schedules-is-now-in-public-beta
 
 ## Capability limits
 
@@ -38,7 +38,7 @@ No task is automatically approved. The schedule cannot approve, resume, cancel, 
 
 ## Activation
 
-This PR adds code and tests only. The schedule does not run in `eve dev`; it fires on a hosted production build. It remains inactive until the stacked task-store work and this schedule are reviewed, merged, and explicitly approved for Production deployment. A live closed-browser execution test is required before claiming background autonomy.
+This PR adds code and tests only. The schedule does not run on its cadence in `eve dev`; hosted Preview builds can carry it too, but the task tools fail closed outside Vercel Production and do not access the Production queue. The schedule can perform work only after the task-store code is deployed to Production and an owner-approved task exists. Production deployment still requires explicit approval. A live closed-browser execution test is required before claiming background autonomy.
 
 ## Verification
 
