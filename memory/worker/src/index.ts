@@ -124,7 +124,7 @@ export class MemoryStore extends DurableObject<Env> {
         const retryable = runningTask.attempt_count < runningTask.max_attempts;
         const recovered = transitionTask(runningTask, retryable ? "waiting" : "failed", {
           now,
-          checkpointSummary: (runningTask.checkpoint_summary ? runningTask.checkpoint_summary + "\\n" : "") +
+          checkpointSummary: (runningTask.checkpoint_summary ? runningTask.checkpoint_summary + "\n" : "") +
             "Recovered after a stale scheduled run; inspect prior evidence before continuing.",
           resultSummary: retryable ? runningTask.result_summary : "Execution lease expired on the final allowed attempt; no further retry.",
           nextRunAt: retryable ? now : undefined,
