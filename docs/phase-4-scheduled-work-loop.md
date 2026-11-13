@@ -4,7 +4,7 @@
 
 This adds one Eve-native schedule at `agent/schedules/owner-approved-work-loop.ts`:
 
-- Cron: `0 * * * *` (hourly). This is deliberately less frequent than the 15-minute minimum allowed on Hobby to keep free schedule usage conservative.
+- Cron: `0 14 * * *` (daily at 14:00 UTC). The actual Vercel Preview build returned `cron_jobs_limits_reached` with the explicit message that this Hobby account is limited to daily Cron Jobs; an hourly expression is rejected.
 - Each invocation starts a fresh Eve session; it does not resume the prior chat.
 - The session claims at most one due owner-approved task through `task_claim_next`. Queue read/write tools are disabled outside Vercel Production; Preview schedule invocations return a no-op without contacting the Production task store.
 - It performs one bounded step, then records success, failure, or a checkpoint through `task_transition`.
@@ -14,7 +14,7 @@ This adds one Eve-native schedule at `agent/schedules/owner-approved-work-loop.t
 
 ## Host behavior
 
-Vercel Schedules is in public beta on all plans. The current Hobby allowance includes 5,000 runs and 500 schedule creations per month; one hourly schedule uses about 720 runs/month per environment. Preview builds can also carry schedules, so the task tools fail closed outside Production.
+This Eve integration emits Vercel Cron Jobs, not the separate Vercel Schedules beta. The actual project deployment error is authoritative: Hobby allows only daily Cron Jobs. This schedule therefore runs once per day and requires no plan upgrade. Preview builds can also carry schedules, so the task tools fail closed outside Production.
 
 
 
