@@ -20,7 +20,7 @@ Normal Eve API access uses `MEMORY_API_TOKEN`. Task approval, task pause/resume,
 
 ## Owner review console
 
-The Next.js `/owner` page is a separate owner-side interface for reviewing tasks and pending memory proposals. It requires the separate `TASK_OWNER_APPROVAL_TOKEN`, held only in page memory and never saved to browser storage or exposed to Eve. The Worker exposes owner-token-only list endpoints and allows browser CORS only from `https://autonomous-dev-ai.vercel.app`. The token must be provisioned out-of-band before the console can operate.
+The Next.js `/owner` page is a separate owner-side interface for reviewing tasks and pending memory proposals, and globally pausing/resuming new task claims. It requires the separate `TASK_OWNER_APPROVAL_TOKEN`, held only in page memory and never saved to browser storage or exposed to Eve. The Worker exposes owner-token-only list endpoints and allows browser CORS only from `https://autonomous-dev-ai.vercel.app`. The token must be provisioned out-of-band before the console can operate. Global pause prevents new claims and scheduled continuations; an already-running invocation may finish its current bounded step.
 
 ## Eve task tools
 
