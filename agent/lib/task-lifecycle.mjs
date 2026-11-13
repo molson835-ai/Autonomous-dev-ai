@@ -163,4 +163,17 @@ export function transitionTask(task, nextStatus, {
   return Object.freeze(updated);
 }
 
+
+/** A running task is recoverable only after its bounded execution lease expires. */
+export function isTaskLeaseExpired(task, {
+  now = Date.now(),
+  leaseMs = 30 * 60 * 1000
+} = {}) {
+  if (!task || task.status !== "running" || !validTimestamp(task.updated_at)) return false;
+  if (!Number.isFinite(now) || !Number.isFinite(leaseMs) || leaseMs < 1) {
+    throw new TypeError("A finite clock and positive lease duration are required");
+  }
+  return now - Date.parse(task.updated_at) >= leaseMs;
+}
+
 export const TASK_STATUS_VALUES = TASK_STATUSES;
