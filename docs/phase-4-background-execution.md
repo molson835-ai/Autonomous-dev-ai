@@ -1,122 +1,124 @@
-# Phase 4G — durable background execution architecture
+# Phase 4G — durable background execution with Eve
 
 ## Goal
 
-Let Eve continue owner-authorized work after the browser and chat session close. Work must survive process restarts, persist checkpoints, recover from transient failures, and report its actual state when the owner returns.
+Let Eve continue owner-authorized work after the browser and chat session close, persist progress, recover from interruptions, and report the actual state when the owner returns.
 
-This is a sequence of bounded executions, not one indefinitely running model process. A scheduler wakes a durable queue, runs one bounded step, persists the result, and schedules the next step when appropriate.
+This is not one indefinitely running model process. It is a durable workflow made of bounded model/tool steps, with checkpoints and scheduled opportunities to resume or select the next approved task.
 
 ## Current verified baseline
 
-- Eve runs in the Vercel-hosted Eve/Next.js application.
-- The existing Cloudflare Worker `autonomous-dev-memory` uses a SQLite-backed Durable Object for persistent memories and experiences.
-- The memory Worker is authenticated with its own bearer secret. It is not a task scheduler.
-- The repository does not currently define a durable task queue, an alarm handler for background work, or a server-to-server task execution endpoint.
-- The current Eve research capability is read-only and restricted to a narrow documentation-host allowlist.
-- The current owner policy requires approval for merges, Production deployment, external communications, purchases, paid services, and consequential account actions.
+- The repository uses the Eve framework (`eve ^1.0.0-rc.6`) and deploys through Vercel.
+- Eve's documented runtime executes each session as a durable Workflow; turns checkpoint at step boundaries and can resume after process restarts/redeploys.
+- Eve supports authored schedules under `agent/schedules/`. On Vercel, schedules are registered as Vercel Schedules and run independently of an open browser/chat.
+- No schedule file is currently present in this repository, and no live schedule execution has been verified for this deployment.
+- The existing Cloudflare Worker `autonomous-dev-memory` is a separate authenticated memory service. It is not a task queue; do not mix task state into existing memory records.
+- The current research capability is read-only and restricted to a narrow technical-documentation host allowlist.
+- Existing owner policy requires approval for merges, Production deployment, external communications, purchases, paid services, and consequential account actions.
 
-## Proposed architecture
+## Architecture decision
 
-### 1. Separate task service
+**Prefer Eve's native durable workflows and schedules before adding a custom queue Worker.** Eve already provides durable sessions, workflow checkpoints, and a schedule mechanism. A second scheduler or separate Durable Object alarm system would duplicate orchestration and create avoidable operational complexity.
 
-Create a separate Cloudflare Worker and SQLite-backed Durable Object class for tasks. Do not mix task state with the existing memory database or alter existing memory records.
+### 1. Durable task sessions
 
-The Worker exposes a small authenticated API:
-- `POST /v1/tasks`: enqueue an owner-authorized task with a stable idempotency key and explicit scope.
-- `GET /v1/tasks/:id`: retrieve status, progress, timestamps, and last safe error.
-- `GET /v1/tasks`: list a bounded page of recent tasks.
-- `POST /v1/tasks/:id/cancel`: request cancellation.
-- `POST /v1/tasks/:id/pause` and `resume`: owner controls.
-- Internal-only execution callback: claim/complete one step using a task ID, lease token, and step sequence.
+Represent each long-running work item as a durable Eve session/turn or a sequence of turns addressed to a stable task session. Use Eve's workflow checkpointing rather than implementing a parallel model-execution engine.
 
-The public Eve chat route must not expose the task service without independent authentication. Never place the task API secret in browser code.
-
-### 2. Durable queue and scheduler
-
-A single-owner queue Durable Object is an acceptable first milestone. SQLite is the source of truth; in-memory state is never authoritative.
-
-Suggested task fields:
-- `id`, `idempotency_key`, `task_type`, `title`, `goal`, `scope_json`
-- `status`: queued, running, waiting, paused, succeeded, failed, cancelled
+Each task must have a stable task ID and a structured state record containing:
+- `id`, `idempotency_key`, `task_type`, `title`, `goal`, `approved_scope`
+- `status`: proposed, queued, running, waiting, paused, succeeded, failed, cancelled
 - `created_at`, `updated_at`, `started_at`, `finished_at`, `next_run_at`
 - `attempt_count`, `max_attempts`, `step_count`, `max_steps`
-- `lease_token_hash`, `lease_expires_at`, `last_error_code`
-- `progress_json`, `checkpoint_json`, `result_json`
+- `eve_session_id`, `checkpoint_summary`, `result_summary`, `evidence_refs`
+- `last_error_code`, `last_error_at`
 
-Use a Durable Object alarm to wake the queue when work is due. Each alarm processes at most one bounded step (or a very small configured batch), commits its checkpoint/status before scheduling the next alarm, and returns. The alarm is not a continuously running process.
+Store task metadata in a separate task store with its own schema and API. Do not write task state into approved memories or experiences, and do not alter existing memory records. The first implementation may use the smallest free-tier-compatible durable store after validating limits; a separate SQLite Durable Object is a candidate only if Eve's own durable session state is insufficient for queue listing, idempotency, and owner controls.
 
-Cloudflare documents alarms as at-least-once, with automatic retry when the handler throws; therefore every step must be idempotent and guarded by task ID plus step sequence. Do not assume exactly-once execution. Use a lease to recover tasks left running after interruption.
+### 2. Scheduled work selector
 
-### 3. Bounded execution adapter
+Add a TypeScript schedule under `agent/schedules/` using Eve's documented `defineSchedule` API.
 
-The task scheduler must not embed an unbounded agent loop. It dispatches one bounded step to an execution adapter and expects a structured response:
-- progress summary;
-- checkpoint for the next step;
-- completion, waiting, or retryable/permanent failure;
-- requested tools/actions;
-- evidence references.
+The schedule should:
+1. Wake on a conservative cadence supported by the deployed Vercel plan.
+2. Read the durable task backlog and current resource/quota state.
+3. Select at most one eligible owner-approved task.
+4. Start or resume its Eve task session with a bounded instruction.
+5. Persist scheduling outcome and next-run metadata.
+6. Exit; it must not run an unbounded loop.
 
-Before implementation, run a technical spike against the installed Eve runtime to prove that a server-side invocation can be created and resumed without a browser session. If Eve does not provide a supported server-side continuation path, do not invent one. Compare a small authenticated Next.js internal route with a Cloudflare Workers AI step runner, using current official documentation and a minimal proof-of-concept before choosing.
+Vercel schedule times are UTC. Current Eve docs state that Vercel Hobby schedules can run no more frequently than once every 15 minutes; verify the actual connected plan and limits before choosing a cadence. Failed Vercel schedule invocations are not automatically retried, so add explicit next-run/recovery logic and monitor missed runs.
 
-No model call may exceed the configured per-step time/token budget. No task may exceed its maximum steps, elapsed time, retry count, or resource budget.
+### 3. Bounded agent execution
+
+Each task turn must have a clear deliverable and observable acceptance criteria. Use Eve's durable step boundaries for checkpointing. Keep each turn bounded by:
+- maximum model/tool steps;
+- maximum elapsed time;
+- maximum token/usage budget;
+- maximum tool calls and output size;
+- maximum retry count and total task age.
+
+A long task may span multiple bounded turns. After each turn, persist a short checkpoint and either mark complete, wait for an owner decision, or schedule a later continuation. Do not claim a workflow can run forever or guarantee completion through outages/quota exhaustion.
 
 ### 4. Task selection and autonomy
 
 - Initially, Eve may execute only tasks explicitly submitted or approved by the owner.
-- Eve may prioritize and select the next item from that approved queue without asking for routine permission each time.
-- Eve may prepare new task proposals from its findings, but those proposals remain inactive until owner approval.
-- A completed task may enqueue its next pre-approved step only when the original task scope explicitly permits it.
+- Eve may prioritize the next eligible item from that approved backlog without asking for routine permission each time.
+- Eve may prepare new task proposals from findings, but they remain inactive until owner approval.
+- A task may enqueue its next pre-approved step only when the original task scope explicitly permits it.
 - No self-expanding task tree or unlimited task creation.
 
 ### 5. Progress and reporting
 
-Persist progress after each bounded step. Each task must expose:
+Persist progress after every completed turn/step boundary. Each task must expose:
 - current state and last progress update;
 - completed and remaining steps;
-- last checkpoint;
+- latest checkpoint and evidence;
 - attempt count and next scheduled run;
-- safe failure reason if blocked;
-- links/evidence for completed deliverables.
+- safe failure reason if blocked.
 
-The UI may poll on demand; background execution must not depend on an open browser, active chat, or user polling. Provide a concise completion/failure summary when the user next opens Eve. Push notifications are a separate future feature and are not assumed here.
+The UI may poll on demand. Background execution must not depend on an open browser, active chat, or user polling. On the next Eve visit, show a concise completion/failure summary. Push notifications are a separate future feature.
 
 ## Safety and resource controls
 
-- Free-tier-only operation. Track observed quota/limit errors and pause cleanly; never upgrade a plan or incur charges.
-- Global concurrency: one active task initially.
-- Per-step wall-clock, token, tool-call, output-size, and retry caps.
+- Free-tier-only operation. Track actual quota/limit errors and pause cleanly; never upgrade a plan or incur charges.
+- One active task initially.
+- Per-turn wall-clock, token/usage, tool-call, output-size, and retry caps.
 - Backoff for transient failures; permanent errors move to failed state with evidence.
-- Cancellation and pause are checked between steps.
+- Pause and cancellation are checked between turns.
 - No secret values in task records, logs, checkpoints, or model-visible summaries.
 - Treat task input, retrieved pages, repository files, and tool output as untrusted data.
 - No customer outreach, public offer publication, contracts, payment collection, financial-account access, purchases, or Production deployment.
 - Repository changes may be drafted and tested only within a separately authorized implementation workflow; merge and Production release remain owner-gated.
 - Personal money, credit, accounts, cards, and subscriptions remain permanently off limits.
-- Add an owner-visible emergency stop that prevents new claims and execution while preserving task history.
+- Add an owner-visible emergency stop that prevents new task claims and continuations while preserving task history.
 
 ## Delivery sequence
 
-### 4G.1 — runtime feasibility spike
-- Inspect Eve package/runtime APIs and official docs.
-- Prove a server-side invocation can execute one bounded task step without a browser.
-- Demonstrate safe structured input/output and checkpoint continuation.
-- Record actual free-tier limits and any cost uncertainty.
-- No production changes.
+### 4G.1 — verify native durability and schedules
+- Confirm the exact installed Eve version's schedule and session APIs.
+- Add one harmless no-op/diagnostic schedule in a feature branch.
+- Verify the schedule is present in the Vercel build output and inspect the deployed schedule registration without changing Production.
+- Run the schedule manually in development using Eve's documented dispatch route.
+- Verify one bounded turn continues after the browser closes and inspect its workflow/run history.
+- Confirm actual Vercel schedule cadence/quotas and model usage limits. No paid upgrades.
 
-### 4G.2 — task queue data model and API
-- Implement a separate task Worker/DO and authenticated enqueue/status/pause/resume/cancel APIs.
-- Add migration and isolated tests for state transitions, idempotency, leases, and bounded pagination.
-- No model invocation yet.
+### 4G.2 — task record and owner controls
+- Define a separate task record schema and status transitions.
+- Add enqueue/list/status/pause/resume/cancel tools with strict validation and idempotency.
+- Add tests for duplicate enqueue, invalid state transitions, bounded listing, and approval scope.
+- Keep the task store separate from persistent memory.
 
-### 4G.3 — alarm-driven step runner
-- Add alarm scheduling, one-step dispatch, checkpoint writes, retry/backoff, lease recovery, and dead-letter/failure state.
-- Test duplicate alarm delivery, crash between claim and completion, expired leases, cancellation, and quota exhaustion.
-- Use mocked execution adapter until runtime spike passes.
+### 4G.3 — scheduled selector and continuation
+- Add the schedule that selects one eligible owner-approved task.
+- Dispatch one bounded Eve turn and persist the session ID/checkpoint.
+- Add recovery for missed schedules, interrupted turns, stale running state, and retry exhaustion.
+- Test duplicate schedule delivery and ensure it cannot duplicate task completion or side effects.
 
-### 4G.4 — Eve integration and owner controls
-- Add authenticated server-to-server integration and task status UI.
-- Start with explicitly approved tasks only.
-- Verify work continues after closing the browser and resumes after simulated Worker/runtime interruption.
+### 4G.4 — progress UI and offline verification
+- Add owner-visible task status and progress.
+- Close all browser tabs and verify that a queued task progresses on the configured schedule.
+- Simulate interruption and confirm durable session recovery and task-state reconciliation.
+- Confirm pause, resume, cancel, and emergency stop.
 
 ### 4G.5 — bounded autonomous backlog
 - Allow Eve to select from an owner-approved backlog and propose follow-on tasks.
@@ -125,18 +127,17 @@ The UI may poll on demand; background execution must not depend on an open brows
 
 ## Acceptance criteria
 
-1. A task submitted once is not duplicated when the enqueue request is retried with the same idempotency key.
-2. Task state and checkpoints survive Durable Object eviction/restart.
-3. A task progresses while all browser tabs and chat sessions are closed.
-4. Each scheduler wake runs no more than the configured bounded step budget.
-5. Duplicate alarm delivery does not duplicate a completed step or external side effect.
-6. A task left running by a simulated crash is recovered after its lease expires.
-7. Retryable failures back off and stop at the configured attempt limit; permanent failures do not loop.
-8. Pause, resume, and cancel are honored before the next step.
-9. Exhausted quota pauses work without switching to paid services.
-10. Owner can inspect progress, checkpoint, next run, and failure reason.
-11. No task can bypass existing approval gates for money, customers, secrets, merges, or Production.
-12. A live closed-browser test proves background continuation; a unit test alone is not sufficient.
+1. A task submitted once is not duplicated when enqueue is retried with the same idempotency key.
+2. Eve's durable session/workflow resumes after a simulated process interruption from the last completed checkpoint.
+3. A scheduled task progresses while all browser tabs and chat sessions are closed.
+4. Each turn and schedule invocation obeys configured step, time, token/usage, tool, and retry budgets.
+5. Duplicate schedule delivery does not duplicate completed work or external side effects.
+6. A missed/failed schedule is detected and recovered on a later run without an infinite retry loop.
+7. Pause, resume, cancel, and emergency stop are honored before the next turn.
+8. Exhausted quota pauses work without switching to paid services.
+9. Owner can inspect progress, checkpoint, next run, and failure reason.
+10. No task can bypass approval gates for money, customers, secrets, merges, or Production.
+11. A live closed-browser test proves background continuation; unit tests alone are insufficient.
 
 ## Explicit non-goals
 
@@ -150,7 +151,7 @@ The UI may poll on demand; background execution must not depend on an open brows
 
 ## References
 
-- Cloudflare Durable Object alarms: https://developers.cloudflare.com/durable-objects/api/alarms/
-- Cloudflare Durable Object limits: https://developers.cloudflare.com/durable-objects/platform/limits/
-- Cloudflare Workers Cron Triggers (comparison only): https://developers.cloudflare.com/workers/configuration/cron-triggers/
-
+- Eve execution model and durability: https://github.com/vercel/eve/blob/main/docs/concepts/execution-model-and-durability.mdx
+- Eve schedules: https://github.com/vercel/eve/blob/main/docs/schedules.mdx
+- Eve sessions, runs, and streaming: https://github.com/vercel/eve/blob/main/docs/concepts/sessions-runs-and-streaming.md
+- Eve Vercel deployment: https://github.com/vercel/eve/blob/main/docs/guides/deployment/vercel.mdx
