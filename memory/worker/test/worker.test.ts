@@ -296,6 +296,21 @@ describe("persistent memory Worker HTTP contract", () => {
     expect(await (await request("/v1/tasks/claim-next", { method: "POST" })).json()).toEqual({ task: null });
   });
 
+  it("does not claim a waiting task that has no scheduled continuation", async () => {
+    const create = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
+      idempotency_key: `TASK-WAITING-BLOCKED-${crypto.randomUUID()}`, task_type: "repo_maintenance",
+      title: "Blocked waiting task", goal: "Wait for owner input", approved_scope: "Read-only analysis"
+    }) });
+    const { task } = await create.json<{ task: { id: string } }>();
+    await request(`/v1/tasks/${task.id}/approve`, { method: "POST" }, ownerToken);
+    await request("/v1/tasks/claim-next", { method: "POST" });
+    const waiting = await request(`/v1/tasks/${task.id}/transition`, {
+      method: "POST", body: JSON.stringify({ status: "waiting", checkpoint_summary: "Needs owner input" })
+    });
+    expect(waiting.status).toBe(200);
+    expect(await (await request("/v1/tasks/claim-next", { method: "POST" })).json()).toEqual({ task: null });
+  });
+
   it("persists task checkpoints and terminal outcomes", async () => {
     const create = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
       idempotency_key: `TASK-CHECKPOINT-${crypto.randomUUID()}`, task_type: "repo_maintenance",
@@ -305,12 +320,13 @@ describe("persistent memory Worker HTTP contract", () => {
     await request(`/v1/tasks/${task.id}/approve`, { method: "POST" }, ownerToken);
     await request("/v1/tasks/claim-next", { method: "POST" });
     const waiting = await request(`/v1/tasks/${task.id}/transition`, { method: "POST", body: JSON.stringify({
-      status: "waiting", checkpoint_summary: "First test stage complete", evidence_refs: ["ci://test/1"]
+      status: "waiting", checkpoint_summary: "First test stage complete",
+      evidence_refs: ["ci://test/1"], next_run_at: new Date(Date.now() - 1000).toISOString()
     }) });
     expect(waiting.status).toBe(200);
-    const queued = await request(`/v1/tasks/${task.id}/transition`, { method: "POST", body: JSON.stringify({ status: "queued" }) });
-    expect(queued.status).toBe(200);
-    await request("/v1/tasks/claim-next", { method: "POST" });
+    const resumed = await request("/v1/tasks/claim-next", { method: "POST" });
+    expect((await resumed.json<{ task: { status: string; attempt_count: number } }>()).task)
+      .toMatchObject({ status: "running", attempt_count: 2 });
     const done = await request(`/v1/tasks/${task.id}/transition`, { method: "POST", body: JSON.stringify({
       status: "succeeded", result_summary: "Read-only test complete"
     }) });
