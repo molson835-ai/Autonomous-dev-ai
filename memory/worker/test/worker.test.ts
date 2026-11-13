@@ -254,6 +254,10 @@ describe("persistent memory Worker HTTP contract", () => {
       .toMatchObject({ id: task.id, status: "running", attempt_count: 1 });
     const blocked = await request("/v1/tasks/claim-next", { method: "POST" });
     expect(await blocked.json()).toEqual({ task: null });
+    const finish = await request(`/v1/tasks/${task.id}/transition`, {
+      method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Approval test completed" })
+    });
+    expect(finish.status).toBe(200);
   });
 
   it("refuses to queue unapproved tasks and rejects illegal transitions", async () => {
