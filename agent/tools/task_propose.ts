@@ -1,6 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { memoryRequest } from "../lib/memory-client";
+import { assertProductionTaskRuntime } from "../lib/task-runtime.mjs";
 
 export default defineTool({
   description:
@@ -13,6 +14,7 @@ export default defineTool({
     approved_scope: z.string().trim().min(3).max(2000),
   }),
   async execute(input) {
+    assertProductionTaskRuntime();
     return memoryRequest("v1/tasks", { method: "POST", body: input });
   },
 });
