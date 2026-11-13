@@ -23,7 +23,7 @@ Sources:
 ## Capability limits
 
 The schedule only uses tools available in the deployed Eve runtime. At this stage:
-- The task queue tools are introduced with the stacked persistent-task-store PR.
+- The task queue tools are introduced in the same persistent-task-store change.
 - General web search remains unavailable until the separate web-search PR is merged and a free provider key is authorized and configured.
 - Local file editing, shell execution, and direct GitHub repository operations are not yet established as Eve runtime tools. Tasks requiring those capabilities must wait rather than be falsely marked complete.
 - No owner-approval tool is exposed to Eve; owner credentials are never placed in its runtime.
