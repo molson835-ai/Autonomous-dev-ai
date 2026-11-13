@@ -2,7 +2,7 @@
 
 ## Scope
 
-The Worker owns a dedicated `tasks` SQL table, separate from `memories` and `experiences`. This milestone exposes authenticated task proposal, read, owner approval, claim, and transition routes, plus model-callable tools for proposal/list/claim/checkpoint operations and a Vercel-hosted hourly schedule that claims only owner-approved tasks.
+The Worker owns a dedicated `tasks` SQL table, separate from `memories` and `experiences`. This milestone exposes authenticated task proposal, read, owner approval, claim, and transition routes, plus model-callable tools for proposal/list/claim/checkpoint operations and a Vercel-hosted daily schedule that claims only owner-approved tasks.
 
 ## API
 
