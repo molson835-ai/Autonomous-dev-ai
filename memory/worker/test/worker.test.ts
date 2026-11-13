@@ -153,10 +153,15 @@ describe("persistent memory Worker HTTP contract", () => {
     const before = await beforeApproval.json<{ memories: Array<{ id: string }>; experiences: unknown[] }>();
     expect(before.memories.some((item) => item.id === created.id)).toBe(false);
 
-    const decision = await request(`/v1/proposals/${created.id}/decision`, {
+    const deniedDecision = await request(`/v1/proposals/${created.id}/decision`, {
       method: "POST",
       body: JSON.stringify({ decision: "approve" }),
     });
+    expect(deniedDecision.status).toBe(401);
+    const decision = await request(`/v1/proposals/${created.id}/decision`, {
+      method: "POST",
+      body: JSON.stringify({ decision: "approve" }),
+    }, ownerToken);
     expect(decision.status).toBe(200);
     expect(await decision.json()).toMatchObject({ id: created.id, status: "approved" });
 
@@ -179,10 +184,15 @@ describe("persistent memory Worker HTTP contract", () => {
     expect(create.status).toBe(201);
     const created = await create.json<{ id: string }>();
 
-    const decision = await request(`/v1/proposals/${created.id}/decision`, {
+    const deniedDecision = await request(`/v1/proposals/${created.id}/decision`, {
       method: "POST",
       body: JSON.stringify({ decision: "reject" }),
     });
+    expect(deniedDecision.status).toBe(401);
+    const decision = await request(`/v1/proposals/${created.id}/decision`, {
+      method: "POST",
+      body: JSON.stringify({ decision: "reject" }),
+    }, ownerToken);
     expect(decision.status).toBe(200);
     expect(await decision.json()).toMatchObject({ id: created.id, status: "rejected" });
 
