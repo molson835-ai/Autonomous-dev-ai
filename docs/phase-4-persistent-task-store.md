@@ -31,7 +31,7 @@ Normal Eve API access uses `MEMORY_API_TOKEN`. Task approval, task pause/resume,
 - Tasks are stored in their own SQL table; existing memory and experience rows are not migrated, rewritten, or deleted.
 - Task proposals start unapproved.
 - Only approved tasks can be claimed.
-- One active task at a time, at most three attempts, and terminal states cannot be reopened.
+- One active task at a time, a 30-minute stale-run recovery lease, at most three attempts, and terminal states cannot be reopened.
 - No task scheduler or background dispatcher is included yet. No external action, customer contact, purchase, payment, or production activation is enabled.
 - The queue remains inactive until owner approval credential provisioning and a separate scheduler milestone.
 
