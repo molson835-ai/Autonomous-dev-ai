@@ -2,7 +2,7 @@
 
 ## Scope
 
-The Worker owns a dedicated `tasks` SQL table, separate from `memories` and `experiences`. This milestone exposes authenticated task proposal, read, owner approval, claim, and transition routes, plus model-callable tools for proposal/list/claim/checkpoint operations. It does not start a schedule.
+The Worker owns a dedicated `tasks` SQL table, separate from `memories` and `experiences`. This milestone exposes authenticated task proposal, read, owner approval, claim, and transition routes, plus model-callable tools for proposal/list/claim/checkpoint operations and a Vercel-hosted 15-minute schedule that claims only owner-approved tasks.
 
 ## API
 
@@ -32,7 +32,7 @@ Normal Eve API access uses `MEMORY_API_TOKEN`. Task approval, task pause/resume,
 - Task proposals start unapproved.
 - Only approved tasks can be claimed.
 - One active task at a time, a 30-minute stale-run recovery lease, at most three attempts, and terminal states cannot be reopened.
-- No task scheduler or background dispatcher is included yet. No external action, customer contact, purchase, payment, or production activation is enabled.
+- The schedule is code only and is not active until a Production deployment containing this change is explicitly approved. No external action, customer contact, purchase, payment, or Production deployment is enabled by this PR.
 - The queue remains inactive until owner approval credential provisioning and a separate scheduler milestone.
 
 ## Verification
