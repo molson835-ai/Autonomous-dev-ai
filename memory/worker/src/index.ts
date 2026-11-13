@@ -257,11 +257,11 @@ export class MemoryStore extends DurableObject<Env> {
         return json({ error: "Decision must be approve or reject." }, 400);
       }
       const status = body.decision === "approve" ? "approved" : "rejected";
-      const result = this.ctx.storage.sql.exec(
-        "UPDATE memories SET status = ?, updated_at = ? WHERE id = ? AND status = 'pending'",
+      const result = this.ctx.storage.sql.exec<{ id: string }>(
+        "UPDATE memories SET status = ?, updated_at = ? WHERE id = ? AND status = 'pending' RETURNING id",
         status, now, match[1]
-      );
-      if (result.rowsWritten === 0) return json({ error: "Pending proposal not found." }, 404);
+      ).toArray();
+      if (result.length !== 1) return json({ error: "Pending proposal not found." }, 404);
       return json({ id: match[1], status });
     }
 
@@ -276,7 +276,8 @@ export default {
     const url = new URL(request.url);
     const ownerApprovalRoute = request.method === "POST" && /^\/v1\/tasks\/[0-9a-f-]{36}\/approve$/i.test(url.pathname);
     const ownerControlRoute = request.method === "POST" && /^\/v1\/tasks\/[0-9a-f-]{36}\/owner-control$/i.test(url.pathname);
-    const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute;
+    const ownerMemoryDecisionRoute = request.method === "POST" && /^\/v1\/proposals\/[0-9a-f-]{36}\/decision$/i.test(url.pathname);
+    const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute || ownerMemoryDecisionRoute;
     const expectedToken = ownerOnlyRoute ? (env.TASK_OWNER_APPROVAL_TOKEN ?? "") : env.MEMORY_API_TOKEN;
     if (ownerOnlyRoute && (!expectedToken || expectedToken === env.MEMORY_API_TOKEN)) return json({ error: "Owner approval is not configured." }, 503);
     if (!expectedToken || !constantTimeEqual(supplied, expectedToken)) return json({ error: "Unauthorized." }, 401);
