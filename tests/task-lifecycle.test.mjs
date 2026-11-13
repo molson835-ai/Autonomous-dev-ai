@@ -59,6 +59,22 @@ test("selector skips unapproved, invalid, exhausted, and not-yet-due tasks", () 
   assert.equal(selectNextTask([scheduled, exhausted], { now: Date.parse(now) }), null);
 });
 
+test("scheduled waiting tasks resume only when their checkpoint time is due", () => {
+  const claimed = transitionTask(queued(), "running", { now });
+  const blocked = transitionTask(claimed, "waiting", { now, checkpointSummary: "Waiting for owner input" });
+  const resumable = transitionTask(claimed, "waiting", {
+    now, checkpointSummary: "Safe checkpoint; continue next cycle",
+    nextRunAt: "2026-11-13T00:15:00.000Z"
+  });
+  assert.equal(selectNextTask([blocked], { now: Date.parse("2026-11-14T00:00:00.000Z") }), null);
+  assert.equal(selectNextTask([resumable], { now: Date.parse("2026-11-13T00:14:59.000Z") }), null);
+  assert.equal(selectNextTask([resumable], { now: Date.parse("2026-11-13T00:15:00.000Z") }).id, resumable.id);
+  const resumed = transitionTask(resumable, "running", { now: "2026-11-13T00:15:00.000Z" });
+  assert.equal(resumed.status, "running");
+  assert.equal(resumed.attempt_count, 2);
+  assert.equal(resumed.next_run_at, null);
+});
+
 test("state machine rejects illegal transitions and stale expected state", () => {
   const task = queued();
   assert.throws(() => transitionTask(task, "succeeded", { now }), /invalid_task_transition/);
