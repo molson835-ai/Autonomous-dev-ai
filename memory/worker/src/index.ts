@@ -111,20 +111,20 @@ export class MemoryStore extends DurableObject<Env> {
       const current = taskFromRow(row);
       if (current.status !== "proposed") return json({ error: "Only proposed tasks can be approved." }, 409);
       const approved = transitionTask(current, "queued", { ownerApproved: true, now });
-      const updated = this.ctx.storage.sql.exec("UPDATE tasks SET status='queued', owner_approved=1, updated_at=? WHERE id=? AND status='proposed' AND owner_approved=0", now, current.id);
-      if (updated.rowsWritten !== 1) return json({ error: "Task approval state conflict." }, 409);
+      const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status='queued', owner_approved=1, updated_at=? WHERE id=? AND status='proposed' AND owner_approved=0 RETURNING id", now, current.id).toArray();
+      if (updated.length !== 1) return json({ error: "Task approval state conflict." }, 409);
       return json({ task: approved });
     }
 
     if (request.method === "POST" && url.pathname === "/v1/tasks/claim-next") {
       const running = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='running'").one().count;
       if (running > 0) return json({ task: null });
-      const rows = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE status='queued' ORDER BY created_at ASC LIMIT 500").toArray();
+      const rows = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE status='queued' AND owner_approved=1 AND attempt_count<max_attempts ORDER BY created_at ASC LIMIT 500").toArray();
       const selected = selectNextTask(rows.map(taskFromRow), { now: Date.parse(now) });
       if (!selected) return json({ task: null });
       const claimed = transitionTask(selected, "running", { now });
-      const updated = this.ctx.storage.sql.exec("UPDATE tasks SET status='running', attempt_count=?, updated_at=?, started_at=COALESCE(started_at,?) WHERE id=? AND status='queued' AND owner_approved=1 AND attempt_count<max_attempts", claimed.attempt_count, now, now, selected.id);
-      if (updated.rowsWritten !== 1) return json({ error: "Task claim state conflict." }, 409);
+      const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status='running', attempt_count=?, updated_at=?, started_at=COALESCE(started_at,?) WHERE id=? AND status='queued' AND owner_approved=1 AND attempt_count<max_attempts RETURNING id", claimed.attempt_count, now, now, selected.id).toArray();
+      if (updated.length !== 1) return json({ error: "Task claim state conflict." }, 409);
       return json({ task: claimed });
     }
 
@@ -160,8 +160,8 @@ export class MemoryStore extends DurableObject<Env> {
       let next;
       try { next = transitionTask(current, String(body.status), { now, checkpointSummary: body.checkpoint_summary, resultSummary: body.result_summary, evidenceRefs: body.evidence_refs }); }
       catch (error) { return json({ error: String(error).includes("owner_approval_required") ? "Owner approval is required." : "Invalid task state transition." }, 409); }
-      const update = this.ctx.storage.sql.exec("UPDATE tasks SET status=?,owner_approved=?,updated_at=?,attempt_count=?,next_run_at=?,checkpoint_summary=?,result_summary=?,evidence_refs=?,started_at=?,finished_at=? WHERE id=? AND status=?", next.status, next.owner_approved ? 1 : 0, next.updated_at, next.attempt_count, next.next_run_at, next.checkpoint_summary, next.result_summary, JSON.stringify(next.evidence_refs), next.started_at ?? null, next.finished_at ?? null, current.id, current.status);
-      if (update.rowsWritten !== 1) return json({ error: "Task state conflict." }, 409);
+      const update = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status=?,owner_approved=?,updated_at=?,attempt_count=?,next_run_at=?,checkpoint_summary=?,result_summary=?,evidence_refs=?,started_at=?,finished_at=? WHERE id=? AND status=? RETURNING id", next.status, next.owner_approved ? 1 : 0, next.updated_at, next.attempt_count, next.next_run_at, next.checkpoint_summary, next.result_summary, JSON.stringify(next.evidence_refs), next.started_at ?? null, next.finished_at ?? null, current.id, current.status).toArray();
+      if (update.length !== 1) return json({ error: "Task state conflict." }, 409);
       return json({ task: next });
     }
 
