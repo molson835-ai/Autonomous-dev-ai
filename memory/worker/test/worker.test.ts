@@ -329,13 +329,16 @@ describe("persistent memory Worker HTTP contract", () => {
     expect(await (await request("/v1/tasks/claim-next", { method: "POST" })).json()).toEqual({ task: null });
   });
 
-  it("lets the owner pause the global queue and blocks claims until resumed", async () => {
+  it("lets the owner pause the global queue and blocks claims and scheduled continuation until resumed", async () => {
     const create = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
       idempotency_key: `TASK-GLOBAL-PAUSE-${crypto.randomUUID()}`, task_type: "repo_maintenance",
       title: "Global pause test", goal: "Verify owner queue pause", approved_scope: "Isolated test only"
     }) });
     const { task } = await create.json<{ task: { id: string } }>();
     await request(`/v1/tasks/${task.id}/approve`, { method: "POST" }, ownerToken);
+    const firstClaim = await request("/v1/tasks/claim-next", { method: "POST" });
+    expect((await firstClaim.json<{ task: { id: string; status: string; attempt_count: number } }>()).task)
+      .toMatchObject({ id: task.id, status: "running", attempt_count: 1 });
 
     const denied = await request("/v1/owner/control", { method: "POST", body: JSON.stringify({ action: "pause" }) });
     expect(denied.status).toBe(401);
@@ -344,18 +347,32 @@ describe("persistent memory Worker HTTP contract", () => {
     }, ownerToken);
     expect(paused.status).toBe(200);
     expect(await (await request("/v1/owner/status", {}, ownerToken)).json())
-      .toMatchObject({ queue_paused: true, reason: "CI emergency-stop test" });
+      .toMatchObject({ queue_paused: true, reason: "CI emergency-stop test", running_tasks: 1 });
 
     const blocked = await request("/v1/tasks/claim-next", { method: "POST" });
     expect(await blocked.json()).toMatchObject({ task: null, paused: true });
+    const continuation = await request(`/v1/tasks/${task.id}/transition`, {
+      method: "POST",
+      body: JSON.stringify({ status: "waiting", next_run_at: new Date(Date.now() + 60_000).toISOString() })
+    });
+    expect(continuation.status).toBe(409);
 
-    const resumed = await request("/v1/owner/control", {
+    const taskPaused = await request(`/v1/tasks/${task.id}/owner-control`, {
+      method: "POST", body: JSON.stringify({ action: "pause" })
+    }, ownerToken);
+    expect(taskPaused.status).toBe(200);
+    const taskResumed = await request(`/v1/tasks/${task.id}/owner-control`, {
       method: "POST", body: JSON.stringify({ action: "resume" })
     }, ownerToken);
-    expect(resumed.status).toBe(200);
+    expect(taskResumed.status).toBe(200);
+    const queueResumed = await request("/v1/owner/control", {
+      method: "POST", body: JSON.stringify({ action: "resume" })
+    }, ownerToken);
+    expect(queueResumed.status).toBe(200);
+
     const claimed = await request("/v1/tasks/claim-next", { method: "POST" });
-    expect((await claimed.json<{ task: { id: string; status: string } }>()).task)
-      .toMatchObject({ id: task.id, status: "running" });
+    expect((await claimed.json<{ task: { id: string; status: string; attempt_count: number } }>()).task)
+      .toMatchObject({ id: task.id, status: "running", attempt_count: 2 });
     const finish = await request(`/v1/tasks/${task.id}/transition`, {
       method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Global pause test completed" })
     });
