@@ -1,0 +1,85 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  classifyResourceFailure,
+  evaluateResourceBudget,
+  resolveResourceLimits,
+  retryDelayMs
+} from "../agent/lib/resource-budget.mjs";
+
+test("default limits are finite and bounded", () => {
+  const limits = resolveResourceLimits();
+  assert.equal(limits.maxStepsPerTurn, 8);
+  assert.equal(limits.maxRetries, 3);
+  assert.equal(limits.maxTaskAgeMs, 24 * 60 * 60 * 1000);
+  assert.throws(() => resolveResourceLimits({ maxRetries: 0 }), /Invalid resource limit/);
+});
+
+test("quota exhaustion pauses and never switches to a paid fallback", () => {
+  for (const error of [
+    { status: 402, message: "payment required" },
+    new Error("Insufficient quota for this request"),
+    "provider usage limit reached"
+  ]) {
+    assert.deepEqual(evaluateResourceBudget({ task: { status: "running" }, error }), {
+      action: "pause", status: "paused", reason: "quota_exhausted", providerFallbackAllowed: false
+    });
+  }
+});
+
+test("rate limits and transient errors yield with bounded exponential backoff", () => {
+  assert.equal(classifyResourceFailure({ status: 429 }), "rate_limited");
+  assert.equal(classifyResourceFailure({ status: 503 }), "transient");
+  assert.equal(retryDelayMs(1), 60_000);
+  assert.equal(retryDelayMs(2), 120_000);
+  assert.equal(retryDelayMs(99), 15 * 60_000);
+  const decision = evaluateResourceBudget({
+    task: { status: "running", retryCount: 1, consecutiveFailures: 1 },
+    error: { status: 429 }
+  });
+  assert.equal(decision.action, "yield");
+  assert.equal(decision.retryAfterMs, 120_000);
+});
+
+test("retry exhaustion and permanent authorization failures stop safely", () => {
+  assert.equal(evaluateResourceBudget({
+    task: { retryCount: 3, consecutiveFailures: 3 }, error: new Error("network timeout")
+  }).reason, "retry_budget_exhausted");
+  assert.equal(evaluateResourceBudget({ error: { status: 403 } }).status, "failed");
+});
+
+test("per-turn step, tool, output, and token caps checkpoint and yield", () => {
+  const cases = [
+    [{ steps: 8 }, "steps_budget_reached"],
+    [{ toolCalls: 12 }, "tool_calls_budget_reached"],
+    [{ outputChars: 12000 }, "output_chars_budget_reached"],
+    [{ tokens: 10000 }, "tokens_budget_reached"]
+  ];
+  for (const [usage, reason] of cases) {
+    const result = evaluateResourceBudget({ usage });
+    assert.equal(result.action, "yield");
+    assert.equal(result.reason, reason);
+    assert.equal(result.checkpointRequired, true);
+  }
+});
+
+test("owner pause, emergency stop, and terminal states prevent continuation", () => {
+  assert.equal(evaluateResourceBudget({ task: { ownerPaused: true } }).action, "pause");
+  assert.equal(evaluateResourceBudget({ emergencyStop: true }).reason, "emergency_stop");
+  assert.equal(evaluateResourceBudget({ task: { status: "cancelled" } }).action, "stop");
+});
+
+test("task age and invalid measurements fail closed", () => {
+  const now = Date.parse("2026-11-13T00:00:00.000Z");
+  assert.equal(evaluateResourceBudget({
+    task: { createdAt: "2026-11-11T00:00:00.000Z" }, now
+  }).reason, "task_age_limit");
+  assert.equal(evaluateResourceBudget({ usage: { tokens: -1 } }).reason, "invalid_usage_measurement");
+});
+
+test("normal work inside all budgets may continue", () => {
+  assert.deepEqual(evaluateResourceBudget({
+    task: { status: "running" },
+    usage: { steps: 2, toolCalls: 3, outputChars: 1500, tokens: 2200 }
+  }), { action: "continue", status: "running", reason: "within_budget" });
+});
