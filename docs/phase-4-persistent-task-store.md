@@ -2,7 +2,7 @@
 
 ## Scope
 
-The Worker owns a dedicated `tasks` SQL table, separate from `memories` and `experiences`. This milestone exposes authenticated task proposal, read, owner approval, claim, and transition routes, plus model-callable tools for proposal/list/claim/checkpoint operations and a Vercel-hosted 15-minute schedule that claims only owner-approved tasks.
+The Worker owns a dedicated `tasks` SQL table, separate from `memories` and `experiences`. This milestone exposes authenticated task proposal, read, owner approval, claim, and transition routes, plus model-callable tools for proposal/list/claim/checkpoint operations and a Vercel-hosted hourly schedule that claims only owner-approved tasks.
 
 ## API
 
@@ -22,8 +22,8 @@ Normal Eve API access uses `MEMORY_API_TOKEN`. Task approval, task pause/resume,
 
 - `task_propose`: create an unapproved proposal; cannot approve or activate it.
 - `task_list`: inspect recent tasks and approval state.
-- `task_claim_next`: atomically claim one due approved task.
-- `task_transition`: checkpoint, wait, pause, or finish the currently claimed task. It cannot approve, change scope, or resume a paused task.
+- `task_claim_next`: atomically claim one due approved task in Vercel Production only; Preview and local sessions return a no-op.
+- `task_transition`: checkpoint, wait, pause, or finish the currently claimed task. It accepts `resume_after_minutes` and computes `next_run_at`. It cannot approve, change scope, or resume a paused task.
 - No task-approval or owner-control tool is exposed to Eve. The owner credential is never placed in Eve's runtime.
 
 ## Isolation and limits
@@ -32,8 +32,8 @@ Normal Eve API access uses `MEMORY_API_TOKEN`. Task approval, task pause/resume,
 - Task proposals start unapproved.
 - Only approved tasks can be claimed.
 - One active task at a time, a 30-minute stale-run recovery lease, at most three attempts, and terminal states cannot be reopened.
-- The schedule is code only and is not active until a Production deployment containing this change is explicitly approved. No external action, customer contact, purchase, payment, or Production deployment is enabled by this PR.
-- The queue remains inactive until owner approval credential provisioning and a separate scheduler milestone.
+- The Production work loop is not active until a Production deployment containing this change is explicitly approved. Preview schedules may fire, but task tools fail closed outside Production and cannot access the Production queue. No external action, customer contact, purchase, payment, or Production deployment is enabled by this PR.
+- The queue remains inactive until the owner credential is provisioned and the Production schedule is explicitly deployed.
 
 ## Verification
 
