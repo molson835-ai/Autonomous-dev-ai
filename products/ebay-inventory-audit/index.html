@@ -77,10 +77,22 @@
     reader.readAsText(file);
   });
   const refresh = () => { runButton.disabled = !(activeInput.files?.[0] && inventoryInput.files?.[0]); };
-  activeInput.addEventListener("change", refresh);
-  inventoryInput.addEventListener("change", refresh);
+  const onFilesChanged = () => {
+    refresh();
+    latest = null;
+    results.hidden = true;
+    document.querySelector("#export").disabled = true;
+    status.textContent = "";
+    status.className = "";
+  };
+  activeInput.addEventListener("change", onFilesChanged);
+  inventoryInput.addEventListener("change", onFilesChanged);
   runButton.addEventListener("click", async () => {
     runButton.disabled = true;
+    latest = null;
+    results.hidden = true;
+    document.querySelector("#export").disabled = true;
+    status.className = "";
     status.textContent = "Checking files locally…";
     try {
       latest = reconcileCsv(await read(activeInput.files[0]), await read(inventoryInput.files[0]));
@@ -105,6 +117,7 @@
       document.querySelector("#empty").hidden = issues.length > 0;
       document.querySelector("#export").disabled = issues.length === 0;
       results.hidden = false;
+      status.className = "";
       status.textContent = `Finished. Found ${summary.errors} errors and ${summary.warnings} warnings.`;
     } catch (error) {
       latest = null;
