@@ -5,14 +5,16 @@ type MemoryRequestInit = {
   body?: unknown;
 };
 
-async function requestWithToken<T>(
+export async function memoryRequest<T>(
   path: string,
-  init: MemoryRequestInit,
-  token: string | undefined,
-  missingTokenMessage: string,
+  init: MemoryRequestInit = {},
 ): Promise<T> {
   const baseUrl = env.MEMORY_API_URL;
-  if (!baseUrl || !token) throw new Error(missingTokenMessage);
+  const token = env.MEMORY_API_TOKEN;
+
+  if (!baseUrl || !token) {
+    throw new Error("Persistent memory is not configured. Do not claim anything was saved or recalled.");
+  }
 
   let endpoint: URL;
   try {
@@ -38,32 +40,4 @@ async function requestWithToken<T>(
 
   if (!response.ok) throw new Error("Persistent memory request failed (" + response.status + ").");
   return (await response.json()) as T;
-}
-
-export function memoryRequest<T>(
-  path: string,
-  init: MemoryRequestInit = {},
-): Promise<T> {
-  return requestWithToken(
-    path,
-    init,
-    env.MEMORY_API_TOKEN,
-    "Persistent memory is not configured. Do not claim anything was saved or recalled.",
-  );
-}
-
-export function ownerMemoryRequest<T>(
-  path: string,
-  init: MemoryRequestInit = {},
-): Promise<T> {
-  const ownerToken = env.TASK_OWNER_APPROVAL_TOKEN;
-  if (!ownerToken || ownerToken === env.MEMORY_API_TOKEN) {
-    throw new Error("Owner approval is not configured. Do not approve or reject a memory proposal.");
-  }
-  return requestWithToken(
-    path,
-    init,
-    ownerToken,
-    "Owner approval is not configured. Do not approve or reject a memory proposal.",
-  );
 }
