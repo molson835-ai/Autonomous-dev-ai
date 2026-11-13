@@ -97,11 +97,11 @@ export function evaluateResourceBudget({
   }
 
   const checks = [
-    ["steps", usage.steps ?? usage.stepCount ?? 0, limits.maxStepsPerTurn],
-    ["tool_calls", usage.toolCalls ?? usage.toolCallCount ?? 0, limits.maxToolCallsPerTurn],
-    ["output_chars", usage.outputChars ?? 0, limits.maxOutputCharsPerTurn],
-    ["tokens", usage.tokens ?? usage.totalTokens ?? 0, limits.maxTokensPerTurn],
-    ["elapsed_ms", usage.elapsedMs ?? 0, limits.maxTurnDurationMs]
+    ["steps", usage.steps ?? usage.stepCount, limits.maxStepsPerTurn],
+    ["tool_calls", usage.toolCalls ?? usage.toolCallCount, limits.maxToolCallsPerTurn],
+    ["output_chars", usage.outputChars, limits.maxOutputCharsPerTurn],
+    ["tokens", usage.tokens ?? usage.totalTokens, limits.maxTokensPerTurn],
+    ["elapsed_ms", usage.elapsedMs, limits.maxTurnDurationMs]
   ];
   for (const [name, value, cap] of checks) {
     if (!finiteNonNegative(value)) {

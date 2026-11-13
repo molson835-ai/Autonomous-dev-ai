@@ -30,7 +30,7 @@ These are software guardrails, not claims about Vercel or Cloudflare plan quotas
 
 ## Mandatory runtime integration requirements
 
-1. Measure step, tool, output, token, elapsed-time, and provider usage where available.
+1. Measure step, tool, output, token, and elapsed-time usage before continuation. If any required measurement is unavailable, fail closed and do not assume remaining capacity.
 2. Persist a checkpoint and yield when any per-turn ceiling is reached.
 3. Pause immediately on explicit quota exhaustion; do not try a different paid model/provider.
 4. Treat HTTP 429 as rate limiting and back off; treat explicit quota/credit/usage-limit responses as quota exhaustion.

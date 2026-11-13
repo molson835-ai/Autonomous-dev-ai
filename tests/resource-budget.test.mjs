@@ -11,6 +11,7 @@ test("default limits are finite and bounded", () => {
   const limits = resolveResourceLimits();
   assert.equal(limits.maxStepsPerTurn, 8);
   assert.equal(limits.maxRetries, 3);
+  assert.equal(limits.maxTurnDurationMs, 45_000);
   assert.equal(limits.maxTaskAgeMs, 24 * 60 * 60 * 1000);
   assert.throws(() => resolveResourceLimits({ maxRetries: 0 }), /Invalid resource limit/);
 });
@@ -48,13 +49,14 @@ test("retry exhaustion and permanent authorization failures stop safely", () => 
   assert.equal(evaluateResourceBudget({ error: { status: 403 } }).status, "failed");
 });
 
-test("per-turn step, tool, output, and token caps checkpoint and yield", () => {
+test("per-turn step, tool, output, token, and duration caps checkpoint and yield", () => {
+  const base = { steps: 1, toolCalls: 1, outputChars: 100, tokens: 100, elapsedMs: 1000 };
   const cases = [
-    [{ steps: 8 }, "steps_budget_reached"],
-    [{ toolCalls: 12 }, "tool_calls_budget_reached"],
-    [{ outputChars: 12000 }, "output_chars_budget_reached"],
-    [{ tokens: 10000 }, "tokens_budget_reached"],
-    [{ elapsedMs: 45000 }, "elapsed_ms_budget_reached"]
+    [{ ...base, steps: 8 }, "steps_budget_reached"],
+    [{ ...base, toolCalls: 12 }, "tool_calls_budget_reached"],
+    [{ ...base, outputChars: 12000 }, "output_chars_budget_reached"],
+    [{ ...base, tokens: 10000 }, "tokens_budget_reached"],
+    [{ ...base, elapsedMs: 45000 }, "elapsed_ms_budget_reached"]
   ];
   for (const [usage, reason] of cases) {
     const result = evaluateResourceBudget({ usage });
@@ -78,9 +80,15 @@ test("task age and invalid measurements fail closed", () => {
   assert.equal(evaluateResourceBudget({ usage: { tokens: -1 } }).reason, "invalid_usage_measurement");
 });
 
+test("missing usage measurements fail closed instead of assuming free capacity", () => {
+  assert.deepEqual(evaluateResourceBudget({}), {
+    action: "stop", status: "failed", reason: "invalid_usage_measurement", measurement: "steps"
+  });
+});
+
 test("normal work inside all budgets may continue", () => {
   assert.deepEqual(evaluateResourceBudget({
     task: { status: "running" },
-    usage: { steps: 2, toolCalls: 3, outputChars: 1500, tokens: 2200 }
+    usage: { steps: 2, toolCalls: 3, outputChars: 1500, tokens: 2200, elapsedMs: 8000 }
   }), { action: "continue", status: "running", reason: "within_budget" });
 });
