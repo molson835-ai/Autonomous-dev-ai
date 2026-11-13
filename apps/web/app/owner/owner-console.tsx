@@ -27,7 +27,8 @@ type Proposal = {
   created_at: string;
 };
 
-type OwnerData = { tasks: Task[]; proposals: Proposal[] };
+type QueueStatus = { queue_paused: boolean; reason: string | null; running_tasks: number; queued_tasks: number; updated_at: string };
+
 
 async function ownerRequest<T>(token: string, path: string, method = "GET", body?: unknown): Promise<T> {
   const response = await fetch(MEMORY_API + path, {
@@ -59,6 +60,7 @@ export default function OwnerConsole() {
   const [token, setToken] = useState("");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -71,12 +73,14 @@ export default function OwnerConsole() {
     setBusy("load");
     setMessage("");
     try {
-      const [taskData, proposalData] = await Promise.all([
+      const [taskData, proposalData, statusData] = await Promise.all([
         ownerRequest<{ tasks: Task[] }>(token, "/v1/owner/tasks?limit=30"),
         ownerRequest<{ proposals: Proposal[] }>(token, "/v1/owner/proposals?limit=30"),
+        ownerRequest<QueueStatus>(token, "/v1/owner/status"),
       ]);
       setTasks(taskData.tasks);
       setProposals(proposalData.proposals);
+      setQueueStatus(statusData);
       setLoaded(true);
       setMessage("Owner review data loaded. The token remains in this page's memory only.");
       return true;
@@ -106,6 +110,7 @@ export default function OwnerConsole() {
     setToken("");
     setTasks([]);
     setProposals([]);
+    setQueueStatus(null);
     setLoaded(false);
     setMessage("Token cleared from this page.");
     setBusy(null);
@@ -157,6 +162,26 @@ export default function OwnerConsole() {
 
       {loaded && (
         <>
+          {queueStatus && (
+            <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4">
+              <div className="space-y-1">
+                <p className="font-semibold">Background task queue: {queueStatus.queue_paused ? "Paused" : "Active"}</p>
+                <p className="text-sm text-muted-foreground">
+                  {queueStatus.running_tasks} running · {queueStatus.queued_tasks} approved and queued
+                  {queueStatus.reason ? " · " + queueStatus.reason : ""}
+                </p>
+                <p className="text-xs text-muted-foreground">Pausing prevents new claims; an already-running invocation may finish its current bounded step.</p>
+              </div>
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void perform("queue", "/v1/owner/control", "POST", queueStatus.queue_paused ? { action: "resume" } : { action: "pause", reason: "Paused from owner console" })}
+                className="rounded-lg border px-3 py-2 text-sm font-medium disabled:opacity-50"
+              >
+                {queueStatus.queue_paused ? "Resume queue" : "Pause queue"}
+              </button>
+            </section>
+          )}
           <section className="space-y-3">
             <div className="flex items-baseline justify-between gap-3">
               <h2 className="text-xl font-semibold">Task approvals</h2>
