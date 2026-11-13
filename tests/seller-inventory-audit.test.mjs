@@ -68,6 +68,18 @@ test("accepts the official eBay Active Listings report header names", () => {
   assert.equal(result.issues.length, 0);
 });
 
+test("rejects trailing characters after a quoted CSV field", () => {
+  assert.throws(
+    () => parseCsv('SKU,Title,Quantity\nA-1,"Lantern"x,2'),
+    /unexpected characters after a closing quote/
+  );
+  assert.throws(
+    () => parseCsv('SKU,Title,Quantity\nA-1,La"ntern,2'),
+    /quote inside an unquoted field/
+  );
+  assert.equal(parseCsv('SKU,Title,Quantity\nA-1,"Lantern",2')[0].title, "Lantern");
+});
+
 test("rejects empty, malformed, or missing required columns", () => {
   assert.throws(() => parseCsv(""), /empty/);
   assert.throws(() => parseCsv('SKU,Title\nA-1,"unclosed'), /unclosed quoted/);
