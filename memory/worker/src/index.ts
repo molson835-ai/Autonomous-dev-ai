@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { isSafeMemoryText, normalizeMemoryQuery } from "../../../agent/lib/memory-policy.mjs";
 import { ensureExperienceExternalIdColumn, findExperienceByExternalId } from "../../../agent/lib/memory-schema.mjs";
-import { createTaskRecord, selectNextTask, TASK_STATUS_VALUES, transitionTask } from "../../../agent/lib/task-lifecycle.mjs";
+import { createTaskRecord, isTaskLeaseExpired, selectNextTask, TASK_STATUS_VALUES, transitionTask } from "../../../agent/lib/task-lifecycle.mjs";
 
 interface Env {
   MEMORY: DurableObjectNamespace<MemoryStore>;
@@ -117,8 +117,27 @@ export class MemoryStore extends DurableObject<Env> {
     }
 
     if (request.method === "POST" && url.pathname === "/v1/tasks/claim-next") {
-      const running = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='running'").one().count;
-      if (running > 0) return json({ task: null });
+      const runningRow = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE status='running' ORDER BY updated_at ASC LIMIT 1").toArray()[0];
+      if (runningRow) {
+        const runningTask = taskFromRow(runningRow);
+        if (!isTaskLeaseExpired(runningTask, { now: Date.parse(now) })) return json({ task: null });
+        const retryable = runningTask.attempt_count < runningTask.max_attempts;
+        const recovered = transitionTask(runningTask, retryable ? "waiting" : "failed", {
+          now,
+          checkpointSummary: (runningTask.checkpoint_summary ? runningTask.checkpoint_summary + "\\n" : "") +
+            "Recovered after a stale scheduled run; inspect prior evidence before continuing.",
+          resultSummary: retryable ? runningTask.result_summary : "Execution lease expired on the final allowed attempt; no further retry.",
+          nextRunAt: retryable ? now : undefined,
+        });
+        const recoveredRow = this.ctx.storage.sql.exec<{ id: string }>(
+          "UPDATE tasks SET status=?,updated_at=?,next_run_at=?,checkpoint_summary=?,result_summary=?,finished_at=? WHERE id=? AND status='running' AND updated_at=? RETURNING id",
+          recovered.status, now, recovered.next_run_at, recovered.checkpoint_summary, recovered.result_summary,
+          recovered.finished_at ?? null, runningTask.id, runningTask.updated_at
+        ).toArray();
+        if (recoveredRow.length !== 1) return json({ task: null });
+      }
+      const stillRunning = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='running'").one().count;
+      if (stillRunning > 0) return json({ task: null });
       const rows = this.ctx.storage.sql.exec<TaskRow>(
         "SELECT * FROM tasks WHERE owner_approved=1 AND attempt_count<max_attempts AND ((status='queued' AND (next_run_at IS NULL OR next_run_at<=?)) OR (status='waiting' AND next_run_at IS NOT NULL AND next_run_at<=?)) ORDER BY COALESCE(next_run_at,created_at) ASC LIMIT 500",
         now, now
