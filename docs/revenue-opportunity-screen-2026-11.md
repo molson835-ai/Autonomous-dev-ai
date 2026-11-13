@@ -8,11 +8,12 @@ This is an experiment, not a validated business. No customer interviews, paid co
 
 ## Evidence and market signals
 
-1. Sellers describe inventory, cost/profit tracking, and listing upkeep as recurring pain. A recent r/eBaySellerAdvice thread asks what tools help with those tasks; replies mention custom spreadsheets, SKU databases, and difficulty maintaining inventory data: https://www.reddit.com/r/eBaySellerAdvice/comments/1x5srv1/what-tools-are-actually-useful-for-staying-organized/
-2. A high-volume eBay seller described around 4,000 listings and 9,000 units, relying on Excel and struggling to detect listings that disappear: https://www.reddit.com/r/Ebay/comments/1u9fsbv/ebay_management_4k_listings_9000qty_and_growing/
-3. eBay officially offers Seller Hub Reports and CSV/XLS bulk listing workflows. Its documentation says reports can support manual audits, and its Sell Feed API can expose active inventory reports, but API integration is out of scope for this MVP: https://www.ebay.com/sellercenter/listings/ebay-bulk-listing-tools
-4. Competition is real. SellerAider lists plans around $12.99–$29.99/month; SixBit lists plans from $29.99/month; existing reseller profit spreadsheets are available free and at one-time prices such as $14.99, $19, $24–$29: https://selleraider.com/pricing/ ; https://www.sixbitsoftware.com/pricing/ ; https://www.profitstamp.com/products/profit-tracker/ ; https://www.etsy.com/listing/4612281545/ebay-seller-spreadsheet-fee-calculator
-5. Existing paid products mostly bundle crosslisting, relisting, bulk editing, fee/profit reporting, and inventory management. A smaller local reconciliation tool could differentiate on no login, no subscription, local file processing, and one narrow job—but that positioning remains untested.
+1. eBay documents Seller Hub Reports as a CSV/XLS workflow for downloading, managing, and auditing listings and inventory. Its official documentation explicitly describes reports as useful for record-keeping, auditing, and order fulfillment: https://www.ebay.com/sellercenter/listings/ebay-bulk-listing-tools
+2. eBay's Seller Hub guidance positions Reports for higher-volume sellers and notes that the workflow requires maintaining a separate spreadsheet. This supports technical compatibility with a local CSV utility, but does not prove that sellers want another tool: https://www.ebay.com/help/selling/selling-tools/file-exchange?id=4096
+3. Competition and pricing are established: SellerAider lists monthly plans from $12.99 to $29.99: https://selleraider.com/pricing/ ; SixBit lists Home and Hobby at $29.99/month and Small Business at $49.99/month: https://www.sixbitsoftware.com/EN/Subscription_Levels.htm ; ProfitStamp lists a reseller profit tracker at a $24 launch price and $29 regular one-time price: https://www.profitstamp.com/pricing/
+4. These competitors cover broader inventory, crosslisting, listing management, or profit tracking. A narrower, no-login local reconciliation utility could differentiate on privacy and simplicity, but that differentiation is only a hypothesis.
+
+**Demand evidence remains weak.** No verified seller interviews, customer-provided exports, search-volume measurements, conversions, or willingness-to-pay results exist. Earlier draft references to two Reddit discussions could not be independently verified and have been removed. Treat this as a low-cost product experiment, not a proven market opportunity.
 
 ## Five candidate opportunities
 
@@ -20,10 +21,10 @@ Scores are preliminary judgment, not measured market size. Scale 1–5. For comp
 
 | Opportunity | Demand signal | Competitive room | Buildability | Free-tier affordability | Delivery path | Average |
 |---|---:|---:|---:|---:|---:|---:|
-| Listing-to-stock CSV reconciliation for small sellers | 4 | 3 | 5 | 5 | 4 | 4.2 |
-| Multi-marketplace profit/inventory spreadsheet | 4 | 1 | 5 | 5 | 5 | 4.0 |
-| Local website accessibility/performance audit report | 3 | 2 | 4 | 4 | 3 | 3.2 |
-| Invoice/packing-slip to inventory CSV converter | 3 | 3 | 3 | 4 | 3 | 3.2 |
+| Listing-to-stock CSV reconciliation for small sellers | 3 | 3 | 5 | 5 | 4 | 4.0 |
+| Multi-marketplace profit/inventory spreadsheet | 3 | 1 | 5 | 5 | 5 | 3.8 |
+| Local website accessibility/performance audit report | 2 | 2 | 4 | 4 | 3 | 3.0 |
+| Invoice/packing-slip to inventory CSV converter | 2 | 3 | 3 | 4 | 3 | 3.0 |
 | AI listing title/description generator | 3 | 1 | 5 | 5 | 3 | 3.4 |
 
 ### Why this candidate
