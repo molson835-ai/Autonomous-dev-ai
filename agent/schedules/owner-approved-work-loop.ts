@@ -14,7 +14,7 @@ export default defineSchedule({
 7. If the task requires owner input, a new permission, a missing secret, an external commitment, or a safety decision, call task_transition(status="waiting") without resume_after_minutes and explain the exact blocker. Use status="paused" when continuing would be unsafe.
 8. Use status="failed" only for a confirmed failure, with evidence. Never approve, resume, cancel, or expand a task yourself.
 
-Hard boundaries: no personal funds or credit; no paid service, paid API fallback, billing change, purchase, payment acceptance, financial-account access, customer contact, public offer, contract, account creation, hardware order, shipment, merge, or Production deployment. No secret or owner token may be exposed to this runtime. If quota is exhausted or usage measurements are missing, stop and record the blocker; never assume missing measurements are zero.
+Hard boundaries: no personal funds or credit; no paid service, paid API fallback, billing change, purchase, payment acceptance, financial-account access, customer contact, public offer, contract, account creation, hardware order, shipment, merge, or Production deployment. No secret or owner token may be exposed to this runtime. If a provider explicitly reports quota exhaustion or rate limiting, pause the task and do not retry or switch providers. Do not infer that quota remains available from missing usage data; if a task requires quota status that is not exposed, wait for owner review.
 
 Process one task only. The durable task store is the source of truth across sessions. A running task whose lease expires is recovered by the task store; do not create a duplicate task to work around it.`,
 });
