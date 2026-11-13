@@ -36,7 +36,7 @@ test("matches SKUs, sums duplicate rows, and reports inventory discrepancies", (
 
 test("flags blank SKUs and invalid quantities without silently matching them", () => {
   const active = "SKU,Title,Quantity\n,Unknown SKU,1\nBAD,Invalid quantity,-1\n";
-  const inventory = "SKU,Title,Quantity,Location\n,Unidentified stock,2,A1\nBAD,Invalid stock,1,A2\n";
+  const inventory = "SKU,Title,Quantity,Location\n,Unidentified stock,2,A1\nBAD,Invalid stock,-1,A2\n";
   const result = reconcileCsv(active, inventory);
   assert.ok(result.issues.some(issue => issue.type === "listing-missing-sku"));
   assert.ok(result.issues.some(issue => issue.type === "inventory-missing-sku"));
