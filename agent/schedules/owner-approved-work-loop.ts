@@ -1,8 +1,8 @@
 import { defineSchedule } from "eve/schedules";
 
 export default defineSchedule({
-  // Hourly keeps the schedule comfortably below Vercel Hobby free-run quotas.
-  cron: "0 * * * *",
+  // This Vercel Hobby project permits only one Cron Job run per day.
+  cron: "0 14 * * *",
   content: `Run one bounded step of the owner's durable work queue.
 
 1. Call task_claim_next exactly once. The task store only returns a due task already approved by the owner. If no task is returned, stop without proposing or inventing work. The task-claim tool deliberately returns a skipped result outside Vercel Production, so Preview schedules cannot touch the Production queue.
@@ -10,7 +10,7 @@ export default defineSchedule({
 3. Use only tools that are actually available in this runtime. If a required capability is missing, do not pretend to have completed the work. Record the blocker with task_transition(status="waiting") and omit resume_after_minutes so the task waits for owner action or a capability change.
 4. Complete at most one bounded unit of work in this invocation. Do not run an unbounded loop or claim a result that was not verified.
 5. If the task is complete, call task_transition(status="succeeded") with a concise result_summary and evidence_refs that identify observed evidence.
-6. If the work can safely continue in another scheduled session, call task_transition(status="waiting") with a checkpoint_summary and resume_after_minutes of at least 60. The tool calculates the timestamp.
+6. If the work can safely continue in another scheduled session, call task_transition(status="waiting") with a checkpoint_summary and resume_after_minutes of at least 1440. The tool calculates the timestamp.
 7. If the task requires owner input, a new permission, a missing secret, an external commitment, or a safety decision, call task_transition(status="waiting") without resume_after_minutes and explain the exact blocker. Use status="paused" when continuing would be unsafe.
 8. Use status="failed" only for a confirmed failure, with evidence. Never approve, resume, cancel, or expand a task yourself.
 
