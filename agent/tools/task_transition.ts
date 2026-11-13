@@ -11,12 +11,18 @@ export default defineTool({
     checkpoint_summary: z.string().max(2000).optional(),
     result_summary: z.string().max(4000).optional(),
     evidence_refs: z.array(z.string().max(500)).max(20).optional(),
-    next_run_at: z.string().datetime().nullable().optional(),
+    resume_after_minutes: z.number().int().min(15).max(1440).optional(),
   }),
-  async execute({ id, ...body }) {
+  async execute({ id, resume_after_minutes, ...body }) {
+    if (resume_after_minutes !== undefined && body.status !== "waiting") {
+      throw new Error("resume_after_minutes is only valid when status is waiting.");
+    }
+    const next_run_at = body.status === "waiting"
+      ? (resume_after_minutes === undefined ? null : new Date(Date.now() + resume_after_minutes * 60_000).toISOString())
+      : undefined;
     return memoryRequest("v1/tasks/" + encodeURIComponent(id) + "/transition", {
       method: "POST",
-      body,
+      body: { ...body, ...(body.status === "waiting" ? { next_run_at } : {}) },
     });
   },
 });
