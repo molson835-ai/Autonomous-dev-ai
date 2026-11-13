@@ -21,6 +21,7 @@ The module does not call providers, schedule work, write state, switch providers
 - 12 tool calls per turn.
 - 12,000 output characters per turn.
 - 10,000 reported tokens per turn.
+- 45-second application-level turn ceiling (not a statement of Vercel's platform timeout).
 - 3 retries and 3 consecutive failures.
 - 24-hour maximum task age.
 - Retry delay doubles from 1 minute to a 15-minute ceiling.

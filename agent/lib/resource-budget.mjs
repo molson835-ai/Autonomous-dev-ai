@@ -3,6 +3,7 @@ const DEFAULT_LIMITS = Object.freeze({
   maxToolCallsPerTurn: 12,
   maxOutputCharsPerTurn: 12000,
   maxTokensPerTurn: 10000,
+  maxTurnDurationMs: 45 * 1000,
   maxRetries: 3,
   maxConsecutiveFailures: 3,
   maxTaskAgeMs: 24 * 60 * 60 * 1000,
@@ -99,7 +100,8 @@ export function evaluateResourceBudget({
     ["steps", usage.steps ?? usage.stepCount ?? 0, limits.maxStepsPerTurn],
     ["tool_calls", usage.toolCalls ?? usage.toolCallCount ?? 0, limits.maxToolCallsPerTurn],
     ["output_chars", usage.outputChars ?? 0, limits.maxOutputCharsPerTurn],
-    ["tokens", usage.tokens ?? usage.totalTokens ?? 0, limits.maxTokensPerTurn]
+    ["tokens", usage.tokens ?? usage.totalTokens ?? 0, limits.maxTokensPerTurn],
+    ["elapsed_ms", usage.elapsedMs ?? 0, limits.maxTurnDurationMs]
   ];
   for (const [name, value, cap] of checks) {
     if (!finiteNonNegative(value)) {

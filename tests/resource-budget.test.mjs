@@ -53,7 +53,8 @@ test("per-turn step, tool, output, and token caps checkpoint and yield", () => {
     [{ steps: 8 }, "steps_budget_reached"],
     [{ toolCalls: 12 }, "tool_calls_budget_reached"],
     [{ outputChars: 12000 }, "output_chars_budget_reached"],
-    [{ tokens: 10000 }, "tokens_budget_reached"]
+    [{ tokens: 10000 }, "tokens_budget_reached"],
+    [{ elapsedMs: 45000 }, "elapsed_ms_budget_reached"]
   ];
   for (const [usage, reason] of cases) {
     const result = evaluateResourceBudget({ usage });
