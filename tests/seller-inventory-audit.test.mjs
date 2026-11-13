@@ -52,6 +52,14 @@ test("accepts common Seller Hub header aliases", () => {
   assert.equal(result.issues.length, 0);
 });
 
+test("accepts the official eBay Active Listings report header names", () => {
+  const active = "Item number,Title,Variation,Custom label,Available quantity\\n123456789012,Widget,,SKU-42,4";
+  const inventory = "SKU,Title,Quantity,Location\\nSKU-42,Widget,4,Shelf A";
+  const result = reconcileCsv(active, inventory);
+  assert.equal(result.summary.matchedSkus, 1);
+  assert.equal(result.issues.length, 0);
+});
+
 test("rejects empty, malformed, or missing required columns", () => {
   assert.throws(() => parseCsv(""), /empty/);
   assert.throws(() => parseCsv('SKU,Title\nA-1,"unclosed'), /unclosed quoted/);
