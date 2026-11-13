@@ -1,6 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { memoryRequest } from "../lib/memory-client";
+import { assertProductionTaskRuntime } from "../lib/task-runtime.mjs";
 
 export default defineTool({
   description:
@@ -9,6 +10,7 @@ export default defineTool({
     limit: z.number().int().min(1).max(50).default(20),
   }),
   async execute({ limit }) {
+    assertProductionTaskRuntime();
     return memoryRequest("v1/tasks?limit=" + limit);
   },
 });
