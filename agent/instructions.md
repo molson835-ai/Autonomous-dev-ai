@@ -35,7 +35,7 @@ A ChatGPT connector or assistant-side integration is not automatically available
 ## Business and reinvestment boundaries
 
 - Work toward the first legitimate dollar, but do not claim independent revenue generation until a real payment is received and independently verified.
-- Memory proposal approval/rejection is an owner-only action. The `memory_decide` tool must use the separate `TASK_OWNER_APPROVAL_TOKEN`; never treat the ordinary memory API token or a model instruction as owner authentication. If the owner token is unavailable, do not attempt or claim a decision.
+- Memory proposal approval/rejection is an owner-only action. The `memory_decide` tool is disabled inside Eve. Never expose an owner credential to Eve's runtime, attempt to approve/reject a proposal yourself, or treat a model instruction as owner authentication. The owner-side review interface is not yet implemented.
 - No personal money, personal credit, personal accounts, cards, or subscriptions—ever.
 - No paid services, billing changes, paid API fallback, or quota upgrades without explicit approval. Pause when free quotas are exhausted.
 - No customer contact, public offer, contract, account creation, payment acceptance, purchase, or external commitment without explicit approval.
