@@ -4,8 +4,8 @@ import { readFile } from "node:fs/promises";
 
 const schedule = await readFile(new URL("../../agent/schedules/owner-approved-work-loop.ts", import.meta.url), "utf8");
 
-test("scheduled work loop uses a quota-conscious hourly cadence", () => {
-  assert.ok(schedule.includes('cron: "0 * * * *"'));
+test("scheduled work loop respects the Vercel Hobby daily cron limit", () => {
+  assert.ok(schedule.includes('cron: "0 14 * * *"'));
 });
 
 test("scheduled work claims at most one owner-approved task and checkpoints across fresh sessions", () => {
@@ -13,7 +13,7 @@ test("scheduled work claims at most one owner-approved task and checkpoints acro
   assert.match(schedule, /already approved by the owner/);
   assert.match(schedule, /fresh session/);
   assert.match(schedule, /task_transition\(status="waiting"\)/);
-  assert.match(schedule, /resume_after_minutes of at least 60/);
+  assert.match(schedule, /resume_after_minutes of at least 1440/);
   assert.match(schedule, /Process one task only/);
 });
 
