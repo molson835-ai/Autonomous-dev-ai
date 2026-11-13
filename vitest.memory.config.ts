@@ -11,6 +11,7 @@ export default defineConfig({
         // Test-only credential. Never read or reuse a deployed Worker secret.
         bindings: {
           MEMORY_API_TOKEN: "local-vitest-only-token",
+          TASK_OWNER_APPROVAL_TOKEN: "local-vitest-only-owner-token",
         },
       },
     }),

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   createTaskRecord,
   findIdempotentTask,
+  isTaskLeaseExpired,
   selectNextTask,
   transitionTask,
   validateTaskRecord
@@ -57,6 +58,29 @@ test("selector skips unapproved, invalid, exhausted, and not-yet-due tasks", () 
   const scheduled = Object.freeze({ ...transitionTask(waiting, "queued", { now }), next_run_at: "2026-11-14T00:00:00.000Z" });
   const exhausted = Object.freeze({ ...queued({ id: "task-x", idempotency_key: "x" }), attempt_count: 3 });
   assert.equal(selectNextTask([scheduled, exhausted], { now: Date.parse(now) }), null);
+});
+
+test("scheduled waiting tasks resume only when their checkpoint time is due", () => {
+  const claimed = transitionTask(queued(), "running", { now });
+  const blocked = transitionTask(claimed, "waiting", { now, checkpointSummary: "Waiting for owner input" });
+  const resumable = transitionTask(claimed, "waiting", {
+    now, checkpointSummary: "Safe checkpoint; continue next cycle",
+    nextRunAt: "2026-11-13T00:15:00.000Z"
+  });
+  assert.equal(selectNextTask([blocked], { now: Date.parse("2026-11-14T00:00:00.000Z") }), null);
+  assert.equal(selectNextTask([resumable], { now: Date.parse("2026-11-13T00:14:59.000Z") }), null);
+  assert.equal(selectNextTask([resumable], { now: Date.parse("2026-11-13T00:15:00.000Z") }).id, resumable.id);
+  const resumed = transitionTask(resumable, "running", { now: "2026-11-13T00:15:00.000Z" });
+  assert.equal(resumed.status, "running");
+  assert.equal(resumed.attempt_count, 2);
+  assert.equal(resumed.next_run_at, null);
+});
+
+test("stale running task leases expire for crash recovery", () => {
+  const running = transitionTask(queued(), "running", { now });
+  assert.equal(isTaskLeaseExpired(running, { now: Date.parse(now) + 29 * 60 * 1000 }), false);
+  assert.equal(isTaskLeaseExpired(running, { now: Date.parse(now) + 30 * 60 * 1000 }), true);
+  assert.equal(isTaskLeaseExpired(queued(), { now: Date.parse(now) + 60 * 60 * 1000 }), false);
 });
 
 test("state machine rejects illegal transitions and stale expected state", () => {

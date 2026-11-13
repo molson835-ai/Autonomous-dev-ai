@@ -1,20 +1,29 @@
 import { DurableObject } from "cloudflare:workers";
 import { isSafeMemoryText, normalizeMemoryQuery } from "../../../agent/lib/memory-policy.mjs";
 import { ensureExperienceExternalIdColumn, findExperienceByExternalId } from "../../../agent/lib/memory-schema.mjs";
+import { createTaskRecord, isTaskLeaseExpired, selectNextTask, TASK_STATUS_VALUES, transitionTask } from "../../../agent/lib/task-lifecycle.mjs";
 
 interface Env {
   MEMORY: DurableObjectNamespace<MemoryStore>;
   MEMORY_API_TOKEN: string;
+  TASK_OWNER_APPROVAL_TOKEN?: string;
 }
 
 type MemoryRow = {
   id: string; kind: string; content: string; source: string;
   confidence: number; status: string; created_at: string; updated_at: string;
 };
+type TaskRow = { id: string; idempotency_key: string; task_type: string; title: string; goal: string; approved_scope: string; status: string; owner_approved: number; created_at: string; updated_at: string; attempt_count: number; max_attempts: number; next_run_at: string | null; checkpoint_summary: string | null; result_summary: string | null; evidence_refs: string; started_at: string | null; finished_at: string | null; };
 type ExperienceRow = {
   id: string; external_id: string | null; task: string; outcome: string; result: string;
   evidence: string; created_at: string;
 };
+
+function taskFromRow(row: TaskRow) {
+  let evidenceRefs: string[] = [];
+  try { const parsed: unknown = JSON.parse(row.evidence_refs); if (Array.isArray(parsed) && parsed.every(item => typeof item === "string")) evidenceRefs = parsed; } catch { /* Fail closed on malformed evidence metadata. */ }
+  return { ...row, owner_approved: row.owner_approved === 1, evidence_refs: evidenceRefs };
+}
 
 const json = (data: unknown, status = 200) =>
   Response.json(data, { status, headers: { "cache-control": "no-store" } });
@@ -57,12 +66,170 @@ export class MemoryStore extends DurableObject<Env> {
       );
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS experiences_created ON experiences(created_at DESC)");
       ensureExperienceExternalIdColumn(ctx.storage.sql);
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE, task_type TEXT NOT NULL, title TEXT NOT NULL, goal TEXT NOT NULL, approved_scope TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('proposed','queued','running','waiting','paused','succeeded','failed','cancelled')), owner_approved INTEGER NOT NULL CHECK (owner_approved IN (0,1)), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, attempt_count INTEGER NOT NULL, max_attempts INTEGER NOT NULL CHECK (max_attempts BETWEEN 1 AND 3), next_run_at TEXT, checkpoint_summary TEXT, result_summary TEXT, evidence_refs TEXT NOT NULL DEFAULT '[]', started_at TEXT, finished_at TEXT)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS task_control (id INTEGER PRIMARY KEY CHECK (id=1), queue_paused INTEGER NOT NULL CHECK (queue_paused IN (0,1)), reason TEXT, updated_at TEXT NOT NULL)");
+      ctx.storage.sql.exec("INSERT OR IGNORE INTO task_control (id,queue_paused,reason,updated_at) VALUES (1,0,NULL,?)", new Date().toISOString());
+      ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS tasks_status_created ON tasks(status, created_at)");
     });
   }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const now = new Date().toISOString();
+
+
+
+    if (request.method === "POST" && url.pathname === "/v1/tasks") {
+      const body = await readBody(request);
+      const allowed = new Set(["idempotency_key", "task_type", "title", "goal", "approved_scope"]);
+      if (!body || Object.keys(body).some(key => !allowed.has(key)) ||
+          !isSafeMemoryText(body.idempotency_key, 200) || !isSafeMemoryText(body.task_type, 80) ||
+          !isSafeMemoryText(body.title, 200) || !isSafeMemoryText(body.goal, 1000) ||
+          !isSafeMemoryText(body.approved_scope, 2000)) return json({ error: "Invalid task proposal." }, 400);
+      const key = String(body.idempotency_key).trim();
+      const existing = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE idempotency_key = ? LIMIT 1", key).toArray()[0];
+      if (existing) return json({ task: taskFromRow(existing), created: false });
+      const task = createTaskRecord({ id: crypto.randomUUID(), idempotency_key: key, task_type: String(body.task_type).trim(), title: String(body.title).trim(), goal: String(body.goal).trim(), approved_scope: String(body.approved_scope).trim() }, { now });
+      this.ctx.storage.sql.exec("INSERT INTO tasks (id,idempotency_key,task_type,title,goal,approved_scope,status,owner_approved,created_at,updated_at,attempt_count,max_attempts,next_run_at,checkpoint_summary,result_summary,evidence_refs,started_at,finished_at) VALUES (?,?,?,?,?,?,?,0,?,?,0,?,NULL,NULL,NULL,'[]',NULL,NULL)", task.id, task.idempotency_key, task.task_type, task.title, task.goal, task.approved_scope, task.status, task.created_at, task.updated_at, task.max_attempts);
+      return json({ task, created: true }, 201);
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/tasks") {
+      const limit = boundedLimit(url.searchParams.get("limit"), 20);
+      const rows = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks ORDER BY created_at DESC LIMIT ?", limit).toArray();
+      return json({ tasks: rows.map(taskFromRow) });
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/owner/status") {
+      const control = this.ctx.storage.sql.exec<{ queue_paused: number; reason: string | null; updated_at: string }>("SELECT queue_paused,reason,updated_at FROM task_control WHERE id=1").one();
+      const running = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='running'").one().count;
+      const queued = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='queued' AND owner_approved=1").one().count;
+      return json({ queue_paused: control.queue_paused === 1, reason: control.reason, updated_at: control.updated_at, running_tasks: running, queued_tasks: queued });
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/owner/control") {
+      const body = await readBody(request);
+      if (!body || Object.keys(body).some(key => !["action","reason"].includes(key)) || !["pause","resume"].includes(body.action)) return json({ error: "Invalid owner control action." }, 400);
+      if (body.reason !== undefined && body.reason !== null && !isSafeMemoryText(body.reason, 500)) return json({ error: "Invalid pause reason." }, 400);
+      const paused = body.action === "pause";
+      const updated = this.ctx.storage.sql.exec<{ id: number }>(
+        "UPDATE task_control SET queue_paused=?,reason=?,updated_at=? WHERE id=1 RETURNING id",
+        paused ? 1 : 0, paused ? (body.reason ?? "Paused by owner") : null, now
+      ).toArray();
+      if (updated.length !== 1) return json({ error: "Owner control state unavailable." }, 503);
+      return json({ queue_paused: paused, reason: paused ? (body.reason ?? "Paused by owner") : null });
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/owner/tasks") {
+      const limit = boundedLimit(url.searchParams.get("limit"), 20);
+      const rows = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks ORDER BY created_at DESC LIMIT ?", limit).toArray();
+      return json({ tasks: rows.map(taskFromRow) });
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/owner/proposals") {
+      const limit = boundedLimit(url.searchParams.get("limit"), 20);
+      const proposals = this.ctx.storage.sql.exec<MemoryRow>(
+        "SELECT * FROM memories WHERE status = 'pending' ORDER BY created_at ASC LIMIT ?",
+        limit
+      ).toArray();
+      return json({ proposals });
+    }
+
+
+
+    const taskMatch = url.pathname.match(/^\/v1\/tasks\/([0-9a-f-]{36})$/i);
+    if (request.method === "GET" && taskMatch) {
+      const row = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE id = ? LIMIT 1", taskMatch[1]).toArray()[0];
+      return row ? json({ task: taskFromRow(row) }) : json({ error: "Task not found." }, 404);
+    }
+
+    const approveMatch = url.pathname.match(/^\/v1\/tasks\/([0-9a-f-]{36})\/approve$/i);
+    if (request.method === "POST" && approveMatch) {
+      const row = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE id = ? LIMIT 1", approveMatch[1]).toArray()[0];
+      if (!row) return json({ error: "Task not found." }, 404);
+      const current = taskFromRow(row);
+      if (current.status !== "proposed") return json({ error: "Only proposed tasks can be approved." }, 409);
+      const approved = transitionTask(current, "queued", { ownerApproved: true, now });
+      const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status='queued', owner_approved=1, updated_at=? WHERE id=? AND status='proposed' AND owner_approved=0 RETURNING id", now, current.id).toArray();
+      if (updated.length !== 1) return json({ error: "Task approval state conflict." }, 409);
+      return json({ task: approved });
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/tasks/claim-next") {
+      const control = this.ctx.storage.sql.exec<{ queue_paused: number; reason: string | null }>("SELECT queue_paused,reason FROM task_control WHERE id=1").one();
+      if (control.queue_paused === 1) return json({ task: null, paused: true, reason: control.reason });
+      const runningRow = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE status='running' ORDER BY updated_at ASC LIMIT 1").toArray()[0];
+      if (runningRow) {
+        const runningTask = taskFromRow(runningRow);
+        if (!isTaskLeaseExpired(runningTask, { now: Date.parse(now) })) return json({ task: null });
+        const retryable = runningTask.attempt_count < runningTask.max_attempts;
+        const recovered = transitionTask(runningTask, retryable ? "waiting" : "failed", {
+          now,
+          checkpointSummary: (runningTask.checkpoint_summary ? runningTask.checkpoint_summary + "\n" : "") +
+            "Recovered after a stale scheduled run; inspect prior evidence before continuing.",
+          resultSummary: retryable ? runningTask.result_summary : "Execution lease expired on the final allowed attempt; no further retry.",
+          nextRunAt: retryable ? now : undefined,
+        });
+        const recoveredRow = this.ctx.storage.sql.exec<{ id: string }>(
+          "UPDATE tasks SET status=?,updated_at=?,next_run_at=?,checkpoint_summary=?,result_summary=?,finished_at=? WHERE id=? AND status='running' AND updated_at=? RETURNING id",
+          recovered.status, now, recovered.next_run_at, recovered.checkpoint_summary, recovered.result_summary,
+          recovered.finished_at ?? null, runningTask.id, runningTask.updated_at
+        ).toArray();
+        if (recoveredRow.length !== 1) return json({ task: null });
+      }
+      const stillRunning = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='running'").one().count;
+      if (stillRunning > 0) return json({ task: null });
+      const rows = this.ctx.storage.sql.exec<TaskRow>(
+        "SELECT * FROM tasks WHERE owner_approved=1 AND attempt_count<max_attempts AND ((status='queued' AND (next_run_at IS NULL OR next_run_at<=?)) OR (status='waiting' AND next_run_at IS NOT NULL AND next_run_at<=?)) ORDER BY COALESCE(next_run_at,created_at) ASC LIMIT 500",
+        now, now
+      ).toArray();
+      const selected = selectNextTask(rows.map(taskFromRow), { now: Date.parse(now) });
+      if (!selected) return json({ task: null });
+      const claimed = transitionTask(selected, "running", { now });
+      const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status='running', attempt_count=?, updated_at=?, started_at=COALESCE(started_at,?), next_run_at=NULL WHERE id=? AND status=? AND owner_approved=1 AND attempt_count<max_attempts RETURNING id", claimed.attempt_count, now, now, selected.id, selected.status).toArray();
+      if (updated.length !== 1) return json({ error: "Task claim state conflict." }, 409);
+      return json({ task: claimed });
+    }
+
+    const ownerControlMatch = url.pathname.match(/^\/v1\/tasks\/([0-9a-f-]{36})\/owner-control$/i);
+    if (request.method === "POST" && ownerControlMatch) {
+      const body = await readBody(request);
+      if (!body || Object.keys(body).some(key => key !== "action") || !["pause", "resume"].includes(String(body.action))) {
+        return json({ error: "Invalid owner task control." }, 400);
+      }
+      const row = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE id=? LIMIT 1", ownerControlMatch[1]).toArray()[0];
+      if (!row) return json({ error: "Task not found." }, 404);
+      const current = taskFromRow(row);
+      const nextStatus = body.action === "pause" ? "paused" : "queued";
+      let next;
+      try { next = transitionTask(current, nextStatus, { now, ownerApproved: body.action === "resume" }); }
+      catch { return json({ error: "Invalid task state transition." }, 409); }
+      const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status=?, owner_approved=?, updated_at=?, next_run_at=NULL WHERE id=? AND status=? RETURNING id", next.status, next.owner_approved ? 1 : 0, now, current.id, current.status).toArray();
+      if (updated.length !== 1) return json({ error: "Task state conflict." }, 409);
+      return json({ task: next });
+    }
+
+    const transitionMatch = url.pathname.match(/^\/v1\/tasks\/([0-9a-f-]{36})\/transition$/i);
+    if (request.method === "POST" && transitionMatch) {
+      const body = await readBody(request);
+      if (!body || Object.keys(body).some(key => !["status","checkpoint_summary","result_summary","evidence_refs","next_run_at"].includes(key)) || !TASK_STATUS_VALUES.includes(String(body.status))) return json({ error: "Invalid task transition." }, 400);
+      if (body.checkpoint_summary !== undefined && body.checkpoint_summary !== null && !isSafeMemoryText(body.checkpoint_summary, 2000)) return json({ error: "Invalid checkpoint summary." }, 400);
+      if (body.result_summary !== undefined && body.result_summary !== null && !isSafeMemoryText(body.result_summary, 4000)) return json({ error: "Invalid result summary." }, 400);
+      if (body.evidence_refs !== undefined && (!Array.isArray(body.evidence_refs) || body.evidence_refs.length > 20 || !body.evidence_refs.every(item => typeof item === "string" && isSafeMemoryText(item, 500)))) return json({ error: "Invalid evidence references." }, 400);
+      if (body.next_run_at !== undefined && body.next_run_at !== null && (typeof body.next_run_at !== "string" || !Number.isFinite(Date.parse(body.next_run_at)))) return json({ error: "Invalid next_run_at timestamp." }, 400);
+      const row = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE id=? LIMIT 1", transitionMatch[1]).toArray()[0];
+      if (!row) return json({ error: "Task not found." }, 404);
+      const current = taskFromRow(row);
+      const control = this.ctx.storage.sql.exec<{ queue_paused: number }>("SELECT queue_paused FROM task_control WHERE id=1").one();
+      if (control.queue_paused === 1 && body.status === "waiting" && body.next_run_at) return json({ error: "The owner has paused the queue; scheduled continuation is blocked." }, 409);
+      if (current.status === "paused" && body.status === "queued") return json({ error: "Owner approval is required to resume a paused task." }, 409);
+      let next;
+      try { next = transitionTask(current, String(body.status), { now, checkpointSummary: body.checkpoint_summary, resultSummary: body.result_summary, evidenceRefs: body.evidence_refs, nextRunAt: body.next_run_at }); }
+      catch (error) { return json({ error: String(error).includes("owner_approval_required") ? "Owner approval is required." : "Invalid task state transition." }, 409); }
+      const update = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status=?,owner_approved=?,updated_at=?,attempt_count=?,next_run_at=?,checkpoint_summary=?,result_summary=?,evidence_refs=?,started_at=?,finished_at=? WHERE id=? AND status=? RETURNING id", next.status, next.owner_approved ? 1 : 0, next.updated_at, next.attempt_count, next.next_run_at, next.checkpoint_summary, next.result_summary, JSON.stringify(next.evidence_refs), next.started_at ?? null, next.finished_at ?? null, current.id, current.status).toArray();
+      if (update.length !== 1) return json({ error: "Task state conflict." }, 409);
+      return json({ task: next });
+    }
 
     if (request.method === "GET" && url.pathname === "/v1/experiences") {
       const externalId = url.searchParams.get("external_id");
@@ -156,11 +323,11 @@ export class MemoryStore extends DurableObject<Env> {
         return json({ error: "Decision must be approve or reject." }, 400);
       }
       const status = body.decision === "approve" ? "approved" : "rejected";
-      const result = this.ctx.storage.sql.exec(
-        "UPDATE memories SET status = ?, updated_at = ? WHERE id = ? AND status = 'pending'",
+      const result = this.ctx.storage.sql.exec<{ id: string }>(
+        "UPDATE memories SET status = ?, updated_at = ? WHERE id = ? AND status = 'pending' RETURNING id",
         status, now, match[1]
-      );
-      if (result.rowsWritten === 0) return json({ error: "Pending proposal not found." }, 404);
+      ).toArray();
+      if (result.length !== 1) return json({ error: "Pending proposal not found." }, 404);
       return json({ id: match[1], status });
     }
 
@@ -172,12 +339,35 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const authorization = request.headers.get("authorization") ?? "";
     const supplied = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
-    if (!env.MEMORY_API_TOKEN || !constantTimeEqual(supplied, env.MEMORY_API_TOKEN)) {
-      return json({ error: "Unauthorized." }, 401);
-    }
     const url = new URL(request.url);
-    if (!url.pathname.startsWith("/v1/")) return json({ error: "Not found." }, 404);
+    const ownerApprovalRoute = request.method === "POST" && /^\/v1\/tasks\/[0-9a-f-]{36}\/approve$/i.test(url.pathname);
+    const ownerControlRoute = request.method === "POST" && /^\/v1\/tasks\/[0-9a-f-]{36}\/owner-control$/i.test(url.pathname);
+    const ownerMemoryDecisionRoute = request.method === "POST" && /^\/v1\/proposals\/[0-9a-f-]{36}\/decision$/i.test(url.pathname);
+    const ownerReadRoute = request.method === "GET" && ["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status"].includes(url.pathname);
+    const ownerQueueControlRoute = request.method === "POST" && url.pathname === "/v1/owner/control";
+    const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute || ownerMemoryDecisionRoute || ownerReadRoute || ownerQueueControlRoute;
+    const ownerOrigin = "https://autonomous-dev-ai.vercel.app";
+    const origin = request.headers.get("origin");
+    const withOwnerCors = (response: Response) => {
+      if (origin !== ownerOrigin) return response;
+      const headers = new Headers(response.headers);
+      headers.set("access-control-allow-origin", ownerOrigin);
+      headers.set("access-control-allow-methods", "GET, POST, OPTIONS");
+      headers.set("access-control-allow-headers", "Authorization, Content-Type");
+      headers.set("access-control-max-age", "86400");
+      headers.append("vary", "Origin");
+      return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    };
+    if (origin && origin !== ownerOrigin) return json({ error: "Origin not allowed." }, 403);
+    if (request.method === "OPTIONS") {
+      if (origin !== ownerOrigin) return json({ error: "Origin not allowed." }, 403);
+      return withOwnerCors(new Response(null, { status: 204 }));
+    }
+    const expectedToken = ownerOnlyRoute ? (env.TASK_OWNER_APPROVAL_TOKEN ?? "") : env.MEMORY_API_TOKEN;
+    if (ownerOnlyRoute && (!expectedToken || expectedToken === env.MEMORY_API_TOKEN)) return withOwnerCors(json({ error: "Owner approval is not configured." }, 503));
+    if (!expectedToken || !constantTimeEqual(supplied, expectedToken)) return withOwnerCors(json({ error: "Unauthorized." }, 401));
+    if (!url.pathname.startsWith("/v1/")) return withOwnerCors(json({ error: "Not found." }, 404));
     const id = env.MEMORY.idFromName("single-owner-memory");
-    return env.MEMORY.get(id).fetch(request);
+    return withOwnerCors(await env.MEMORY.get(id).fetch(request));
   },
 };

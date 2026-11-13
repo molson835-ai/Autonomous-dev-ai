@@ -8,7 +8,7 @@ const TRANSITIONS = Object.freeze({
   proposed: new Set(["queued", "cancelled"]),
   queued: new Set(["running", "paused", "failed", "cancelled"]),
   running: new Set(["waiting", "paused", "succeeded", "failed", "cancelled"]),
-  waiting: new Set(["queued", "paused", "failed", "cancelled"]),
+  waiting: new Set(["queued", "running", "paused", "failed", "cancelled"]),
   paused: new Set(["queued", "failed", "cancelled"]),
   succeeded: new Set(),
   failed: new Set(),
@@ -101,9 +101,11 @@ export function selectNextTask(tasks, { now = Date.now() } = {}) {
   if (tasks.some(task => task?.status === "running")) return null;
   const eligible = tasks.filter(task => {
     if (!validateTaskRecord(task).valid) return false;
-    if (task.status !== "queued" || task.owner_approved !== true) return false;
+    const dueQueued = task.status === "queued" && (!task.next_run_at || Date.parse(task.next_run_at) <= now);
+    const dueWaiting = task.status === "waiting" && task.next_run_at !== null && task.next_run_at !== undefined && Date.parse(task.next_run_at) <= now;
+    if (!dueQueued && !dueWaiting) return false;
+    if (task.owner_approved !== true) return false;
     if (task.attempt_count >= task.max_attempts) return false;
-    if (task.next_run_at && Date.parse(task.next_run_at) > now) return false;
     return true;
   });
   eligible.sort((a, b) =>
@@ -120,7 +122,8 @@ export function transitionTask(task, nextStatus, {
   now = new Date().toISOString(),
   checkpointSummary,
   resultSummary,
-  evidenceRefs
+  evidenceRefs,
+  nextRunAt
 } = {}) {
   const validation = validateTaskRecord(task);
   if (!validation.valid) throw new TypeError(`Invalid existing task: ${validation.reason}`);
@@ -153,10 +156,24 @@ export function transitionTask(task, nextStatus, {
   if (checkpointSummary !== undefined) updated.checkpoint_summary = checkpointSummary;
   if (resultSummary !== undefined) updated.result_summary = resultSummary;
   if (evidenceRefs !== undefined) updated.evidence_refs = [...evidenceRefs];
-  if (nextStatus === "queued") updated.next_run_at = null;
+  if (nextStatus === "running") updated.next_run_at = null;
+  else if (nextRunAt !== undefined) updated.next_run_at = nextRunAt;
   const after = validateTaskRecord(updated);
   if (!after.valid) throw new TypeError(`Invalid transitioned task: ${after.reason}`);
   return Object.freeze(updated);
+}
+
+
+/** A running task is recoverable only after its bounded execution lease expires. */
+export function isTaskLeaseExpired(task, {
+  now = Date.now(),
+  leaseMs = 30 * 60 * 1000
+} = {}) {
+  if (!task || task.status !== "running" || !validTimestamp(task.updated_at)) return false;
+  if (!Number.isFinite(now) || !Number.isFinite(leaseMs) || leaseMs < 1) {
+    throw new TypeError("A finite clock and positive lease duration are required");
+  }
+  return now - Date.parse(task.updated_at) >= leaseMs;
 }
 
 export const TASK_STATUS_VALUES = TASK_STATUSES;
