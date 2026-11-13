@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A private, browser-based CSV checker for reconciling active marketplace listings with physical inventory.">
+  <title>Listing & Stock Check — Local CSV Audit</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, Segoe UI, sans-serif; color: #17212b; background: #f4f7fa; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px 16px 48px; }
+    main { width: min(960px, 100%); margin: 0 auto; }
+    header, section { background: white; border: 1px solid #dbe3ea; border-radius: 16px; padding: 22px; margin-bottom: 16px; }
+    h1 { margin: 0 0 8px; font-size: clamp(1.6rem, 4vw, 2.3rem); }
+    h2 { margin: 0 0 12px; font-size: 1.15rem; }
+    p { line-height: 1.55; color: #475569; }
+    .privacy { border-left: 4px solid #16835d; padding: 10px 12px; background: #effaf5; color: #14553e; border-radius: 8px; }
+    .files { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+    label { display: block; font-weight: 650; margin-bottom: 7px; }
+    input[type=file] { display: block; width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 10px; background: #f8fafc; }
+    button, a.download { display: inline-block; text-decoration: none; border: 0; border-radius: 10px; padding: 12px 16px; font-weight: 700; cursor: pointer; background: #155e75; color: white; margin: 14px 8px 0 0; }
+    button.secondary { background: #e2e8f0; color: #17212b; }
+    a.download.secondary { background: #e2e8f0; color: #17212b; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 16px 0; }
+    .stat { background: #f1f5f9; padding: 13px; border-radius: 10px; }
+    .stat strong { display: block; font-size: 1.5rem; }
+    .stat span { color: #475569; font-size: .88rem; }
+    .table-wrap { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+    th, td { text-align: left; padding: 10px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+    th { background: #f8fafc; }
+    .error { color: #a12b2b; } .warning { color: #8a5b00; }
+    .muted { color: #64748b; font-size: .9rem; }
+    #status { min-height: 1.5em; }
+    @media (max-width: 520px) { body { padding: 12px 10px 32px; } header, section { padding: 16px; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Listing & Stock Check</h1>
+    <p>Compare a CSV of your active listings with a CSV of your physical inventory. Find SKUs with no stock record, stock that has no active listing, and quantity mismatches.</p>
+    <p class="privacy"><strong>Private by design:</strong> files are read and compared in this browser. Nothing is uploaded and no marketplace login or API key is used.</p>
+  </header>
+  <section>
+    <h2>1. Choose your CSV files</h2>
+    <div class="files">
+      <div><label for="active">Active listings CSV</label><input id="active" type="file" accept=".csv,text/csv"><p class="muted">Required columns: SKU (or Custom label) and Quantity. Title is optional.</p></div>
+      <div><label for="inventory">Physical inventory CSV</label><input id="inventory" type="file" accept=".csv,text/csv"><p class="muted">Required columns: SKU and Quantity. Title and Location are optional.</p></div>
+    </div>
+    <button id="run" disabled>Run reconciliation</button>
+    <a class="download secondary" href="./sample-active-listings.csv" download="sample-active-listings.csv">Download active listings sample</a>
+    <a class="download secondary" href="./sample-physical-inventory.csv" download="sample-physical-inventory.csv">Download inventory sample</a>
+    <p id="status" role="status" aria-live="polite"></p>
+  </section>
+  <section id="results" hidden>
+    <h2>2. Reconciliation results</h2>
+    <div id="stats" class="stats"></div>
+    <p class="muted">This is a comparison of the two files you supplied, not a live check of your marketplace account. Review each flag before changing inventory or listings.</p>
+    <button id="export" disabled>Export issue report CSV</button>
+    <div class="table-wrap"><table><thead><tr><th>Severity</th><th>Issue</th><th>SKU</th><th>Title</th><th>Listing qty</th><th>Stock qty</th><th>Location</th><th>Details</th></tr></thead><tbody id="issues"></tbody></table></div>
+    <p id="empty" hidden>No discrepancies or data-quality warnings were found in these files.</p>
+  </section>
+  <p class="muted">MVP limitation: export complete files from your seller account and prepare the inventory CSV with matching SKU values. Header aliases are supported, but column names and marketplace export formats can change. This tool does not edit or upload listings.</p>
+</main>
+<script type="module">
+  import { reconcileCsv, issuesToCsv } from "./reconcile.mjs";
+  const activeInput = document.querySelector("#active");
+  const inventoryInput = document.querySelector("#inventory");
+  const runButton = document.querySelector("#run");
+  const status = document.querySelector("#status");
+  const results = document.querySelector("#results");
+  let latest = null;
+  const read = file => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error("Could not read the selected file."));
+    reader.readAsText(file);
+  });
+  const refresh = () => { runButton.disabled = !(activeInput.files?.[0] && inventoryInput.files?.[0]); };
+  const onFilesChanged = () => {
+    refresh();
+    latest = null;
+    results.hidden = true;
+    document.querySelector("#export").disabled = true;
+    status.textContent = "";
+    status.className = "";
+  };
+  activeInput.addEventListener("change", onFilesChanged);
+  inventoryInput.addEventListener("change", onFilesChanged);
+  runButton.addEventListener("click", async () => {
+    runButton.disabled = true;
+    latest = null;
+    results.hidden = true;
+    document.querySelector("#export").disabled = true;
+    status.className = "";
+    status.textContent = "Checking files locally…";
+    try {
+      latest = reconcileCsv(await read(activeInput.files[0]), await read(inventoryInput.files[0]));
+      const { summary, issues } = latest;
+      document.querySelector("#stats").innerHTML = [
+        ["Active rows", summary.activeRows], ["Inventory rows", summary.inventoryRows],
+        ["Matched SKUs", summary.matchedSkus], ["Errors", summary.errors], ["Warnings", summary.warnings]
+      ].map(([label, value]) => `<div class="stat"><strong>${value}</strong><span>${label}</span></div>`).join("");
+      const body = document.querySelector("#issues");
+      body.replaceChildren();
+      for (const issue of issues) {
+        const tr = document.createElement("tr");
+        const values = [issue.severity, issue.type, issue.sku, issue.title, issue.activeQuantity, issue.stockQuantity, issue.location, issue.details];
+        values.forEach((value, index) => {
+          const td = document.createElement("td");
+          td.textContent = String(value ?? "");
+          if (index === 0) td.className = issue.severity;
+          tr.append(td);
+        });
+        body.append(tr);
+      }
+      document.querySelector("#empty").hidden = issues.length > 0;
+      document.querySelector("#export").disabled = issues.length === 0;
+      results.hidden = false;
+      status.className = "";
+      status.textContent = `Finished. Found ${summary.errors} errors and ${summary.warnings} warnings.`;
+    } catch (error) {
+      latest = null;
+      status.textContent = error instanceof Error ? error.message : "Could not process the selected files.";
+      status.className = "error";
+    } finally { refresh(); }
+  });
+  document.querySelector("#export").addEventListener("click", () => {
+    if (!latest?.issues.length) return;
+    const blob = new Blob([issuesToCsv(latest.issues)], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url; link.download = "listing-stock-issues.csv"; link.click();
+    URL.revokeObjectURL(url);
+  });
+</script>
+</body>
+</html>
