@@ -16,7 +16,7 @@ async function requestWithToken<T>(
 
   let endpoint: URL;
   try {
-    endpoint = new URL(path.replace(/^\\/+/, ""), baseUrl.endsWith("/") ? baseUrl : baseUrl + "/");
+    endpoint = new URL(path.replace(/^\/+/, ""), baseUrl.endsWith("/") ? baseUrl : baseUrl + "/");
   } catch {
     throw new Error("Persistent memory URL is invalid.");
   }
