@@ -64,10 +64,13 @@ function dataset(csv, kind) {
       location: kind === "inventory" ? findField(row, "location").trim() : ""
     };
   });
-  if (!parsed.some(row => Object.keys(row).some(key => HEADER_ALIASES.sku.includes(key)))) {
+  const hasField = field => parsed.some(row =>
+    Object.keys(row).some(key => HEADER_ALIASES[field].some(alias => normalizeHeader(alias) === key))
+  );
+  if (!hasField("sku")) {
     throw new Error("Missing SKU column. Use SKU or Custom label.");
   }
-  if (!parsed.some(row => Object.keys(row).some(key => HEADER_ALIASES.quantity.includes(key)))) {
+  if (!hasField("quantity")) {
     throw new Error("Missing quantity column. Use Quantity or Available quantity.");
   }
   return rows;
