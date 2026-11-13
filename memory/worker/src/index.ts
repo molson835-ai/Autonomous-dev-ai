@@ -220,6 +220,8 @@ export class MemoryStore extends DurableObject<Env> {
       const row = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE id=? LIMIT 1", transitionMatch[1]).toArray()[0];
       if (!row) return json({ error: "Task not found." }, 404);
       const current = taskFromRow(row);
+      const control = this.ctx.storage.sql.exec<{ queue_paused: number }>("SELECT queue_paused FROM task_control WHERE id=1").one();
+      if (control.queue_paused === 1 && body.status === "waiting" && body.next_run_at) return json({ error: "The owner has paused the queue; scheduled continuation is blocked." }, 409);
       if (current.status === "paused" && body.status === "queued") return json({ error: "Owner approval is required to resume a paused task." }, 409);
       let next;
       try { next = transitionTask(current, String(body.status), { now, checkpointSummary: body.checkpoint_summary, resultSummary: body.result_summary, evidenceRefs: body.evidence_refs, nextRunAt: body.next_run_at }); }
