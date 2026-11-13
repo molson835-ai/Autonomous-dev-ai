@@ -11,7 +11,7 @@ The agent definition in `agent/agent.ts` registers a Cloudflare Workers AI model
 | `memory_record_experience` | Record a completed experience | Requires memory service; must report actual write result. |
 | `memory_propose` | Submit a pending knowledge proposal | Requires memory service; does not approve itself. |
 | `memory_review` | Review pending proposals | Requires memory service. |
-| `memory_decide` | Approve/reject pending memory proposals | Uses the normal `MEMORY_API_TOKEN`; the tool description requires an explicit owner instruction, but this is instruction-level gating, not a separate cryptographic owner credential. Harden this before treating it as a strong owner-authentication boundary. |
+| `memory_decide` | Approve/reject pending memory proposals | Uses a separate `TASK_OWNER_APPROVAL_TOKEN`; it is unavailable until that owner-only credential is configured. The Worker rejects the ordinary `MEMORY_API_TOKEN` for this route. |
 
 The tool inventory is based on files under `agent/tools/`. It is not a claim that every tool is available in every deployment. Eve must inspect its live runtime tool list and verify service configuration before claiming access.
 
