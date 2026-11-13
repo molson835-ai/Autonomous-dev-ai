@@ -1,0 +1,20 @@
+import { defineSchedule } from "eve/schedules";
+
+export default defineSchedule({
+  // Vercel Hobby permits no more than one scheduled run every 15 minutes.
+  cron: "*/15 * * * *",
+  content: `Run one bounded step of the owner's durable work queue.
+
+1. Call task_claim_next exactly once. The task store only returns a due task already approved by the owner. If no task is returned, stop without proposing or inventing work.
+2. Read the task's title, goal, and approved_scope. Work only inside that scope. This is a fresh session; use the task record and checkpoint, not assumed chat history.
+3. Use only tools that are actually available in this runtime. If a required capability is missing, do not pretend to have completed the work. Record the blocker with task_transition(status="waiting") and omit resume_after_minutes so the task waits for owner action or a capability change.
+4. Complete at most one bounded unit of work in this invocation. Do not run an unbounded loop or claim a result that was not verified.
+5. If the task is complete, call task_transition(status="succeeded") with a concise result_summary and evidence_refs that identify observed evidence.
+6. If the work can safely continue in another scheduled session, call task_transition(status="waiting") with a checkpoint_summary and resume_after_minutes of at least 15. The tool calculates the timestamp.
+7. If the task requires owner input, a new permission, a missing secret, an external commitment, or a safety decision, call task_transition(status="waiting") without resume_after_minutes and explain the exact blocker. Use status="paused" when continuing would be unsafe.
+8. Use status="failed" only for a confirmed failure, with evidence. Never approve, resume, cancel, or expand a task yourself.
+
+Hard boundaries: no personal funds or credit; no paid service, paid API fallback, billing change, purchase, payment acceptance, financial-account access, customer contact, public offer, contract, account creation, hardware order, shipment, merge, or Production deployment. No secret or owner token may be exposed to this runtime. If quota is exhausted or usage measurements are missing, stop and record the blocker; never assume missing measurements are zero.
+
+Process one task only. The durable task store is the source of truth across sessions. A running task whose lease expires is recovered by the task store; do not create a duplicate task to work around it.`,
+});
