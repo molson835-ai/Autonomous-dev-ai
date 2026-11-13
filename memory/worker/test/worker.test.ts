@@ -3,13 +3,14 @@ import { describe, expect, it } from "vitest";
 
 const token = "local-vitest-only-token";
 const endpoint = "https://memory-test.invalid";
+const ownerToken = "local-vitest-only-owner-token";
 
-function request(path: string, init: RequestInit = {}) {
+function request(path: string, init: RequestInit = {}, credential = token) {
   return exports.default.fetch(
     new Request(new URL(path, endpoint), {
       ...init,
       headers: {
-        authorization: `Bearer ${token}`,
+        authorization: `Bearer ${credential}`,
         ...(init.body ? { "content-type": "application/json" } : {}),
         ...init.headers,
       },
@@ -215,6 +216,79 @@ describe("persistent memory Worker HTTP contract", () => {
         result,
       });
     }
+  });
+
+
+  it("creates isolated task proposals idempotently without adding them to memory recall", async () => {
+    const key = `TASK-IDEMPOTENCY-${crypto.randomUUID()}`;
+    const payload = { idempotency_key: key, task_type: "repo_maintenance", title: "Review bounded maintenance", goal: "Inspect test status and report findings", approved_scope: "Read-only repository inspection; no merge or deployment" };
+    const first = await request("/v1/tasks", { method: "POST", body: JSON.stringify(payload) });
+    expect(first.status).toBe(201);
+    const saved = await first.json<{ task: { id: string; status: string; owner_approved: boolean }; created: boolean }>();
+    expect(saved.created).toBe(true);
+    expect(saved.task).toMatchObject({ status: "proposed", owner_approved: false });
+    const duplicate = await request("/v1/tasks", { method: "POST", body: JSON.stringify(payload) });
+    expect(duplicate.status).toBe(200);
+    const repeated = await duplicate.json<{ task: { id: string }; created: boolean }>();
+    expect(repeated.task.id).toBe(saved.task.id);
+    expect(repeated.created).toBe(false);
+    const recall = await request(`/v1/recall?q=${encodeURIComponent("bounded maintenance")}`);
+    expect(await recall.json()).toMatchObject({ memories: [], experiences: [] });
+  });
+
+  it("requires the separate owner credential to approve and claims only approved tasks", async () => {
+    const create = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
+      idempotency_key: `TASK-APPROVAL-${crypto.randomUUID()}`, task_type: "repo_maintenance",
+      title: "Approved task test", goal: "Run a bounded read-only check", approved_scope: "Read-only tests only"
+    }) });
+    expect(create.status).toBe(201);
+    const { task } = await create.json<{ task: { id: string } }>();
+    const denied = await request(`/v1/tasks/${task.id}/approve`, { method: "POST" });
+    expect(denied.status).toBe(401);
+    const approved = await request(`/v1/tasks/${task.id}/approve`, { method: "POST" }, ownerToken);
+    expect(approved.status).toBe(200);
+    expect((await approved.json<{ task: { status: string; owner_approved: boolean } }>()).task)
+      .toMatchObject({ status: "queued", owner_approved: true });
+    const claimed = await request("/v1/tasks/claim-next", { method: "POST" });
+    expect((await claimed.json<{ task: { id: string; status: string; attempt_count: number } }>()).task)
+      .toMatchObject({ id: task.id, status: "running", attempt_count: 1 });
+    const blocked = await request("/v1/tasks/claim-next", { method: "POST" });
+    expect(await blocked.json()).toEqual({ task: null });
+  });
+
+  it("refuses to queue unapproved tasks and rejects illegal transitions", async () => {
+    const create = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
+      idempotency_key: `TASK-UNAPPROVED-${crypto.randomUUID()}`, task_type: "repo_maintenance",
+      title: "Unapproved task test", goal: "Must not execute", approved_scope: "No action"
+    }) });
+    const { task } = await create.json<{ task: { id: string } }>();
+    const queued = await request(`/v1/tasks/${task.id}/transition`, { method: "POST", body: JSON.stringify({ status: "queued" }) });
+    expect(queued.status).toBe(409);
+    expect(await (await request("/v1/tasks/claim-next", { method: "POST" })).json()).toEqual({ task: null });
+  });
+
+  it("persists task checkpoints and terminal outcomes", async () => {
+    const create = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
+      idempotency_key: `TASK-CHECKPOINT-${crypto.randomUUID()}`, task_type: "repo_maintenance",
+      title: "Checkpoint persistence test", goal: "Store and recall progress", approved_scope: "Read-only tests"
+    }) });
+    const { task } = await create.json<{ task: { id: string } }>();
+    await request(`/v1/tasks/${task.id}/approve`, { method: "POST" }, ownerToken);
+    await request("/v1/tasks/claim-next", { method: "POST" });
+    const waiting = await request(`/v1/tasks/${task.id}/transition`, { method: "POST", body: JSON.stringify({
+      status: "waiting", checkpoint_summary: "First test stage complete", evidence_refs: ["ci://test/1"]
+    }) });
+    expect(waiting.status).toBe(200);
+    const queued = await request(`/v1/tasks/${task.id}/transition`, { method: "POST", body: JSON.stringify({ status: "queued" }) });
+    expect(queued.status).toBe(200);
+    await request("/v1/tasks/claim-next", { method: "POST" });
+    const done = await request(`/v1/tasks/${task.id}/transition`, { method: "POST", body: JSON.stringify({
+      status: "succeeded", result_summary: "Read-only test complete"
+    }) });
+    expect(done.status).toBe(200);
+    const read = await request(`/v1/tasks/${task.id}`);
+    expect((await read.json<{ task: { status: string; attempt_count: number; checkpoint_summary: string; result_summary: string; evidence_refs: string[] } }>()).task)
+      .toMatchObject({ status: "succeeded", attempt_count: 2, checkpoint_summary: "First test stage complete", result_summary: "Read-only test complete", evidence_refs: ["ci://test/1"] });
   });
 
 });
