@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   createTaskRecord,
   findIdempotentTask,
+  isTaskLeaseExpired,
   selectNextTask,
   transitionTask,
   validateTaskRecord
@@ -73,6 +74,13 @@ test("scheduled waiting tasks resume only when their checkpoint time is due", ()
   assert.equal(resumed.status, "running");
   assert.equal(resumed.attempt_count, 2);
   assert.equal(resumed.next_run_at, null);
+});
+
+test("stale running task leases expire for crash recovery", () => {
+  const running = transitionTask(queued(), "running", { now });
+  assert.equal(isTaskLeaseExpired(running, { now: Date.parse(now) + 29 * 60 * 1000 }), false);
+  assert.equal(isTaskLeaseExpired(running, { now: Date.parse(now) + 30 * 60 * 1000 }), true);
+  assert.equal(isTaskLeaseExpired(queued(), { now: Date.parse(now) + 60 * 60 * 1000 }), false);
 });
 
 test("state machine rejects illegal transitions and stale expected state", () => {
