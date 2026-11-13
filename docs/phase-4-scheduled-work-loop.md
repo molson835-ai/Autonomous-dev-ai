@@ -4,15 +4,19 @@
 
 This adds one Eve-native schedule at `agent/schedules/owner-approved-work-loop.ts`:
 
-- Cron: `*/15 * * * *` (Vercel Hobby's documented minimum interval).
+- Cron: `0 * * * *` (hourly). This is deliberately less frequent than the 15-minute minimum allowed on Hobby to keep free schedule usage conservative.
 - Each invocation starts a fresh Eve session; it does not resume the prior chat.
-- The session claims at most one due owner-approved task through `task_claim_next`.
+- The session claims at most one due owner-approved task through `task_claim_next`. Queue read/write tools are disabled outside Vercel Production; Preview schedule invocations return a no-op without contacting the Production task store.
 - It performs one bounded step, then records success, failure, or a checkpoint through `task_transition`.
 - A safe continuation is scheduled by setting `waiting` with `resume_after_minutes`; the tool computes `next_run_at`.
 - A waiting task without a continuation time remains blocked for owner input or a capability change.
 - The task store's 30-minute stale-running lease recovers crashed or abandoned invocations, subject to the three-attempt limit.
 
 ## Host behavior
+
+Vercel Schedules is in public beta on all plans. The current Hobby allowance includes 5,000 runs and 500 schedule creations per month; one hourly schedule uses about 720 runs/month per environment. Preview builds can also carry schedules, so the task tools fail closed outside Production.
+
+
 
 Eve's current schedule documentation states that hosted Vercel builds run schedules in UTC, Hobby permits at most one run every 15 minutes, each schedule is an independent invocation, and failed invocations are not automatically retried. Each run therefore relies on the durable task store rather than session continuity.
 
