@@ -1,6 +1,6 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { memoryRequest } from "../lib/memory-client";
+import { ownerMemoryRequest } from "../lib/memory-client";
 
 export default defineTool({
   description:
@@ -10,7 +10,7 @@ export default defineTool({
     decision: z.enum(["approve", "reject"]),
   }),
   async execute({ id, decision }) {
-    return memoryRequest("v1/proposals/" + encodeURIComponent(id) + "/decision", {
+    return ownerMemoryRequest("v1/proposals/" + encodeURIComponent(id) + "/decision", {
       method: "POST",
       body: { decision },
     });
