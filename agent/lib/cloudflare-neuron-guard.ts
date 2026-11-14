@@ -87,7 +87,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
       const id = await reserve();
       let result;
       try { result = await doStream(); }
-      catch (error) { if (isQuotaError(error)) await circuit(id); else await settle(id); throw error; }
+      catch (error) { if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id); throw error; }
       let settled = false;
       const stream = result.stream.pipeThrough(new TransformStream({
         async transform(part, controller) {
