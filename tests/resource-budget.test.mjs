@@ -92,3 +92,21 @@ test("normal work inside all budgets may continue", () => {
     usage: { steps: 2, toolCalls: 3, outputChars: 1500, tokens: 2200, elapsedMs: 8000 }
   }), { action: "continue", status: "running", reason: "within_budget" });
 });
+
+test("Cloudflare Workers AI daily-allocation error 4006 is quota exhaustion, not a retryable 429", () => {
+  const failures = [
+    { status: 429, code: 4006, message: "AiError: you have used up your daily free allocation of 10,000 neurons" },
+    { status: 429, code: "4006", message: "daily free allocation exhausted" },
+    { status: 429, message: "you have used up your daily free allocation of 10,000 neurons" }
+  ];
+  for (const error of failures) {
+    assert.equal(classifyResourceFailure(error), "quota_exhausted");
+    assert.deepEqual(evaluateResourceBudget({ task: { status: "running" }, error }), {
+      action: "pause", status: "paused", reason: "quota_exhausted", providerFallbackAllowed: false
+    });
+  }
+});
+
+test("ordinary HTTP 429 rate limiting remains bounded and retryable", () => {
+  assert.equal(classifyResourceFailure({ status: 429, message: "Too many requests" }), "rate_limited");
+});
