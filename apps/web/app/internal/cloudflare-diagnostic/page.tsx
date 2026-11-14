@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import CloudflareCredentialCheck from "../_components/cloudflare-credential-check";
+import CloudflareCredentialCheck from "../../_components/cloudflare-credential-check";
 
 export const metadata: Metadata = {
   title: "EVE Credential Check",
