@@ -14,5 +14,5 @@ const cloudflare = createOpenAICompatible({
 
 export default defineAgent({
   model: cloudflare.chatModel("@cf/zai-org/glm-4.7-flash"),
-  modelContextWindowTokens: 131_072,
+  modelContextWindowTokens: 16_384,
 });
