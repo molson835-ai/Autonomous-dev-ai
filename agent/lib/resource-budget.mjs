@@ -1,17 +1,20 @@
 const DEFAULT_LIMITS = Object.freeze({
-  maxStepsPerTurn: 8,
-  maxToolCallsPerTurn: 12,
-  maxOutputCharsPerTurn: 12000,
-  maxTokensPerTurn: 10000,
-  maxTurnDurationMs: 45 * 1000,
-  maxRetries: 3,
-  maxConsecutiveFailures: 3,
+  maxStepsPerTurn: 4,
+  maxToolCallsPerTurn: 6,
+  maxOutputCharsPerTurn: 6000,
+  maxTokensPerTurn: 4000,
+  maxTurnDurationMs: 30 * 1000,
+  maxRetries: 1,
+  maxConsecutiveFailures: 2,
   maxTaskAgeMs: 24 * 60 * 60 * 1000,
   baseRetryDelayMs: 60 * 1000,
-  maxRetryDelayMs: 15 * 60 * 1000
+  maxRetryDelayMs: 15 * 60 * 1000,
+  dailyNeuronBudget: 7000,
+  dailyNeuronReserve: 3000,
+  maxQuotaObservationAgeMs: 15 * 60 * 1000
 });
 
-const QUOTA_TERMS = /quota exceeded|insufficient quota|usage limit|billing limit|resource exhausted|credits exhausted/i;
+const QUOTA_TERMS = /quota exceeded|insufficient quota|usage limit|billing limit|resource exhausted|credits exhausted|daily free allocation|neurons? (?:allocation|limit|quota|exhausted)/i;
 const RATE_LIMIT_TERMS = /rate.?limit|too many requests|throttl/i;
 const TRANSIENT_TERMS = /timeout|timed out|temporar|network|connection reset|fetch failed|service unavailable/i;
 
@@ -26,15 +29,23 @@ export function resolveResourceLimits(overrides = {}) {
       throw new TypeError(`Invalid resource limit: ${key}`);
     }
   }
+  if (limits.dailyNeuronReserve >= limits.dailyNeuronBudget) {
+    throw new TypeError("Daily neuron reserve must be smaller than the daily budget");
+  }
   return Object.freeze(limits);
 }
 
 /** Classify provider/runtime failures without exposing raw error text to logs. */
 export function classifyResourceFailure(error) {
   const message = typeof error === "string" ? error
-    : [error?.code, error?.message, error?.name].filter(Boolean).join(" ");
-  const status = Number(error?.status ?? error?.statusCode ?? 0);
-  if (status === 402 || QUOTA_TERMS.test(message)) return "quota_exhausted";
+    : [error?.code, error?.message, error?.name, error?.cause?.code, error?.cause?.message].filter(Boolean).join(" ");
+  const status = Number(error?.status ?? error?.statusCode ?? error?.cause?.status ?? 0);
+  const code = String(error?.code ?? error?.cause?.code ?? "");
+  // Cloudflare Workers AI uses error code 4006 for exhausted daily free neurons.
+  // Check this before generic HTTP 429 handling: it is not a transient rate limit.
+  if (code === "4006" || /\b4006\b/.test(message) || QUOTA_TERMS.test(message) || status === 402) {
+    return "quota_exhausted";
+  }
   if (RATE_LIMIT_TERMS.test(message) || status === 429) return "rate_limited";
   if (status === 408 || status >= 500 || TRANSIENT_TERMS.test(message)) return "transient";
   if (status === 401 || status === 403) return "authorization";
@@ -47,6 +58,43 @@ export function retryDelayMs(attempt, limits = DEFAULT_LIMITS) {
   if (!Number.isInteger(attempt) || attempt < 1) throw new TypeError("Retry attempt must be a positive integer");
   const exponent = Math.min(attempt - 1, 30);
   return Math.min(resolved.baseRetryDelayMs * (2 ** exponent), resolved.maxRetryDelayMs);
+}
+
+/**
+ * Account-wide daily quota gate. Only an authoritative, fresh observation may
+ * authorize model work. Local token estimates are not Cloudflare neuron counts.
+ */
+export function evaluateDailyNeuronBudget({
+  usedNeurons,
+  observedAt,
+  sourceVerified = false,
+  now = Date.now(),
+  limits: limitOverrides = {}
+} = {}) {
+  const limits = resolveResourceLimits(limitOverrides);
+  const observed = Date.parse(observedAt ?? "");
+  if (!sourceVerified || !finiteNonNegative(usedNeurons) || !Number.isFinite(observed)) {
+    return { action: "pause", status: "paused", reason: "daily_quota_usage_unknown", allowModelCalls: false };
+  }
+  if (!Number.isFinite(now) || now - observed < 0 || now - observed > limits.maxQuotaObservationAgeMs) {
+    return { action: "pause", status: "paused", reason: "daily_quota_observation_stale", allowModelCalls: false };
+  }
+  if (usedNeurons >= limits.dailyNeuronBudget) {
+    return { action: "pause", status: "paused", reason: "daily_neuron_budget_reached", allowModelCalls: false, usedNeurons };
+  }
+  const target = limits.dailyNeuronBudget;
+  const level = usedNeurons >= target * 0.85 ? "critical"
+    : usedNeurons >= target * 0.70 ? "high"
+      : usedNeurons >= target * 0.50 ? "restricted" : "normal";
+  return {
+    action: "continue",
+    status: level,
+    reason: "within_daily_neuron_budget",
+    allowModelCalls: true,
+    usedNeurons,
+    remainingBudget: target - usedNeurons,
+    reservedNeurons: limits.dailyNeuronReserve
+  };
 }
 
 /**
@@ -72,7 +120,7 @@ export function evaluateResourceBudget({
 
   const failure = error ? classifyResourceFailure(error) : null;
   if (usage.quotaExceeded === true || failure === "quota_exhausted") {
-    return { action: "pause", status: "paused", reason: "quota_exhausted", providerFallbackAllowed: false };
+    return { action: "pause", status: "paused", reason: "quota_exhausted", providerFallbackAllowed: false, retryAllowed: false };
   }
   if (failure === "authorization" || failure === "permanent") {
     return { action: "stop", status: "failed", reason: failure };
