@@ -14,7 +14,8 @@ test("default limits are finite and bounded", () => {
   assert.equal(limits.maxRetries, 1);
   assert.equal(limits.maxTurnDurationMs, 30_000);
   assert.equal(limits.maxTaskAgeMs, 24 * 60 * 60 * 1000);
-  assert.equal(limits.dailyNeuronBudget, 7000);\n  assert.equal(limits.dailyNeuronReserve, 3000);
+  assert.equal(limits.dailyNeuronBudget, 7000);
+  assert.equal(limits.dailyNeuronReserve, 3000);
   assert.throws(() => resolveResourceLimits({ maxRetries: 0 }), /Invalid resource limit/);
 });
 
@@ -25,7 +26,7 @@ test("quota exhaustion pauses and never switches to a paid fallback", () => {
     "provider usage limit reached"
   ]) {
     assert.deepEqual(evaluateResourceBudget({ task: { status: "running" }, error }), {
-      action: "pause", status: "paused", reason: "quota_exhausted", providerFallbackAllowed: false
+      action: "pause", status: "paused", reason: "quota_exhausted", providerFallbackAllowed: false, retryAllowed: false
     });
   }
 });
@@ -104,7 +105,7 @@ test("Cloudflare Workers AI daily-allocation error 4006 is quota exhaustion, not
   for (const error of failures) {
     assert.equal(classifyResourceFailure(error), "quota_exhausted");
     assert.deepEqual(evaluateResourceBudget({ task: { status: "running" }, error }), {
-      action: "pause", status: "paused", reason: "quota_exhausted", providerFallbackAllowed: false
+      action: "pause", status: "paused", reason: "quota_exhausted", providerFallbackAllowed: false, retryAllowed: false
     });
   }
 });
