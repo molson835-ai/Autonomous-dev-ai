@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   classifyResourceFailure,
+  evaluateDailyNeuronBudget,
   evaluateResourceBudget,
   resolveResourceLimits,
   retryDelayMs
@@ -9,10 +10,10 @@ import {
 
 test("default limits are finite and bounded", () => {
   const limits = resolveResourceLimits();
-  assert.equal(limits.maxStepsPerTurn, 8);
-  assert.equal(limits.maxRetries, 3);
-  assert.equal(limits.maxTurnDurationMs, 45_000);
-  assert.equal(limits.maxTaskAgeMs, 24 * 60 * 60 * 1000);
+  assert.equal(limits.maxStepsPerTurn, 4);
+  assert.equal(limits.maxRetries, 1);
+  assert.equal(limits.maxTurnDurationMs, 30_000);
+  assert.equal(limits.maxTaskAgeMs, 24 * 60 * 60 * 1000);\n  assert.equal(limits.dailyNeuronBudget, 7000);\n  assert.equal(limits.dailyNeuronReserve, 3000);
   assert.throws(() => resolveResourceLimits({ maxRetries: 0 }), /Invalid resource limit/);
 });
 
@@ -52,11 +53,11 @@ test("retry exhaustion and permanent authorization failures stop safely", () => 
 test("per-turn step, tool, output, token, and duration caps checkpoint and yield", () => {
   const base = { steps: 1, toolCalls: 1, outputChars: 100, tokens: 100, elapsedMs: 1000 };
   const cases = [
-    [{ ...base, steps: 8 }, "steps_budget_reached"],
-    [{ ...base, toolCalls: 12 }, "tool_calls_budget_reached"],
-    [{ ...base, outputChars: 12000 }, "output_chars_budget_reached"],
-    [{ ...base, tokens: 10000 }, "tokens_budget_reached"],
-    [{ ...base, elapsedMs: 45000 }, "elapsed_ms_budget_reached"]
+    [{ ...base, steps: 4 }, "steps_budget_reached"],
+    [{ ...base, toolCalls: 6 }, "tool_calls_budget_reached"],
+    [{ ...base, outputChars: 6000 }, "output_chars_budget_reached"],
+    [{ ...base, tokens: 4000 }, "tokens_budget_reached"],
+    [{ ...base, elapsedMs: 30000 }, "elapsed_ms_budget_reached"]
   ];
   for (const [usage, reason] of cases) {
     const result = evaluateResourceBudget({ usage });
@@ -109,4 +110,31 @@ test("Cloudflare Workers AI daily-allocation error 4006 is quota exhaustion, not
 
 test("ordinary HTTP 429 rate limiting remains bounded and retryable", () => {
   assert.equal(classifyResourceFailure({ status: 429, message: "Too many requests" }), "rate_limited");
+});
+
+test("daily neuron gate fails closed when telemetry is missing or stale", () => {
+  assert.equal(evaluateDailyNeuronBudget().reason, "daily_quota_usage_unknown");
+  assert.equal(evaluateDailyNeuronBudget({
+    usedNeurons: 1200,
+    observedAt: "2026-11-14T00:00:00.000Z",
+    sourceVerified: true,
+    now: Date.parse("2026-11-14T01:00:00.000Z")
+  }).reason, "daily_quota_observation_stale");
+});
+
+test("daily neuron gate preserves reserve and reports 50, 70, and 85 percent thresholds", () => {
+  const now = Date.parse("2026-11-14T01:00:00.000Z");
+  const check = usedNeurons => evaluateDailyNeuronBudget({
+    usedNeurons,
+    observedAt: "2026-11-14T00:55:00.000Z",
+    sourceVerified: true,
+    now
+  });
+  assert.equal(check(1000).status, "normal");
+  assert.equal(check(3500).status, "restricted");
+  assert.equal(check(4900).status, "high");
+  assert.equal(check(5950).status, "critical");
+  assert.equal(check(7000).allowModelCalls, false);
+  assert.equal(check(7000).reason, "daily_neuron_budget_reached");
+  assert.equal(check(6000).remainingBudget, 1000);
 });
