@@ -60,3 +60,16 @@ Important limitation: this commit adds the pure quota decision and Cloudflare er
 - No Production deployment or merge without separate owner approval.
 - Preview deployment is deferred until code and tests are ready and the owner approves use of deployment quota.
 - Do not claim autonomous background quota protection until the runtime integration and closed-browser tests pass.
+
+
+## Hybrid runtime integration
+
+The model instance is wrapped with AI SDK v4 middleware. Both generate and stream calls obtain a shared Durable Object reservation before reaching Cloudflare. Streaming reservations settle only on the provider finish event; an interrupted stream keeps its reservation for the UTC day. Cloudflare error 4006 opens the circuit breaker and is never retried.
+
+Before every model call, server-side middleware queries Cloudflare GraphQL for the current UTC day's account-wide Workers AI neuron total, grouped only by date so all models and request sources are included. Missing credentials, GraphQL errors, ambiguous aggregates, or invalid totals fail closed. The Cloudflare API token never enters prompts or tools.
+
+The MemoryStore Durable Object maintains daily observations, local usage estimates, outstanding reservations, and circuit state. Its synchronous request handler serializes read-modify-write operations. It rejects stale or backwards-moving telemetry and reserves against the greater of observed account usage and baseline plus EVE's local estimates plus outstanding reservations.
+
+GLM-4.7-Flash's published neuron rates (5,500 per million input tokens and 36,400 per million output tokens) inform a 50%-margin estimate. Output is capped at 1,024 tokens; each call reserves at least 200 neurons. EVE session limits cap new input at 16,384 tokens and output at 4,000 per continuation window. The account target remains 7,000 neurons, leaving a 3,000-neuron reserve. Provider error 4006 remains the hard stop if external or unmodelled use exceeds the target.
+
+A feature-branch-only Vercel deployment exclusion is added so this code push does not consume Preview deployment quota. It does not disable deployments from main.

@@ -1,5 +1,7 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { wrapLanguageModel } from "ai";
 import { defineAgent } from "eve";
+import { createCloudflareNeuronGuard } from "./lib/cloudflare-neuron-guard";
 import { env } from "node:process";
 
 const accountId = env.CLOUDFLARE_ACCOUNT_ID ?? "missing-account-id";
@@ -13,6 +15,7 @@ const cloudflare = createOpenAICompatible({
 });
 
 export default defineAgent({
-  model: cloudflare.chatModel("@cf/zai-org/glm-4.7-flash"),
+  model: wrapLanguageModel({ model: cloudflare.chatModel("@cf/zai-org/glm-4.7-flash"), middleware: createCloudflareNeuronGuard() }),
   modelContextWindowTokens: 16_384,
+  limits: { sessionUsage: ({ window }) => window.inputTokens - window.cacheReadTokens >= 16_384 || window.outputTokens >= 4_000 },
 });

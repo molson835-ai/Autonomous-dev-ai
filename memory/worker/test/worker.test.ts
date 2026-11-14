@@ -18,6 +18,39 @@ function request(path: string, init: RequestInit = {}, credential = token) {
   );
 }
 
+describe("shared daily neuron quota coordinator", () => {
+  it("requires auth and rejects stale account telemetry", async () => {
+    const denied=await exports.default.fetch(new Request(new URL("/v1/quota/reserve",endpoint),{method:"POST",body:"{}"}));
+    expect(denied.status).toBe(401);
+    const day=new Date().toISOString().slice(0,10);
+    const stale=await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify({day,usedNeurons:0,observedAt:new Date(Date.now()-16*60_000).toISOString(),reserve_neurons:200,model_id:"@cf/zai-org/glm-4.7-flash"})});
+    expect(stale.status).toBe(503);
+  });
+  it("reserves, settles, and opens a daily circuit breaker", async () => {
+    const day=new Date().toISOString().slice(0,10);
+    const observation={day,usedNeurons:1000,observedAt:new Date().toISOString(),reserve_neurons:200,model_id:"@cf/zai-org/glm-4.7-flash"};
+    const first=await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify(observation)});
+    expect(first.status).toBe(200);
+    const one=await first.json<{reservation_id:string}>();
+    const second=await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify(observation)});
+    expect(second.status).toBe(200);
+    const two=await second.json<{reservation_id:string}>();
+    const settle=await request("/v1/quota/settle",{method:"POST",body:JSON.stringify({reservation_id:one.reservation_id,actual_neurons:250})});
+    expect(settle.status).toBe(200);
+    expect(await settle.json()).toMatchObject({settled:true,charged_neurons:250});
+    expect((await request("/v1/quota/settle",{method:"POST",body:JSON.stringify({reservation_id:one.reservation_id,actual_neurons:250})})).status).toBe(404);
+    expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify({...observation,usedNeurons:6900})})).status).toBe(429);
+    expect((await request("/v1/quota/circuit",{method:"POST",body:JSON.stringify({reservation_id:two.reservation_id,reason:"cloudflare_daily_quota_exhausted"})})).status).toBe(200);
+    expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify(observation)})).status).toBe(429);
+  });
+  it("fails closed when authoritative telemetry moves backwards", async () => {
+    const day=new Date().toISOString().slice(0,10);
+    const base={day,usedNeurons:2000,observedAt:new Date().toISOString(),reserve_neurons:200,model_id:"@cf/zai-org/glm-4.7-flash"};
+    expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify(base)})).status).toBe(200);
+    expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify({...base,usedNeurons:1900,observedAt:new Date(Date.now()+1).toISOString()})})).status).toBe(503);
+  });
+});
+
 describe("persistent memory Worker HTTP contract", () => {
   it("rejects requests without the test credential", async () => {
     const response = await exports.default.fetch(
