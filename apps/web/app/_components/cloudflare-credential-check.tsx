@@ -4,6 +4,19 @@ import { useState, type FormEvent } from "react";
 
 type ResultState = "idle" | "checking" | "success" | "failure";
 
+const safeMessages: Record<string, string> = {
+  cloudflare_permission_denied: "Cloudflare rejected the token's access to account analytics. The token needs the appropriate read permission.",
+  analytics_query_rejected: "Cloudflare rejected the analytics query. The query or requested analytics field needs correction.",
+  cloudflare_account_not_available: "Cloudflare did not return the expected account. Check the configured account selection and token access.",
+  cloudflare_graphql_error: "Cloudflare returned a GraphQL error that needs server-side investigation.",
+  cloudflare_http_error: "Cloudflare returned an HTTP error for the analytics request.",
+  cloudflare_invalid_response: "Cloudflare returned a response that was not valid JSON.",
+  analytics_result_invalid: "Cloudflare responded, but the analytics result did not match the expected structure.",
+  cloudflare_request_timeout: "The Cloudflare analytics request timed out.",
+  cloudflare_network_error: "The Preview server could not complete its connection to Cloudflare.",
+  preview_environment_incomplete: "The Preview runtime is missing a required Cloudflare environment variable.",
+};
+
 export default function CloudflareCredentialCheck() {
   const [token, setToken] = useState("");
   const [state, setState] = useState<ResultState>("idle");
@@ -18,7 +31,6 @@ export default function CloudflareCredentialCheck() {
       return;
     }
 
-    // Keep the secret only in component memory and clear the input before sending.
     setToken("");
     setMessage("");
     setState("checking");
@@ -40,11 +52,9 @@ export default function CloudflareCredentialCheck() {
       } else if (response.status === 401) {
         setMessage("The diagnostic token was not accepted. Check that EVE_DIAGNOSTIC_TOKEN is set for Preview.");
         setState("failure");
-      } else if (response.status === 503) {
-        setMessage("The Preview runtime is missing a required Cloudflare environment variable.");
-        setState("failure");
       } else {
-        setMessage("The credential check could not be completed. No token or account details were returned.");
+        setMessage(safeMessages[result.error ?? ""] ??
+          "The credential check could not be completed. No token or account details were returned.");
         setState("failure");
       }
     } catch {
