@@ -8,6 +8,7 @@ export default await withEve({
       buildCommand: "node ../../node_modules/next/dist/bin/next build",
     },
   },
+  git: { deploymentEnabled: { "feat/eve-quota-resource-manager-2026-11-14": false } },
   routes: [
     {
       src: "^(.*)$",
