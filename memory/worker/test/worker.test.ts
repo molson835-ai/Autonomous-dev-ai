@@ -41,13 +41,16 @@ describe("shared daily neuron quota coordinator", () => {
     expect((await request("/v1/quota/settle",{method:"POST",body:JSON.stringify({reservation_id:one.reservation_id,actual_neurons:250})})).status).toBe(404);
     expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify({...observation,usedNeurons:6900})})).status).toBe(429);
     expect((await request("/v1/quota/circuit",{method:"POST",body:JSON.stringify({reservation_id:two.reservation_id,reason:"cloudflare_daily_quota_exhausted"})})).status).toBe(200);
-    expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify(observation)})).status).toBe(429);
+    expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify({...observation,usedNeurons:6900})})).status).toBe(429);
   });
   it("fails closed when authoritative telemetry moves backwards", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 24 * 60 * 60 * 1000);
     const day=new Date().toISOString().slice(0,10);
     const base={day,usedNeurons:2000,observedAt:new Date().toISOString(),reserve_neurons:200,model_id:"@cf/zai-org/glm-4.7-flash"};
     expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify(base)})).status).toBe(200);
-    expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify({...base,usedNeurons:1900,observedAt:new Date(Date.now()+1).toISOString()})})).status).toBe(503);
+    expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify({...base,usedNeurons:1900,observedAt:new Date(Date.now()-1).toISOString()})})).status).toBe(503);
+    vi.useRealTimers();
   });
 });
 
