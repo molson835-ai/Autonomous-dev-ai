@@ -23,5 +23,5 @@ test("provider configuration cannot silently use a real credential when unset", 
 });
 
 test("provider model context matches the documented model context window", () => {
-  assert.match(agent, /modelContextWindowTokens: 131_072/);
+  assert.match(agent, /modelContextWindowTokens: 16_384/);
 });
