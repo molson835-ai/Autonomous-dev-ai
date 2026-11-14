@@ -6,6 +6,16 @@ const MAX_OUTPUT_TOKENS = 1024;
 const RESERVATION_NEURONS = 200;
 function stop(reason: string): never { throw new Error("EVE quota guard paused model work: " + reason); }
 
+// Deliberately throw a plain Error for provider quota exhaustion. The AI SDK's
+// retry policy retries retryable APICallError instances, not arbitrary Errors.
+// This prevents a second provider request even if circuit persistence fails.
+export function nonRetryableQuotaError(cause: unknown): Error {
+  const error = new Error("EVE stopped this model request because the Cloudflare daily neuron allocation is exhausted.");
+  error.name = "EVEQuotaExhaustedError";
+  (error as Error & { cause?: unknown }).cause = cause;
+  return error;
+}
+
 async function accountUsage() {
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const token = process.env.CLOUDFLARE_API_TOKEN;
@@ -69,7 +79,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
       const id = await reserve();
       let result;
       try { result = await doGenerate(); }
-      catch (error) { if (isQuotaError(error)) await circuit(id); else await settle(id); throw error; }
+      catch (error) { if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id); throw error; }
       await settle(id, result.usage);
       return result;
     },
