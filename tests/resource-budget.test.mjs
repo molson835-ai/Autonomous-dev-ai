@@ -36,11 +36,11 @@ test("rate limits and transient errors yield with bounded exponential backoff", 
   assert.equal(retryDelayMs(2), 120_000);
   assert.equal(retryDelayMs(99), 15 * 60_000);
   const decision = evaluateResourceBudget({
-    task: { status: "running", retryCount: 1, consecutiveFailures: 1 },
+    task: { status: "running", retryCount: 0, consecutiveFailures: 0 },
     error: { status: 429 }
   });
   assert.equal(decision.action, "yield");
-  assert.equal(decision.retryAfterMs, 120_000);
+  assert.equal(decision.retryAfterMs, 60_000);
 });
 
 test("retry exhaustion and permanent authorization failures stop safely", () => {
