@@ -13,7 +13,8 @@ test("default limits are finite and bounded", () => {
   assert.equal(limits.maxStepsPerTurn, 4);
   assert.equal(limits.maxRetries, 1);
   assert.equal(limits.maxTurnDurationMs, 30_000);
-  assert.equal(limits.maxTaskAgeMs, 24 * 60 * 60 * 1000);\n  assert.equal(limits.dailyNeuronBudget, 7000);\n  assert.equal(limits.dailyNeuronReserve, 3000);
+  assert.equal(limits.maxTaskAgeMs, 24 * 60 * 60 * 1000);
+  assert.equal(limits.dailyNeuronBudget, 7000);\n  assert.equal(limits.dailyNeuronReserve, 3000);
   assert.throws(() => resolveResourceLimits({ maxRetries: 0 }), /Invalid resource limit/);
 });
 
