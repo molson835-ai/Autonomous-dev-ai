@@ -58,9 +58,19 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const day = new Date().toISOString().slice(0, 10);
-  const query = "query { viewer { accounts(filter: { accountTag: \\"" + accountId + "\\" }) { " +
-    "aiInferenceAdaptiveGroups(limit: 1, filter: { date_geq: \\"" + day + "\\", date_leq: \\"" + day + "\\" }) " +
-    "{ sum { totalNeurons } dimensions { date } } } } }";
+  const query = `query {
+    viewer {
+      accounts(filter: { accountTag: ${JSON.stringify(accountId)} }) {
+        aiInferenceAdaptiveGroups(
+          limit: 1
+          filter: { date_geq: ${JSON.stringify(day)}, date_leq: ${JSON.stringify(day)} }
+        ) {
+          sum { totalNeurons }
+          dimensions { date }
+        }
+      }
+    }
+  }`;
 
   try {
     const response = await fetch("https://api.cloudflare.com/client/v4/graphql", {
