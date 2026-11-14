@@ -7,8 +7,8 @@ The agent definition in `agent/agent.ts` registers a Cloudflare Workers AI model
 | Tool | Purpose | Limits |
 |---|---|---|
 | `research_sources` | Fetch up to five supplied HTTPS documentation URLs | Exact allowlist: MDN, TC39, OWASP, Cloudflare Developers, Vercel. Not a search engine. Read-only. |
-| `research_web` | Public web search through Tavily | Basic search only, max five results, HTTPS result filtering, safe search, no raw content, no retries/fallback. Requires `TAVILY_API_KEY`; the key is currently absent from Vercel Production, so this tool is not yet operational. |
-| `memory_recall` | Retrieve approved memories/experiences | Requires persistent memory Worker configuration and valid secret. |
+| `research_web` | Public web search through Tavily | Basic search only, max five results, HTTPS result filtering, safe search, no raw content, no retries/fallback. Production env metadata confirms the key is configured; Agent Runs shows successful invocations. |
+| `memory_recall` | Retrieve approved memories/experiences | A recent Production call returned HTTP 401 despite Production env metadata showing memory variables. Treat as blocked until a safe recall succeeds. |
 | `memory_record_experience` | Record a completed experience | Requires memory service; must report actual write result. |
 | `memory_propose` | Submit a pending knowledge proposal | Requires memory service; does not approve itself. |
 | `memory_review` | Review pending proposals | Requires memory service. |
@@ -18,11 +18,9 @@ The tool inventory is based on files under `agent/tools/`. It is not a claim tha
 
 ## Not currently established as Eve runtime capabilities
 
-The repository does not define tools for:
+The repository does not define application-owned tools for:
 
-- Arbitrary public website crawling
-- Reading/writing/editing local files
-- Shell or terminal execution
+- Arbitrary public website crawling beyond the bounded Tavily search result snippets
 - Direct GitHub repository/branch/pull-request operations
 - Vercel deployment control
 - Customer email, messaging, social posting, or outreach
@@ -35,14 +33,14 @@ Other ChatGPT-side connectors and the existence of GitHub, Vercel, and Cloudflar
 
 Eve should independently move toward legitimate revenue by identifying problems, comparing evidence-backed opportunities, selecting small experiments, building deliverables, testing them, and reporting results. It should not wait for the owner to invent ideas or conduct routine research when the required tools are available.
 
-A bounded Tavily general-search adapter is integrated in code, but public search is disabled until `TAVILY_API_KEY` is provisioned in Vercel Production. The owner-approved task queue and daily schedule are merged and the Vercel app is deployed, but the Cloudflare Durable Object Worker still needs the task-table code deployed and `TASK_OWNER_APPROVAL_TOKEN` configured. A closed-chat scheduled execution has not yet been verified. Repository write/CI and customer validation capabilities are not available to Eve as direct tools. Until each capability is actually enabled and tested, Eve must not claim that it can autonomously research the whole market, publish a product, contact customers, or earn revenue. It can still use its real tools to research allowed documentation, reason about product options, prepare proposals, and use configured memory.
+Production Tavily search is configured and has been invoked successfully. Runtime traces also show sandbox-provided `bash`, `read_file`, `write_file`, and `web_fetch` tools; these support temporary isolated workspace operations, not direct GitHub commits. A recent `memory_recall` returned HTTP 401, so persistent memory is currently unverified despite environment variables being present. The Cloudflare Worker deployment is complete, but a closed-chat scheduled task claim/checkpoint has not yet been verified. Eve must not claim durable repository writes, working persistent memory, proven background autonomy, public offers, customer contact, or revenue until each is tested end-to-end.
 
 ## Capability milestones
 
 1. **Tool truthfulness:** live tool inventory matches claims; failures are distinguished from empty results.
-2. **Research discovery:** configure the approved free-tier Tavily key, verify one live basic search, verify usage-credit reporting, and stop on quota exhaustion.
-3. **Development execution:** isolated workspace/repository operations, branch-only writes, test execution, evidence capture.
-4. **Durable task execution:** deploy the matching Durable Object Worker code only after confirming the Cloudflare Workers plan is no-cost; provision a separate owner-only approval token; test proposal/approval/claim/checkpoint, pause/resume, and a closed-chat daily schedule run.
+2. **Research discovery:** maintain the configured free-tier Tavily integration, verify live basic searches and usage-credit reporting, and stop on quota exhaustion.
+3. **Development execution:** sandbox file/shell operations are visible; add a separately authorized GitHub branch-write workflow, then verify tests and evidence capture.
+4. **Durable task execution:** verify proposal/approval/claim/checkpoint, pause/resume, and a closed-chat daily schedule run against the deployed Worker.
 5. **Market validation:** a user-approved channel for volunteer testing or outreach; no unsolicited contact.
 6. **Revenue operations:** separately authorized business identity, public offer, payment provider, and revenue reconciliation. Each is a separate approval milestone.
 7. **Hardware reinvestment:** measured bottleneck report and owner-approved purchase using cleared business revenue only.
