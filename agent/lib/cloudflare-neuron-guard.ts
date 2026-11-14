@@ -12,7 +12,7 @@ async function accountUsage() {
   if (!accountId || !token) stop("Cloudflare Analytics credentials unavailable.");
   const day = new Date().toISOString().slice(0, 10);
   const query = "query { viewer { accounts(filter: { accountTag: \"" + accountId + "\" }) { " +
-    "aiInferenceAdaptiveGroups(limit: 2, filter: { date_geq: \"" + day + "\", date_leq: \"" + day + "\" }, dimensions: [date]) " +
+    "aiInferenceAdaptiveGroups(limit: 2, filter: { date_geq: \"" + day + "\", date_leq: \"" + day + "\" }) " +
     "{ sum { totalNeurons } dimensions { date } } } } }";
   let response: Response;
   try {
@@ -28,6 +28,7 @@ async function accountUsage() {
   const accounts = payload?.data?.viewer?.accounts;
   const groups = accounts?.length === 1 ? accounts[0]?.aiInferenceAdaptiveGroups : null;
   if (!Array.isArray(groups) || groups.length > 1) return stop("Cloudflare daily aggregate missing or ambiguous.");
+  if (groups.length === 1 && groups[0]?.dimensions?.date !== day) return stop("Cloudflare analytics returned the wrong UTC date.");
   const usedNeurons = groups.length === 0 ? 0 : groups[0]?.sum?.totalNeurons;
   if (typeof usedNeurons !== "number" || !Number.isFinite(usedNeurons) || usedNeurons < 0)
     return stop("Authoritative neuron total missing.");
