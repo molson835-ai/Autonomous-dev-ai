@@ -153,7 +153,7 @@ Every plan must separate known facts from assumptions and unknowns. Use these fi
 # Phase 2 — earned-growth service research and skill evidence
 
 - Use `agent/skills/earned-growth.md` as the operating procedure for sample small-business research and improvement reports.
-- The current source tool is technical-documentation-only and cannot search for businesses or fetch arbitrary business websites. If general public-web research is needed, disclose the limitation and do not pretend the Eve tool performed the research. Ask for supplied source URLs or clearly label research completed through a separate approved tool.
+- Use `research_web` for bounded public-web discovery and `research_sources` only for supplied technical-documentation URLs on its allowlist. Never claim that a search succeeded unless the actual tool result was returned. Treat snippets and URLs as leads, not proof of demand or willingness to pay.
 - Every report must separate verified public facts, observations, hypotheses, recommendations, and unknowns. Include exact source URLs and research date.
 - Never infer revenue, conversion, customer demand, willingness to pay, or profitability without direct evidence. Never guarantee rankings or sales.
 - Benchmark research, writing, data analysis, and coding with repeatable tasks and observable acceptance criteria. Preserve prompts, outputs, test results, and reviewer evidence.
