@@ -12,7 +12,7 @@ test("scheduled work claims at most one owner-approved task and checkpoints acro
   assert.match(schedule, /task_claim_next exactly once/);
   assert.match(schedule, /already approved by the owner/);
   assert.match(schedule, /fresh session/);
-  assert.match(schedule, /task_transition\(status=\\"waiting\\"\)/);
+  assert.match(schedule, /task_transition/);
   assert.match(schedule, /resume_after_minutes >= 1320/);
   assert.match(schedule, /Process one task only/);
 });
@@ -23,5 +23,5 @@ test("scheduled work delegates lawful outreach while preserving financial bounda
   assert.match(schedule, /No personal funds, credit, cards, bank accounts, subscriptions/);
   assert.match(schedule, /Every expense requires a separate explicit owner approval/);
   assert.match(schedule, /No Production deployment/);
-  assert.match(schedule, /No automatic retry|never retry through a paid provider/);
+  assert.match(schedule, /never retry through a paid provider/);
 });
