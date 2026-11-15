@@ -5,7 +5,7 @@ import { isProductionTaskRuntime } from "../lib/task-runtime.mjs";
 
 export default defineTool({
   description:
-    "Production-only: atomically claim at most one due task that is already owner-approved. In Preview or local development, return a skipped result without contacting the task store. The task store blocks a second running task and enforces attempt limits. If no task is returned, stop. Never bypass approval, change task scope, or attempt external actions not explicitly inside the approved scope.",
+    "Production-only: atomically claim at most one due task that is either individually owner-approved or authorized by the owner’s standing EVE revenue mission mandate. In Preview or local development, return a skipped result without contacting the task store. The task store blocks a second running task and enforces attempt limits. If no task is returned, stop. Never bypass approval, change task scope, or attempt external actions not explicitly inside the approved scope.",
   inputSchema: z.object({}),
   async execute() {
     if (!isProductionTaskRuntime()) return { task: null, skipped: true, reason: "Task claiming is disabled outside Vercel Production." };
