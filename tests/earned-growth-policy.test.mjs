@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   EARNED_GROWTH_CAPABILITIES,
+  evaluateExpenseApproval,
   evaluateHardwarePurchaseApproval,
   validateRevenueRecord,
   validateServiceExperiment,
@@ -39,7 +40,7 @@ test("quotes and pending payments are never spendable revenue", () => {
   }
 });
 
-test("verified receipts require positive amount, currency, and evidence", () => {
+test("verified receipts require positive amount, currency, and evidence but remain net-of-reserves", () => {
   assert.equal(validateRevenueRecord({
     status: "received_verified", amount: 0, currency: "USD", evidenceReference: "receipt-1",
   }).valid, false);
@@ -47,31 +48,45 @@ test("verified receipts require positive amount, currency, and evidence", () => 
     status: "received_verified", amount: 25, currency: "USD",
   }).valid, false);
   const result = validateRevenueRecord({
-    status: "received_verified", amount: 25, currency: "USD", evidenceReference: "owner-verified-receipt-1",
+    status: "received_verified", amount: 25, currency: "USD", evidenceReference: "verified-receipt-1",
   });
   assert.equal(result.valid, true);
   assert.equal(result.spendable, false);
+  assert.equal(result.verifiedReceipt, true);
 });
 
-test("hardware purchase recommendation requires exact owner approval and cleared business funds", () => {
+test("every expense fails closed without exact approval and cleared EVE funds", () => {
+  const base = {
+    item: "Research hardware", seller: "Example seller", purpose: "Remove measured bottleneck",
+    totalCost: 80, spendingCap: 100, fundsStatus: "cleared_business_revenue",
+    availableClearedFunds: 100, ownerApproved: true, approvalReference: "approval-001",
+  };
+  assert.equal(evaluateExpenseApproval({ ...base, ownerApproved: false }).allowed, false);
+  assert.equal(evaluateExpenseApproval({ ...base, fundsStatus: "pending_payment" }).allowed, false);
+  assert.equal(evaluateExpenseApproval({ ...base, availableClearedFunds: 79 }).allowed, false);
+  assert.equal(evaluateExpenseApproval({ ...base, totalCost: 110 }).allowed, false);
+  assert.equal(evaluateExpenseApproval({ ...base, ownerFundsUsed: true }).allowed, false);
+  assert.equal(evaluateExpenseApproval({ ...base, personalPaymentMethod: true }).allowed, false);
+  assert.equal(evaluateExpenseApproval(base).allowed, true);
+});
+
+test("hardware expenses require exact approval, net cleared business funds, and destination", () => {
   const base = {
     item: "RAM upgrade", seller: "Example seller", purpose: "Remove measured memory bottleneck",
-    shippingDestination: "Owner-approved destination", totalLandedCost: 80, spendingCap: 100,
+    shippingDestination: "Owner-confirmed destination", totalLandedCost: 80, spendingCap: 100,
     fundsStatus: "cleared_business_revenue", clearedBusinessFunds: 100,
     ownerApproved: true, approvalReference: "approval-001",
   };
   assert.equal(evaluateHardwarePurchaseApproval({ ...base, ownerApproved: false }).allowed, false);
   assert.equal(evaluateHardwarePurchaseApproval({ ...base, fundsStatus: "pending_payment" }).allowed, false);
   assert.equal(evaluateHardwarePurchaseApproval({ ...base, totalLandedCost: 110 }).allowed, false);
-  const result = evaluateHardwarePurchaseApproval(base);
-  assert.equal(result.allowed, true);
-  assert.equal(result.action, "recommendation_only");
-  assert.equal(result.requiresSeparateExecutionApproval, true);
+  assert.equal(evaluateHardwarePurchaseApproval({ ...base, shippingDestination: "" }).allowed, false);
+  assert.equal(evaluateHardwarePurchaseApproval(base).allowed, true);
 });
 
-test("external financial and customer actions remain disabled", () => {
-  assert.equal(EARNED_GROWTH_CAPABILITIES.mayContactCustomers, false);
-  assert.equal(EARNED_GROWTH_CAPABILITIES.mayPublishOffers, false);
+test("customer discovery and truthful offer publication are delegated; financial authority is not", () => {
+  assert.equal(EARNED_GROWTH_CAPABILITIES.mayContactCustomers, true);
+  assert.equal(EARNED_GROWTH_CAPABILITIES.mayPublishOffers, true);
   assert.equal(EARNED_GROWTH_CAPABILITIES.mayAcceptPayments, false);
   assert.equal(EARNED_GROWTH_CAPABILITIES.mayAccessFinancialAccounts, false);
   assert.equal(EARNED_GROWTH_CAPABILITIES.mayPurchase, false);
