@@ -41,13 +41,13 @@ export function validateRevenueRecord(record) {
 }
 
 /**
- * Fail-closed authorization for any business expense. This is a policy
- * decision helper only; it does not execute payments or purchase anything.
+ * Fail-closed authorization evaluator only. It does not execute payments.
+ * A separate, trusted owner-control path must create the exact approval record.
  */
 export function evaluateExpenseApproval(request) {
-  const required = ["item", "seller", "purpose", "approvalReference"];
+  const required = ["item", "seller", "purpose"];
   if (!request || required.some((key) => !nonEmpty(request[key]))) {
-    return { allowed: false, reason: "Exact item, payee, purpose, and owner approval reference are required." };
+    return { allowed: false, reason: "Exact item, payee, and purpose are required." };
   }
   if (!(typeof request.totalCost === "number" && Number.isFinite(request.totalCost) && request.totalCost > 0) ||
       !(typeof request.spendingCap === "number" && Number.isFinite(request.spendingCap) && request.spendingCap > 0) ||
@@ -58,13 +58,23 @@ export function evaluateExpenseApproval(request) {
       !(typeof request.availableClearedFunds === "number" && Number.isFinite(request.availableClearedFunds) && request.availableClearedFunds >= request.totalCost)) {
     return { allowed: false, reason: "Only sufficient cleared EVE business revenue, net of reserves and liabilities, may fund an expense." };
   }
-  if (request.ownerApproved !== true || !nonEmpty(request.approvalReference)) {
-    return { allowed: false, reason: "Explicit approval for this exact expense is required." };
+  const approval = request.approval;
+  const nowMs = Number.isFinite(request.nowMs) ? request.nowMs : Date.now();
+  if (!approval || approval.status !== "approved" ||
+      !nonEmpty(approval.reference) ||
+      approval.item !== request.item ||
+      approval.seller !== request.seller ||
+      approval.purpose !== request.purpose ||
+      approval.totalCost !== request.totalCost ||
+      approval.spendingCap !== request.spendingCap ||
+      !Number.isFinite(Date.parse(approval.expiresAt)) ||
+      Date.parse(approval.expiresAt) <= nowMs) {
+    return { allowed: false, reason: "A current owner approval record matching this exact item, payee, purpose, total cost, and spending cap is required." };
   }
   if (request.ownerFundsUsed === true || request.personalPaymentMethod === true) {
     return { allowed: false, reason: "Owner personal funds, credit, accounts, and payment methods are permanently prohibited." };
   }
-  return { allowed: true, action: "authorized_exact_expense", amount: request.totalCost, approvalReference: request.approvalReference };
+  return { allowed: true, action: "authorized_exact_expense", amount: request.totalCost, approvalReference: approval.reference };
 }
 
 export function evaluateHardwarePurchaseApproval(request) {
@@ -79,8 +89,8 @@ export function evaluateHardwarePurchaseApproval(request) {
     spendingCap: request.spendingCap,
     fundsStatus: request.fundsStatus,
     availableClearedFunds: request.clearedBusinessFunds,
-    ownerApproved: request.ownerApproved,
-    approvalReference: request.approvalReference,
+    approval: request.approval,
+    nowMs: request.nowMs,
     ownerFundsUsed: request.ownerFundsUsed,
     personalPaymentMethod: request.personalPaymentMethod,
   });
