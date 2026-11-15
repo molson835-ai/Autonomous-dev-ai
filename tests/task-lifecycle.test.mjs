@@ -135,4 +135,5 @@ test("standing mission mandate auto-queues only allowlisted non-financial tasks"
   assert.equal(selectNextTask([task], { now: Date.parse(now) }).id, task.id);
   assert.equal(isMissionAuthorizedTask({ task_type: "customer_outreach", approved_scope: "Purchase email lists and send bulk sales messages." }), false);
   assert.equal(isMissionAuthorizedTask({ task_type: "payments", approved_scope: "Set up checkout." }), false);
+  assert.throws(() => createTaskRecord({ id: "mission-unsafe", idempotency_key: "mission-unsafe-001", task_type: "payments", title: "Set up checkout", goal: "Accept money", approved_scope: "Set up checkout." }, { now, missionAuthorized: true }), /Invalid mission-authorized task scope/);
 });
