@@ -10,7 +10,7 @@ test("scheduled work loop respects the Vercel Hobby daily cron limit", () => {
 
 test("scheduled work claims at most one owner-approved task and checkpoints across fresh sessions", () => {
   assert.match(schedule, /task_claim_next exactly once/);
-  assert.match(schedule, /owner-approved or mission-authorized under the standing mandate/);
+  assert.match(schedule, /individually owner-approved or mission-authorized under the restricted standing revenue mandate/);
   assert.match(schedule, /fresh session/);
   assert.match(schedule, /task_transition/);
   assert.match(schedule, /resume_after_minutes >= 1320/);
@@ -18,7 +18,7 @@ test("scheduled work claims at most one owner-approved task and checkpoints acro
 });
 
 test("scheduled work delegates lawful outreach while preserving financial boundaries", () => {
-  assert.match(schedule, /may conduct relevant, truthful, lawful, privacy-respecting, platform-compliant customer discovery and outreach/);
+  assert.match(schedule, /delegated authority to conduct relevant, truthful, lawful, privacy-respecting, platform-compliant customer discovery and outreach/);
   assert.match(schedule, /publish accurate offers/);
   assert.match(schedule, /No personal funds, credit, cards, bank accounts, subscriptions/);
   assert.match(schedule, /Every expense requires a separate explicit owner approval/);
