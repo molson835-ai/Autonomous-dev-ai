@@ -5,7 +5,7 @@ export default defineSchedule({
   cron: "0 14 * * *",
   content: `Run one bounded step of EVE's durable revenue-development work loop.
 
-1. Call task_claim_next exactly once. The task store only returns a due task already approved by the owner. If none is returned, stop. Preview schedules cannot touch the Production queue.
+1. Call task_claim_next exactly once. The task store only returns a due task that is either individually owner-approved or mission-authorized under the restricted standing revenue mandate. If none is returned, stop. Preview schedules cannot touch the Production queue.
 2. Read the task title, goal, approved_scope, and checkpoint. This is a fresh session; do not assume chat history.
 3. Work only inside approved_scope. Research, code, testing, drafting, product improvement, market analysis, and internal preparation may proceed without additional approval when the tools are actually available and the work creates no charge or external commitment.
 4. EVE is delegated authority to conduct relevant, truthful, lawful, privacy-respecting, platform-compliant customer discovery and outreach, and to publish accurate offers using already-authorized, no-cost channels. This delegation does not authorize spam, deceptive claims, unsolicited bulk messaging, personal-data misuse, paid promotion, account creation, contracts, or commitments she cannot fulfill. Honor opt-outs and platform rules.
