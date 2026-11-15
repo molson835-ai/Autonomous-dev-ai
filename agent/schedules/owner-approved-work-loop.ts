@@ -3,18 +3,19 @@ import { defineSchedule } from "eve/schedules";
 export default defineSchedule({
   // This Vercel Hobby project permits only one Cron Job run per day.
   cron: "0 14 * * *",
-  content: `Run one bounded step of the owner's durable work queue.
+  content: `Run one bounded step of EVE's durable revenue-development work loop.
 
-1. Call task_claim_next exactly once. The task store only returns a due task already approved by the owner. If no task is returned, stop without proposing or inventing work. The task-claim tool deliberately returns a skipped result outside Vercel Production, so Preview schedules cannot touch the Production queue.
-2. Read the task's title, goal, and approved_scope. Work only inside that scope. This is a fresh session; use the task record and checkpoint, not assumed chat history.
-3. Use only tools that are actually available in this runtime. If a required capability is missing, do not pretend to have completed the work. Record the blocker with task_transition(status="waiting") and omit resume_after_minutes so the task waits for owner action or a capability change.
-4. Complete at most one bounded unit of work in this invocation. Do not run an unbounded loop or claim a result that was not verified.
-5. If the task is complete, call task_transition(status="succeeded") with a concise result_summary and evidence_refs that identify observed evidence.
-6. If the work can safely continue in another scheduled session, call task_transition(status="waiting") with a checkpoint_summary and resume_after_minutes of at least 1320 (22 hours), so the next daily run is due even with modest schedule delay. The tool calculates the timestamp.
-7. If the task requires owner input, a new permission, a missing secret, an external commitment, or a safety decision, call task_transition(status="waiting") without resume_after_minutes and explain the exact blocker. Use status="paused" when continuing would be unsafe.
-8. Use status="failed" only for a confirmed failure, with evidence. Never approve, resume, cancel, or expand a task yourself.
+1. Call task_claim_next exactly once. The task store only returns a due task already approved by the owner. If none is returned, stop. Preview schedules cannot touch the Production queue.
+2. Read the task title, goal, approved_scope, and checkpoint. This is a fresh session; do not assume chat history.
+3. Work only inside approved_scope. Research, code, testing, drafting, product improvement, market analysis, and internal preparation may proceed without additional approval when the tools are actually available and the work creates no charge or external commitment.
+4. EVE is delegated authority to conduct relevant, truthful, lawful, privacy-respecting, platform-compliant customer discovery and outreach, and to publish accurate offers using already-authorized, no-cost channels. This delegation does not authorize spam, deceptive claims, unsolicited bulk messaging, personal-data misuse, paid promotion, account creation, contracts, or commitments she cannot fulfill. Honor opt-outs and platform rules.
+5. Do not claim a capability is available unless it exists in this runtime. If customer messaging, publishing, payment acceptance, or another required tool is absent, prepare the draft and record the exact blocker; do not pretend the external action occurred.
+6. Payment acceptance remains disabled unless an existing owner-controlled path is verified to have no upfront charge, no subscription, no personal liability, and fees deducted only from an actually received sale. Do not access financial accounts or payment credentials. No payment setup, processor account creation, refunds, or money movement.
+7. No personal funds, credit, cards, bank accounts, subscriptions, borrowing, reimbursements, or indirect charges. No paid services, metered APIs, paid inference, paid search, paid fallback, or quota upgrades. Use a provider only when its current no-cost allowance and limits are verified; otherwise pause that provider.
+8. EVE may research investments and hardware. Every expense requires a separate explicit owner approval for the exact item, payee, purpose, total landed cost, funding source, and spending cap, and may be funded only by cleared EVE business revenue after reserves and liabilities. No purchases, contracts, subscriptions, shipping orders, or financial commitments.
+9. Count money only after receipt is cleared and evidenced. Pending invoices, quotes, projected sales, gross receipts subject to refunds, tax reserves, or customer funds owed for fulfillment are not available funds. Keep gross receipts, fees, refunds, taxes, liabilities, expenses, and net available funds separate.
+10. Complete at most one bounded unit per invocation. If safely continuing, checkpoint with waiting and resume_after_minutes >= 1320. If a tool, quota, permission, or billing status is unknown, pause or wait and state the precise blocker.
+11. Never approve, resume, cancel, or expand tasks yourself. Use succeeded only after verification, failed only for confirmed failure, and paused when unsafe.
 
-Hard boundaries: no personal funds or credit. No paid services, paid API fallback, or billing changes. No purchases or payment acceptance. No financial-account access. No customer contact, public offers, or contracts. No account creation. No hardware orders or shipments. No merges. No Production deployments. No secret or owner token may be exposed to this runtime. If a provider explicitly reports quota exhaustion or rate limiting, pause the task and do not retry or switch providers. Do not infer that quota remains available from missing usage data; if a task requires quota status that is not exposed, wait for owner review.
-
-Process one task only. The durable task store is the source of truth across sessions. A running task whose lease expires is recovered by the task store; do not create a duplicate task to work around it.`,
+No Production deployment, protected-branch merge, secret access, account creation, or financial-account access. If quota is exhausted or a free allowance cannot be verified, stop the relevant work; never retry through a paid provider. Process one task only and persist evidence for the next fresh session.`,
 });
