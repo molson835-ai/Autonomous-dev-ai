@@ -4,16 +4,28 @@ import { searchTavily } from "../../agent/research/tavily-search.mjs";
 
 const response = (payload, status = 200) => new Response(JSON.stringify(payload), { status, headers: { "content-type": "application/json" } });
 
-test("requires an API key and makes no request when absent", async () => {
+test("requires explicit verified-free-plan flag before making any request", async () => {
   let calls = 0;
-  await assert.rejects(searchTavily("seller inventory tools", {}, { apiKey: "", fetchImpl: async () => { calls++; return response({ results: [] }); } }), /TAVILY_API_KEY is not configured/);
+  await assert.rejects(searchTavily("seller inventory tools", {}, {
+    apiKey: "test-only-key", freePlanVerified: false,
+    fetchImpl: async () => { calls++; return response({ results: [], usage: { credits: 1 } }); },
+  }), /no-cost plan and billing limits are verified/);
+  assert.equal(calls, 0);
+});
+
+test("requires an API key after free-plan verification", async () => {
+  let calls = 0;
+  await assert.rejects(searchTavily("seller inventory tools", {}, {
+    apiKey: "", freePlanVerified: true,
+    fetchImpl: async () => { calls++; return response({ results: [], usage: { credits: 1 } }); },
+  }), /TAVILY_API_KEY is not configured/);
   assert.equal(calls, 0);
 });
 
 test("uses bounded basic safe search and returns only sanitized HTTPS results", async () => {
   let captured;
   const result = await searchTavily("seller inventory tools", { maxResults: 2, topic: "general", timeRange: "month" }, {
-    apiKey: "test-only-key",
+    apiKey: "test-only-key", freePlanVerified: true,
     fetchImpl: async (url, init) => {
       captured = { url, init, body: JSON.parse(init.body) };
       return response({ usage: { credits: 1 }, results: [
@@ -39,24 +51,37 @@ test("uses bounded basic safe search and returns only sanitized HTTPS results", 
   assert.equal(result.results[0].snippet, "Evidence snippet");
 });
 
+test("rejects missing usage accounting before accepting results", async () => {
+  await assert.rejects(searchTavily("seller inventory tools", {}, {
+    apiKey: "test-key", freePlanVerified: true,
+    fetchImpl: async () => response({ results: [{ url: "https://example.com" }] }),
+  }), /usage was not reported/);
+});
+
 test("rejects invalid inputs before network access", async () => {
   let calls = 0;
-  const fetchImpl = async () => { calls++; return response({ results: [] }); };
+  const fetchImpl = async () => { calls++; return response({ results: [], usage: { credits: 1 } }); };
   for (const [query, options] of [["x", {}], ["valid query", { maxResults: 6 }], ["valid query", { maxResults: 0 }], ["valid query", { topic: "finance" }], ["valid query", { timeRange: "decade" }]]) {
-    await assert.rejects(searchTavily(query, options, { apiKey: "test-key", fetchImpl }));
+    await assert.rejects(searchTavily(query, options, { apiKey: "test-key", freePlanVerified: true, fetchImpl }));
   }
   assert.equal(calls, 0);
 });
 
 test("stops on exhausted quota without retry or paid fallback", async () => {
   let calls = 0;
-  await assert.rejects(searchTavily("seller inventory tools", {}, { apiKey: "test-key", fetchImpl: async () => { calls++; return response({ detail: "quota" }, 432); } }), /quota or plan limit reached/);
+  await assert.rejects(searchTavily("seller inventory tools", {}, {
+    apiKey: "test-key", freePlanVerified: true,
+    fetchImpl: async () => { calls++; return response({ detail: "quota" }, 432); },
+  }), /quota or plan limit reached/);
   assert.equal(calls, 1);
 });
 
 test("does not retry rate limits or disclose provider response details", async () => {
   let calls = 0;
-  await assert.rejects(searchTavily("seller inventory tools", {}, { apiKey: "test-key", fetchImpl: async () => { calls++; return response({ detail: "secret provider text" }, 429); } }), error => {
+  await assert.rejects(searchTavily("seller inventory tools", {}, {
+    apiKey: "test-key", freePlanVerified: true,
+    fetchImpl: async () => { calls++; return response({ detail: "secret provider text" }, 429); },
+  }), error => {
     assert.match(error.message, /rate-limited/);
     assert.doesNotMatch(error.message, /secret provider text/);
     return true;
@@ -65,7 +90,10 @@ test("does not retry rate limits or disclose provider response details", async (
 });
 
 test("rejects unauthorized credentials without exposing the key", async () => {
-  await assert.rejects(searchTavily("seller inventory tools", {}, { apiKey: "never-print-this", fetchImpl: async () => response({ detail: "unauthorized" }, 401) }), error => {
+  await assert.rejects(searchTavily("seller inventory tools", {}, {
+    apiKey: "never-print-this", freePlanVerified: true,
+    fetchImpl: async () => response({ detail: "unauthorized" }, 401),
+  }), error => {
     assert.match(error.message, /credentials were rejected/);
     assert.doesNotMatch(error.message, /never-print-this/);
     return true;

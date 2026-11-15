@@ -10,6 +10,7 @@ type Task = {
   approved_scope: string;
   status: string;
   owner_approved: boolean;
+  mission_authorized: boolean;
   attempt_count: number;
   max_attempts: number;
   checkpoint_summary?: string | null;
@@ -162,7 +163,7 @@ export default function OwnerConsole() {
               <div className="space-y-1">
                 <p className="font-semibold">Background task queue: {queueStatus.queue_paused ? "Paused" : "Active"}</p>
                 <p className="text-sm text-muted-foreground">
-                  {queueStatus.running_tasks} running · {queueStatus.queued_tasks} approved and queued
+                  {queueStatus.running_tasks} running · {queueStatus.queued_tasks} queued (owner-approved or standing-mission authorized)
                   {queueStatus.reason ? " · " + queueStatus.reason : ""}
                 </p>
                 <p className="text-xs text-muted-foreground">Pausing prevents new claims; an already-running invocation may finish its current bounded step.</p>
@@ -179,7 +180,7 @@ export default function OwnerConsole() {
           )}
           <section className="space-y-3">
             <div className="flex items-baseline justify-between gap-3">
-              <h2 className="text-xl font-semibold">Task approvals</h2>
+              <h2 className="text-xl font-semibold">Task queue & approvals</h2>
               <span className="text-sm text-muted-foreground">{tasks.length} tasks</span>
             </div>
             {tasks.length === 0 && <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">No task records yet.</p>}
@@ -196,7 +197,7 @@ export default function OwnerConsole() {
                 </div>
                 {task.checkpoint_summary && <p className="text-sm text-muted-foreground">Checkpoint: {task.checkpoint_summary}</p>}
                 {task.result_summary && <p className="text-sm text-muted-foreground">Result: {task.result_summary}</p>}
-                <p className="text-xs text-muted-foreground">Attempts: {task.attempt_count}/{task.max_attempts} · {task.owner_approved ? "Owner approved" : "Not approved"} · ID {task.id}</p>
+                <p className="text-xs text-muted-foreground">Attempts: {task.attempt_count}/{task.max_attempts} · {task.owner_approved ? "Owner approved" : task.mission_authorized ? "Standing mission mandate" : "Awaiting owner approval"} · ID {task.id}</p>
                 <div className="flex flex-wrap gap-2">
                   {task.status === "proposed" && (
                     <button type="button" disabled={busy !== null} onClick={() => void perform(task.id, "/v1/tasks/" + task.id + "/approve", "POST")} className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">

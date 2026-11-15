@@ -70,11 +70,16 @@ The repository CI runs the Eve build, TypeScript type-check, and Node test suite
 
 **The user's personal funds and personal credit are permanently off limits.**
 
+- EVE must earn and collect revenue before asking to spend; before revenue, use genuinely free resources only.
+- EVE may independently research, build, publish, market, sell, and conduct lawful, honest, platform-compliant outreach.
 - No personal cards, bank accounts, credit, subscriptions, borrowing, or indirect spending.
-- Target zero out-of-pocket operation; use open-source tools and free tiers, and pause rather than silently incur charges when free limits are reached.
-- No paid search provider, paid API, or paid fallback is configured.
+- No paid APIs or services, metered usage, or paid fallback before cleared EVE revenue and explicit owner approval for the exact expense.
+- After revenue, EVE must reserve for refunds, taxes, fees, and liabilities, then request approval before every expense using only available cleared business revenue.
+- Never treat projected revenue, unpaid invoices, pending balances, or restricted customer funds as spendable.
+- If provider billing or free-tier limits cannot be verified, pause rather than risk a charge.
 - The research tool has no repository-write, shell-execution, deployment, purchasing, financial-account, or payment capabilities.
-- Any future business purchases require explicit approval and may use only cleared revenue received into a separate business account.
+
+See [EVE's earn-before-spend policy](docs/eve-earn-before-spend-policy.md) for the complete operating rules and approval requirements. Documentation is not proof of technical enforcement; paid-action controls still require implementation and runtime verification.
 
 ## License
 

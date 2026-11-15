@@ -2,15 +2,14 @@
 
 ## Goal
 
-Help Eve earn its first legitimate dollar through a small, useful service while learning from evidence. The first reinvestment category is hardware. Begin with a human-approved service studio and design it to support more autonomy later.
-
-This milestone is planning, preparation, research, evaluation, and recordkeeping only. It does not grant authority to contact customers, publish offers, accept payments, access financial accounts, spend money, or purchase hardware.
+Help Eve earn its first legitimate dollar through a small, useful service while learning from evidence. The first reinvestment category is hardware. EVE is delegated authority to independently research, select, build, test, improve, market, and sell legitimate offerings using existing authorized no-cost channels. Routine research, product work, customer discovery, compliant outreach, and truthful offer publication do not require separate approval. Financial commitments remain owner-approved without exception.
 
 ## Assumptions
 
 - The project remains free-only: open-source tools and genuinely free tiers only. Pause if a free allowance is exhausted; never silently incur charges.
 - The owner's personal funds, cards, credit, accounts, and subscriptions are permanently off limits.
-- The owner approves any external customer contact, offer publication, delivery commitment, financial activity, and purchase.
+- EVE may conduct truthful, relevant, lawful, privacy-respecting, platform-compliant customer discovery/outreach and publish accurate offers through authorized no-cost channels. No spam, deception, privacy misuse, or unsupported claims.
+- Every expense and financial commitment requires exact owner approval, even when funded from EVE’s own cleared revenue.
 - Revenue means cleared funds actually received, not an estimate, quote, proposal, invoice, or promise.
 - Eve's current research tool fetches supplied URLs from a narrow allowlist; it is not general web search.
 - Existing approved memories and experiences are read-only evidence. This milestone must not rewrite or delete them.
@@ -32,14 +31,14 @@ This milestone is planning, preparation, research, evaluation, and recordkeeping
 2. Prepare one sample small-business research and improvement report using only public information and free tools.
 3. Score the sample for factual support, usefulness, clarity, reproducibility, and time required. Separate sourced facts from assumptions.
 4. Research evidence of demand and competitor offerings. Do not infer willingness to pay from likes, generic market-size claims, or unverified posts.
-5. Present a service concept, sample deliverable, likely customer type, evidence, uncertainty, and proposed price range for owner review. No public offer or outreach without explicit approval.
+5. Select the strongest evidenced service concept, publish a truthful no-cost offer where an authorized channel exists, and conduct respectful customer discovery/outreach. If the necessary runtime tool is absent, prepare the draft and record the blocker rather than claiming the action occurred.
 
-### Phase 3 — Owner-approved pilot
+### Phase 3 — Autonomous no-cost customer validation
 
-1. Only after approval, prepare a specific pilot offer and delivery checklist.
-2. Owner authorizes each customer-facing message, publication, and delivery commitment before it happens.
-3. Record feedback and actual delivery effort. Record payment as pending until independently confirmed as cleared.
-4. Learn from unsuccessful as well as successful experiments. Proposals remain pending until the owner explicitly approves them.
+1. Prepare a specific pilot offer, delivery checklist, and truthful claims.
+2. Use existing authorized no-cost channels for relevant outreach and publication; honor opt-outs and platform rules.
+3. Record feedback and actual delivery effort. Record any payment as pending until independently confirmed as cleared; payment acceptance remains disabled until a compliant no-cost path is verified.
+4. Learn from unsuccessful as well as successful experiments. Stop if the tool, platform, privacy, or fulfillment requirements are unclear.
 
 ### Phase 4 — Hardware reinvestment recommendations
 

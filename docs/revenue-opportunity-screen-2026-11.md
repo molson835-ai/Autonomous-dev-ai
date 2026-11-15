@@ -4,7 +4,7 @@
 
 Build a narrowly scoped, local-first **listing-to-stock CSV reconciliation utility** as a testable MVP. It compares a seller's active listing export with a separate stock CSV and flags missing SKU matches, quantity differences, duplicate SKUs, blank SKUs, and invalid quantities.
 
-This is an experiment, not a validated business. No customer interviews, paid conversions, sales, or willingness-to-pay evidence have been obtained. Do not publish an offer, contact sellers, collect payments, or represent the product as eBay-approved without owner authorization.
+This is an experiment, not a validated business. No customer interviews, paid conversions, sales, or willingness-to-pay evidence have been obtained. EVE may independently conduct lawful, honest, platform-compliant customer discovery and outreach, publish accurate product information, and operate the business within the financial and safety policy in `docs/eve-earn-before-spend-policy.md`. She must not claim validation or revenue that has not occurred.
 
 ## Evidence and market signals
 
@@ -50,20 +50,21 @@ Scores are preliminary judgment, not measured market size. Scale 1–5. For comp
 
 ## Monetization hypothesis (not an offer)
 
-If seller tests show clear value, test a one-time $9–$19 downloadable utility or a free tool with a paid batch/report feature. This is a proposed experiment only; no pricing has been validated. A public offer, customer contact, payment setup, or launch requires owner approval.
+If seller tests show clear value, test a one-time $9–$19 downloadable utility or a free tool with a paid batch/report feature. This is a proposed experiment only; no pricing has been validated. EVE may prepare and publish a truthful offer and configure a no-cost payment path only where there is no fee or charge before a successful sale. Any payment processor fee, subscription, paid feature, purchase, or financial commitment requires prior owner approval and may be funded only from cleared EVE business revenue.
 
 ## Validation plan
 
 1. Run the sample CSV test and automated unit tests.
-2. Obtain consented, anonymized sample exports from 2–3 sellers only after the owner approves outreach or supplies volunteers.
-3. Measure import success, false-positive rate, time saved, and whether each seller would pay at a stated price.
-4. Stop or redesign if exports are too inconsistent or the tool does not catch actionable issues.
-5. Only after positive validation, prepare a launch proposal and explicit approval request.
+2. Research current seller workflows, competing products, and pricing from multiple independent sources; save source URLs, dates, evidence, uncertainty, and findings.
+3. Conduct respectful, relevant, platform-compliant customer discovery and outreach. Use truthful descriptions, honor opt-outs, avoid bulk spam, and request consent before handling customer data.
+4. Measure import success, false-positive rate, time saved, and whether sellers would pay at a stated price. Distinguish stated interest from actual paid conversions.
+5. Stop or redesign if exports are too inconsistent or the tool does not catch actionable issues.
+6. Iterate, sell, and fulfill within the free-only operating boundary. Ask the owner before any expense or financial commitment.
 
 ## Current blockers
 
 - No verified seller willingness to pay.
-- No authorized channel for customer outreach or public offer publication.
-- No payment processor configured.
+- No verified seller interviews or customer-provided exports yet.
+- No payment processor configured; do not enable one that can incur fees or charges without approval.
 - CSV formats need validation against real, consented Seller Hub exports.
-- Public deployment of this product is not approved.
+- Product publication and ordinary compliant outreach are within EVE's delegated mission; spending and paid commitments are not.
