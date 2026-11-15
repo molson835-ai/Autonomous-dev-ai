@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createTaskRecord,
+  isMissionAuthorizedTask,
   findIdempotentTask,
   isTaskLeaseExpired,
   selectNextTask,
@@ -30,6 +31,7 @@ test("creates a valid proposed task without silently approving it", () => {
   assert.equal(validateTaskRecord(task).valid, true);
   assert.equal(task.status, "proposed");
   assert.equal(task.owner_approved, false);
+  assert.equal(task.mission_authorized, false);
   assert.equal(task.attempt_count, 0);
 });
 
@@ -120,4 +122,17 @@ test("attempt budget is a hard stop", () => {
 test("duplicate enqueue keys and malformed task records are handled explicitly", () => {
   assert.throws(() => createTaskRecord({ id: "x" }, { now }), /Invalid task record/);
   assert.equal(validateTaskRecord({ ...proposed(), status: "running" }).valid, false);
+});
+
+test("standing mission mandate auto-queues only allowlisted non-financial tasks", () => {
+  const safe = { task_type: "customer_outreach", approved_scope: "Research relevant sellers and draft truthful, respectful messages using authorized no-cost channels." };
+  assert.equal(isMissionAuthorizedTask(safe), true);
+  const task = createTaskRecord({ id: "mission-1", idempotency_key: "mission-task-001", title: "Validate seller workflow", goal: "Conduct bounded customer discovery", ...safe }, { now, missionAuthorized: true });
+  assert.equal(task.status, "queued");
+  assert.equal(task.owner_approved, false);
+  assert.equal(task.mission_authorized, true);
+  assert.equal(validateTaskRecord(task).valid, true);
+  assert.equal(selectNextTask([task], { now: Date.parse(now) }).id, task.id);
+  assert.equal(isMissionAuthorizedTask({ task_type: "customer_outreach", approved_scope: "Purchase email lists and send bulk sales messages." }), false);
+  assert.equal(isMissionAuthorizedTask({ task_type: "payments", approved_scope: "Set up checkout." }), false);
 });
