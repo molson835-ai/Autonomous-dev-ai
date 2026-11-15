@@ -76,7 +76,7 @@ export default function OwnerConsole() {
       setProposals(proposalData.proposals);
       setQueueStatus(statusData);
       setLoaded(true);
-      setMessage("Owner review data loaded. The token remains in this page's memory only.");
+      setMessage("Owner review data loaded. Your GitHub identity is verified server-side.");
       return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Owner request failed.");
@@ -135,7 +135,7 @@ export default function OwnerConsole() {
         <h1 className="text-3xl font-semibold tracking-tight">Eve Owner Console</h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
           Review proposed tasks and learning proposals. This console is separate from Eve's model tools.
-          The token is kept in page memory only; it is not saved to browser storage or sent to Eve.
+          Owner access is verified by GitHub and the session credential stays in an HttpOnly cookie.
         </p>
       </header>
 
