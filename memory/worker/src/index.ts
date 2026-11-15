@@ -387,6 +387,27 @@ export class MemoryStore extends DurableObject<Env> {
   }
 }
 
+async function isAuthorizedGithubOwner(accessToken: string): Promise<boolean> {
+  if (!accessToken || accessToken.length > 4096) return false;
+  try {
+    const response = await fetch("https://api.github.com/user", {
+      headers: {
+        authorization: "Bearer " + accessToken,
+        accept: "application/vnd.github+json",
+        "x-github-api-version": "2022-11-28",
+        "user-agent": "EVE-owner-console",
+      },
+    });
+    if (!response.ok) return false;
+    const user: unknown = await response.json();
+    return !!user && typeof user === "object" && "login" in user &&
+      typeof (user as { login: unknown }).login === "string" &&
+      (user as { login: string }).login.toLowerCase() === "molson835-ai";
+  } catch {
+    return false;
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const authorization = request.headers.get("authorization") ?? "";
@@ -415,9 +436,16 @@ export default {
       if (origin !== ownerOrigin) return json({ error: "Origin not allowed." }, 403);
       return withOwnerCors(new Response(null, { status: 204 }));
     }
-    const expectedToken = ownerOnlyRoute ? (env.TASK_OWNER_APPROVAL_TOKEN ?? "") : env.MEMORY_API_TOKEN;
-    if (ownerOnlyRoute && (!expectedToken || expectedToken === env.MEMORY_API_TOKEN)) return withOwnerCors(json({ error: "Owner approval is not configured." }, 503));
-    if (!expectedToken || !constantTimeEqual(supplied, expectedToken)) return withOwnerCors(json({ error: "Unauthorized." }, 401));
+    if (ownerOnlyRoute) {
+      let authorizedOwner = supplied ? await isAuthorizedGithubOwner(supplied) : false;
+      const legacyOwnerToken = env.TASK_OWNER_APPROVAL_TOKEN ?? "";
+      if (!authorizedOwner && legacyOwnerToken && legacyOwnerToken !== env.MEMORY_API_TOKEN) {
+        authorizedOwner = constantTimeEqual(supplied, legacyOwnerToken);
+      }
+      if (!authorizedOwner) return withOwnerCors(json({ error: "Unauthorized." }, 401));
+    } else if (!env.MEMORY_API_TOKEN || !constantTimeEqual(supplied, env.MEMORY_API_TOKEN)) {
+      return withOwnerCors(json({ error: "Unauthorized." }, 401));
+    }
     if (!url.pathname.startsWith("/v1/")) return withOwnerCors(json({ error: "Not found." }, 404));
     const id = env.MEMORY.idFromName("single-owner-memory");
     return withOwnerCors(await env.MEMORY.get(id).fetch(request));
