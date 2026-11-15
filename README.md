@@ -11,6 +11,7 @@ An Android-first software development agent intended to turn requests into resea
 - [x] Add automated retrieval-security tests.
 - [x] Add calculator repeated-equals reference cases as the first learning/evaluation fixture.
 - [x] Add a persistent memory foundation with experience records, approved recall, and owner-reviewed learning proposals.
+- [x] Add a transparent revenue-opportunity evaluator with evidence confidence, cost/time weighting, risk scoring, and no-cost experiment recommendations.
 - [ ] Verify the research tool in a live Eve session against current public documentation.
 - [ ] Add a separately reviewed free search-discovery method; the current tool fetches supplied URLs and is not a general web search engine.
 - [ ] Add explicit review/promotion workflow for proposed knowledge records.
@@ -26,6 +27,7 @@ The research capability is read-only. It does not write to the repository, execu
 - Model provider: Cloudflare Workers AI direct API using `@cf/zai-org/glm-4.7-flash`.
 - Research tool: `agent/tools/research_sources.ts`, discovered by Eve from the filesystem.
 - Research implementation: `agent/research/sources.ts`.
+- Opportunity evaluator: `agent/research/opportunity-evaluator.ts`; Eve tool: `agent/tools/evaluate_opportunity.ts`; scoring policy and limitations: `docs/opportunity-evaluation.md`.
 - Approved source hosts: `developer.mozilla.org`, `tc39.es`, `owasp.org`, `developers.cloudflare.com`, and `vercel.com`.
 - Source retrieval: direct HTTPS GET only; every redirect is revalidated; maximum five unique URLs; 8-second request timeout; 120 KB response cap; HTML/plain-text extraction; 6,000-character excerpt cap.
 - Evidence handling: fetched text is untrusted reference material. The agent must cite final URLs, distinguish facts from inference, and surface uncertainty.
@@ -57,6 +59,13 @@ node --test tests/*.test.mjs tests/research/*.test.mjs
 ```
 
 The repository CI runs the Eve build, TypeScript type-check, and Node test suite. A passing build or test suite does not prove live source retrieval or live model behavior; those require a separate runtime test.
+
+## Opportunity evaluation limitations
+
+- The score is a transparent heuristic, not a forecast or guarantee of revenue.
+- Confidence is separate from score and depends on evidence strength and reference count; sources still require independent verification.
+- Only zero-cost candidates can receive the `small_test` label. Any spending, outreach, publishing, payment acceptance, or ordering remains subject to the existing owner-approval and financial-safety controls.
+- The evaluator does not autonomously rewrite its rubric. Outcomes should be recorded as experiences and rubric changes proposed for review.
 
 ## Research limitations
 
