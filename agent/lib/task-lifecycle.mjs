@@ -54,6 +54,7 @@ export function validateTaskRecord(task) {
   }
   if (task.attempt_count > task.max_attempts) return { valid: false, reason: "attempt_budget_exceeded" };
   if (typeof task.mission_authorized !== "boolean") return { valid: false, reason: "missing_mission_authorization_state" };
+  if (task.mission_authorized === true && !isMissionAuthorizedTask(task)) return { valid: false, reason: "invalid_mission_authorized_scope" };
   if (task.status !== "proposed" && task.owner_approved !== true && task.mission_authorized !== true) {
     return { valid: false, reason: "unapproved_task_cannot_be_active" };
   }
@@ -87,6 +88,7 @@ export function createTaskRecord(input, { now = new Date().toISOString(), maxAtt
     result_summary: null,
     evidence_refs: []
   };
+  if (missionAuthorized === true && !isMissionAuthorizedTask(record)) throw new TypeError("Invalid mission-authorized task scope");
   const validation = validateTaskRecord(record);
   if (!validation.valid) throw new TypeError(`Invalid task record: ${validation.reason}`);
   return Object.freeze(record);
