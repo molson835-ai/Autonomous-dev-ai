@@ -23,5 +23,17 @@ test("provider configuration cannot silently use a real credential when unset", 
 });
 
 test("provider model context matches the documented model context window", () => {
-  assert.match(agent, /modelContextWindowTokens: 131_072/);
+  assert.match(agent, /modelContextWindowTokens: 16_384/);
+  assert.match(agent, /sessionUsage:/);
+  assert.match(agent, /createCloudflareNeuronGuard/);
+});
+
+
+test("provider quota exhaustion is converted to a non-retryable error for generate and stream", () => {
+  const guard = readFileSync(new URL("../agent/lib/cloudflare-neuron-guard.ts", import.meta.url), "utf8");
+  assert.match(guard, /export function nonRetryableQuotaError\(cause: unknown\): Error/);
+  assert.match(guard, /error\.name = "EVEQuotaExhaustedError"/);
+  assert.match(guard, /new Error\("EVE stopped this model request/);
+  assert.equal((guard.match(/throw nonRetryableQuotaError\(error\)/g) ?? []).length, 2);
+  assert.doesNotMatch(guard, /catch \(error\) \{ if \(isQuotaError\(error\)\) await circuit\(id\);/);
 });

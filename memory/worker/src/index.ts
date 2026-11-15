@@ -69,6 +69,9 @@ export class MemoryStore extends DurableObject<Env> {
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE, task_type TEXT NOT NULL, title TEXT NOT NULL, goal TEXT NOT NULL, approved_scope TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('proposed','queued','running','waiting','paused','succeeded','failed','cancelled')), owner_approved INTEGER NOT NULL CHECK (owner_approved IN (0,1)), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, attempt_count INTEGER NOT NULL, max_attempts INTEGER NOT NULL CHECK (max_attempts BETWEEN 1 AND 3), next_run_at TEXT, checkpoint_summary TEXT, result_summary TEXT, evidence_refs TEXT NOT NULL DEFAULT '[]', started_at TEXT, finished_at TEXT)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS task_control (id INTEGER PRIMARY KEY CHECK (id=1), queue_paused INTEGER NOT NULL CHECK (queue_paused IN (0,1)), reason TEXT, updated_at TEXT NOT NULL)");
       ctx.storage.sql.exec("INSERT OR IGNORE INTO task_control (id,queue_paused,reason,updated_at) VALUES (1,0,NULL,?)", new Date().toISOString());
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS quota_daily (day TEXT PRIMARY KEY, baseline_neurons REAL NOT NULL, observed_neurons REAL NOT NULL, observed_at TEXT NOT NULL, local_estimated_neurons REAL NOT NULL DEFAULT 0, circuit_open INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS quota_reservations (id TEXT PRIMARY KEY, day TEXT NOT NULL, reserved_neurons REAL NOT NULL, created_at TEXT NOT NULL)");
+      ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS quota_reservations_day ON quota_reservations(day)");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS tasks_status_created ON tasks(status, created_at)");
     });
   }
@@ -79,6 +82,55 @@ export class MemoryStore extends DurableObject<Env> {
 
 
 
+    if (request.method === "POST" && url.pathname === "/v1/quota/reserve") {
+      const body = await readBody(request), day = now.slice(0,10);
+      const observedMs = Date.parse(typeof body?.observedAt === "string" ? body.observedAt : "");
+      if (!body || Object.keys(body).some(k => !["day","usedNeurons","observedAt","reserve_neurons","model_id"].includes(k)) ||
+          body.day !== day || typeof body.usedNeurons !== "number" || !Number.isFinite(body.usedNeurons) || body.usedNeurons < 0 ||
+          body.reserve_neurons !== 200 || body.model_id !== "@cf/zai-org/glm-4.7-flash" ||
+          !Number.isFinite(observedMs) || Date.parse(now)-observedMs < 0 || Date.parse(now)-observedMs > 900000)
+        return json({ error: "Authoritative daily neuron telemetry missing, stale, or invalid; paused." },503);
+      let daily = this.ctx.storage.sql.exec<{day:string;baseline_neurons:number;observed_neurons:number;local_estimated_neurons:number;circuit_open:number}>("SELECT * FROM quota_daily WHERE day=? LIMIT 1",day).toArray()[0];
+      if (daily && body.usedNeurons < daily.observed_neurons) return json({error:"Neuron telemetry regressed; paused."},503);
+      if (!daily) {
+        this.ctx.storage.sql.exec("INSERT INTO quota_daily (day,baseline_neurons,observed_neurons,observed_at,local_estimated_neurons,circuit_open,updated_at) VALUES (?,?,?,?,0,0,?)",day,body.usedNeurons,body.usedNeurons,body.observedAt,now);
+        daily={day,baseline_neurons:body.usedNeurons,observed_neurons:body.usedNeurons,local_estimated_neurons:0,circuit_open:0};
+      } else {
+        this.ctx.storage.sql.exec("UPDATE quota_daily SET observed_neurons=?,observed_at=?,updated_at=? WHERE day=?",body.usedNeurons,body.observedAt,now,day);
+        daily.observed_neurons=body.usedNeurons;
+      }
+      if (daily.circuit_open===1) return json({error:"Daily Workers AI circuit is open."},429);
+      const active=this.ctx.storage.sql.exec<{total:number}>("SELECT COALESCE(SUM(reserved_neurons),0) AS total FROM quota_reservations WHERE day=?",day).one().total;
+      const projected=Math.max(daily.observed_neurons,daily.baseline_neurons+daily.local_estimated_neurons+active);
+      if (projected+200>7000) return json({error:"Daily neuron target reached; 3,000-neuron reserve preserved."},429);
+      const id=crypto.randomUUID();
+      this.ctx.storage.sql.exec("INSERT INTO quota_reservations (id,day,reserved_neurons,created_at) VALUES (?,?,200,?)",id,day,now);
+      return json({reservation_id:id,projected_neurons:projected,reserved_neurons:200,target_neurons:7000});
+    }
+    if (request.method === "POST" && url.pathname === "/v1/quota/settle") {
+      const body=await readBody(request);
+      if (!body || Object.keys(body).some(k=>!["reservation_id","actual_neurons"].includes(k)) ||
+          typeof body.reservation_id!=="string" || !/^[0-9a-f-]{36}$/i.test(body.reservation_id) ||
+          typeof body.actual_neurons!=="number" || !Number.isFinite(body.actual_neurons) || body.actual_neurons<200 || body.actual_neurons>100000)
+        return json({error:"Invalid quota settlement."},400);
+      const row=this.ctx.storage.sql.exec<{id:string;day:string;reserved_neurons:number}>("SELECT * FROM quota_reservations WHERE id=? LIMIT 1",body.reservation_id).toArray()[0];
+      if (!row) return json({error:"Reservation not found or already settled."},404);
+      const charged=Math.max(row.reserved_neurons,body.actual_neurons);
+      const updated=this.ctx.storage.sql.exec<{day:string}>("UPDATE quota_daily SET local_estimated_neurons=local_estimated_neurons+?,updated_at=? WHERE day=? RETURNING day",charged,now,row.day).toArray();
+      if (updated.length!==1) return json({error:"Quota ledger unavailable; reservation retained."},503);
+      this.ctx.storage.sql.exec("DELETE FROM quota_reservations WHERE id=?",row.id);
+      return json({settled:true,charged_neurons:charged});
+    }
+    if (request.method === "POST" && url.pathname === "/v1/quota/circuit") {
+      const body=await readBody(request);
+      if (!body || Object.keys(body).some(k=>!["reservation_id","reason"].includes(k)) ||
+          typeof body.reservation_id!=="string" || body.reason!=="cloudflare_daily_quota_exhausted")
+        return json({error:"Invalid quota circuit request."},400);
+      const row=this.ctx.storage.sql.exec<{day:string}>("SELECT day FROM quota_reservations WHERE id=? LIMIT 1",body.reservation_id).toArray()[0];
+      if (!row) return json({error:"Reservation not found."},404);
+      const updated=this.ctx.storage.sql.exec("UPDATE quota_daily SET circuit_open=1,updated_at=? WHERE day=?",now,row.day);
+      return json({circuit_open:true,day:row.day});
+    }
     if (request.method === "POST" && url.pathname === "/v1/tasks") {
       const body = await readBody(request);
       const allowed = new Set(["idempotency_key", "task_type", "title", "goal", "approved_scope"]);

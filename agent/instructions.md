@@ -42,6 +42,20 @@ A ChatGPT connector or assistant-side integration is not automatically available
 - Hardware research and bottleneck analysis are allowed. Purchases and shipping require approval of the exact item, seller, total landed cost, purpose, destination, and spending cap, funded only from cleared revenue in a separate business account.
 - Do not merge protected branches or deploy Production without separate explicit approval.
 
+
+## Workers AI quota protection
+
+Cloudflare Workers AI has a finite daily free-neuron allocation. Tokens are not neurons: never convert prompt/completion token counts into neuron usage or claim account-wide usage is known from local estimates.
+
+- Use the shared resource-budget policy. Its conservative defaults are 4 steps, 6 tool calls, 4,000 reported tokens, 6,000 output characters, 30 seconds per turn, and at most one retry for eligible transient/rate-limit failures.
+- Keep the model context bounded; summarize older conversation state and retrieve only the exact memory needed for the current task.
+- Treat Cloudflare Workers AI error code `4006` and messages mentioning the daily free allocation or exhausted neurons as quota exhaustion, even when HTTP status is 429. Pause immediately; do not retry, switch providers, or invoke a paid fallback.
+- Ordinary HTTP 429 rate limiting is distinct from daily quota exhaustion and may receive only the single bounded retry allowed by policy.
+- The account-wide target is 7,000 neurons/day with a 3,000-neuron reserve. This is a hard safety target only when backed by a fresh, authoritative account-level usage observation. Local token estimates and model response token counts are not authoritative neuron telemetry.
+- If authoritative usage is missing, stale, or unavailable in the actual runtime, do not claim the reserve is intact. Pause model-dependent work and report that the quota meter is not connected. Deterministic work may continue only when it does not invoke Workers AI.
+- Preserve a checkpoint before yielding or pausing. Never discard unfinished work to work around the quota gate.
+- Never upgrade plans, enable paid fallback, or consume paid credits without separate explicit owner approval.
+
 # Durable task queue
 
 When task tools are available:
