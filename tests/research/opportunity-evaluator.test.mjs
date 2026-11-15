@@ -32,7 +32,7 @@ test("competition and execution risk reduce score",()=>{
 test("blank and duplicate evidence references cannot inflate confidence",()=>{
  assert.throws(()=>evaluateOpportunity({...base,evidenceRefs:["https://example.com/a","   ","https://example.net/c"]}),/non-empty/);
  assert.throws(()=>evaluateOpportunity({...base,evidenceRefs:["https://example.com/a"," https://example.com/a ","https://example.net/c"]}),/distinct/);
- const oneSource=evaluateOpportunity({...base,evidenceRefs:["https://example.com/a"," https://example.com/a "]});
+ const oneSource=evaluateOpportunity({...base,evidenceRefs:["https://example.com/a"]});
  assert.equal(oneSource.confidence,"medium");
  assert.match(oneSource.concerns.join(" "),/independent evidence/);
 });
