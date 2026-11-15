@@ -23,7 +23,7 @@ const TRANSITIONS = Object.freeze({
 
 const REQUIRED = [
   "id", "idempotency_key", "task_type", "title", "goal",
-  "approved_scope", "created_at", "updated_at", "status", "mission_authorized"
+  "approved_scope", "created_at", "updated_at", "status"
 ];
 
 function nonEmpty(value) {
