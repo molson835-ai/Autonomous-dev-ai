@@ -10,7 +10,7 @@ test("scheduled work loop respects the Vercel Hobby daily cron limit", () => {
 
 test("scheduled work claims at most one owner-approved task and checkpoints across fresh sessions", () => {
   assert.match(schedule, /task_claim_next exactly once/);
-  assert.match(schedule, /already approved by the owner/);
+  assert.match(schedule, /owner-approved or mission-authorized under the standing mandate/);
   assert.match(schedule, /fresh session/);
   assert.match(schedule, /task_transition/);
   assert.match(schedule, /resume_after_minutes >= 1320/);
