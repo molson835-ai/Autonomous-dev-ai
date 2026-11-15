@@ -30,8 +30,10 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   if (request.method === "POST") {
     const raw = await request.text();
     if (raw.length > 16_384) return NextResponse.json({ error: "Request body too large." }, { status: 413 });
-    body = raw;
-    headers.set("content-type", "application/json");
+    if (raw.length > 0) {
+      body = raw;
+      headers.set("content-type", "application/json");
+    }
   }
   try {
     const upstream = await fetch(target, { method: request.method, headers, body, cache: "no-store" });
