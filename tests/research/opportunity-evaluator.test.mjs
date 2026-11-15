@@ -31,7 +31,11 @@ test("competition and execution risk reduce score",()=>{
 });
 test("blank and duplicate evidence references cannot inflate confidence",()=>{
  assert.throws(()=>evaluateOpportunity({...base,evidenceRefs:["https://example.com/a","   ","https://example.net/c"]}),/non-empty/);
- assert.throws(()=>evaluateOpportunity({...base,evidenceRefs:["https://example.com/a"," https://example.com/a ","https://example.net/c"]}),/distinct/);\n const oneSource=evaluateOpportunity({...base,evidenceRefs:["https://example.com/a"," https://example.com/a "]});\n assert.equal(oneSource.confidence,"medium");\n assert.match(oneSource.concerns.join(" "),/independent evidence/);\n});
+ assert.throws(()=>evaluateOpportunity({...base,evidenceRefs:["https://example.com/a"," https://example.com/a ","https://example.net/c"]}),/distinct/);
+ const oneSource=evaluateOpportunity({...base,evidenceRefs:["https://example.com/a"," https://example.com/a "]});
+ assert.equal(oneSource.confidence,"medium");
+ assert.match(oneSource.concerns.join(" "),/independent evidence/);
+});
 
 test("rejects out-of-range or malformed inputs",()=>{
  assert.throws(()=>evaluateOpportunity({...base,demandEvidence:6}),/scores from 0 to 5/);
