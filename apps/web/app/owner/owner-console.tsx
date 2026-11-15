@@ -1,8 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-const MEMORY_API = "https://autonomous-dev-memory.molson835.workers.dev";
 
 type Task = {
   id: string;
@@ -30,16 +29,14 @@ type Proposal = {
 type QueueStatus = { queue_paused: boolean; reason: string | null; running_tasks: number; queued_tasks: number; updated_at: string };
 
 
-async function ownerRequest<T>(token: string, path: string, method = "GET", body?: unknown): Promise<T> {
-  const response = await fetch(MEMORY_API + path, {
+async function ownerRequest<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+  const response = await fetch("/api/owner" + path, {
     method,
     headers: {
-      authorization: "Bearer " + token,
       ...(body === undefined ? {} : { "content-type": "application/json" }),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
     cache: "no-store",
-    credentials: "omit",
   });
   let payload: unknown = null;
   try {
@@ -57,7 +54,7 @@ async function ownerRequest<T>(token: string, path: string, method = "GET", body
 }
 
 export default function OwnerConsole() {
-  const [token, setToken] = useState("");
+  const [authenticated, setAuthenticated] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
@@ -66,17 +63,14 @@ export default function OwnerConsole() {
   const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async (): Promise<boolean> => {
-    if (!token.trim()) {
-      setMessage("Enter the owner-only token to load pending reviews.");
-      return false;
-    }
+    if (!authenticated) return false;
     setBusy("load");
     setMessage("");
     try {
       const [taskData, proposalData, statusData] = await Promise.all([
-        ownerRequest<{ tasks: Task[] }>(token, "/v1/owner/tasks?limit=30"),
-        ownerRequest<{ proposals: Proposal[] }>(token, "/v1/owner/proposals?limit=30"),
-        ownerRequest<QueueStatus>(token, "/v1/owner/status"),
+        ownerRequest<{ tasks: Task[] }>("/v1/owner/tasks?limit=30"),
+        ownerRequest<{ proposals: Proposal[] }>("/v1/owner/proposals?limit=30"),
+        ownerRequest<QueueStatus>("/v1/owner/status"),
       ]);
       setTasks(taskData.tasks);
       setProposals(proposalData.proposals);
@@ -91,13 +85,13 @@ export default function OwnerConsole() {
     } finally {
       setBusy(null);
     }
-  }, [token]);
+  }, [authenticated]);
 
   async function perform(id: string, path: string, method: string, body?: unknown) {
     setBusy(id);
     setMessage("");
     try {
-      await ownerRequest(token, path, method, body);
+      await ownerRequest(path, method, body);
       if (await load()) setMessage("Owner action confirmed.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Owner action failed.");
@@ -106,13 +100,31 @@ export default function OwnerConsole() {
     }
   }
 
-  function forgetToken() {
-    setToken("");
+  useEffect(() => {
+    let active = true;
+    fetch("/api/owner/session", { cache: "no-store" })
+      .then(response => response.ok ? response.json() : { authenticated: false })
+      .then(session => {
+        if (!active) return;
+        setAuthenticated(session.authenticated === true);
+        if (session.authenticated !== true) setMessage("Sign in with the owner GitHub account to review pending approvals.");
+      })
+      .catch(() => { if (active) setMessage("Could not verify the owner session."); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (authenticated) void load();
+  }, [authenticated, load]);
+
+  async function forgetToken() {
+    await fetch("/api/auth/github/logout", { method: "POST" });
+    setAuthenticated(false);
     setTasks([]);
     setProposals([]);
     setQueueStatus(null);
     setLoaded(false);
-    setMessage("Token cleared from this page.");
+    setMessage("Signed out of the owner console.");
     setBusy(null);
   }
 
@@ -128,35 +140,18 @@ export default function OwnerConsole() {
       </header>
 
       <section className="rounded-xl border bg-card p-4 shadow-sm">
-        <label htmlFor="owner-token" className="mb-2 block text-sm font-medium">Owner approval token</label>
-        <input
-          id="owner-token"
-          type="password"
-          autoComplete="off"
-          spellCheck={false}
-          value={token}
-          onChange={event => setToken(event.target.value)}
-          placeholder="Paste the separate owner-only token"
-          className="w-full rounded-lg border bg-background px-3 py-3 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-        />
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => void load()}
-            disabled={busy !== null || !token.trim()}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-          >
-            {busy === "load" ? "Loading…" : "Load reviews"}
-          </button>
-          <button
-            type="button"
-            onClick={forgetToken}
-            disabled={!token && !loaded}
-            className="rounded-lg border px-4 py-2 text-sm font-medium disabled:opacity-50"
-          >
-            Forget token
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium">{authenticated ? "Signed in with the owner GitHub account" : "Owner authentication required"}</p>
+            <p className="mt-1 text-sm text-muted-foreground">Only the GitHub account molson835-ai can access approvals and queue controls. No owner credential is entered into this page.</p>
+          </div>
+          {authenticated ? (
+            <button type="button" onClick={() => void forgetToken()} disabled={busy !== null} className="rounded-lg border px-4 py-2 text-sm font-medium disabled:opacity-50">Sign out</button>
+          ) : (
+            <a href="/api/auth/github" className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">Sign in with GitHub</a>
+          )}
         </div>
+        {authenticated && <button type="button" onClick={() => void load()} disabled={busy !== null} className="mt-3 rounded-lg border px-4 py-2 text-sm font-medium disabled:opacity-50">{busy === "load" ? "Loading…" : "Refresh reviews"}</button>}
         {message && <p role="status" className="mt-3 text-sm text-muted-foreground">{message}</p>}
       </section>
 
