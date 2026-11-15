@@ -303,9 +303,9 @@ describe("persistent memory Worker HTTP contract", () => {
     const payload = { idempotency_key: key, task_type: "repo_maintenance", title: "Review bounded maintenance", goal: "Inspect test status and report findings", approved_scope: "Read-only repository inspection; no merge or deployment" };
     const first = await request("/v1/tasks", { method: "POST", body: JSON.stringify(payload) });
     expect(first.status).toBe(201);
-    const saved = await first.json<{ task: { id: string; status: string; owner_approved: boolean }; created: boolean }>();
+    const saved = await first.json<{ task: { id: string; status: string; owner_approved: boolean; mission_authorized: boolean }; created: boolean }>();
     expect(saved.created).toBe(true);
-    expect(saved.task).toMatchObject({ status: "proposed", owner_approved: false });
+    expect(saved.task).toMatchObject({ status: "proposed", owner_approved: false, mission_authorized: false });
     const duplicate = await request("/v1/tasks", { method: "POST", body: JSON.stringify(payload) });
     expect(duplicate.status).toBe(200);
     const repeated = await duplicate.json<{ task: { id: string }; created: boolean }>();
@@ -313,6 +313,39 @@ describe("persistent memory Worker HTTP contract", () => {
     expect(repeated.created).toBe(false);
     const recall = await request(`/v1/recall?q=${encodeURIComponent("bounded maintenance")}`);
     expect(await recall.json()).toMatchObject({ memories: [], experiences: [] });
+  });
+
+  it("auto-queues only safe task types under the standing mission mandate", async () => {
+    const safePayload = {
+      idempotency_key: `MISSION-OUTREACH-${crypto.randomUUID()}`,
+      task_type: "customer_outreach",
+      title: "Validate seller workflow",
+      goal: "Conduct a bounded customer discovery experiment",
+      approved_scope: "Research relevant sellers and draft truthful, respectful messages using existing authorized no-cost channels. Do not send if no compliant messaging tool is available."
+    };
+    const created = await request("/v1/tasks", { method: "POST", body: JSON.stringify(safePayload) });
+    expect(created.status).toBe(201);
+    const safe = await created.json<{ task: { id: string; status: string; owner_approved: boolean; mission_authorized: boolean }; mission_authorized: boolean }>();
+    expect(safe.mission_authorized).toBe(true);
+    expect(safe.task).toMatchObject({ status: "queued", owner_approved: false, mission_authorized: true });
+    const claimed = await request("/v1/tasks/claim-next", { method: "POST" });
+    expect((await claimed.json<{ task: { id: string; status: string; mission_authorized: boolean } }>()).task)
+      .toMatchObject({ id: safe.task.id, status: "running", mission_authorized: true });
+    await request(`/v1/tasks/${safe.task.id}/transition`, { method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Mission-authorized claim verified" }) });
+
+    const unsafePayload = {
+      ...safePayload,
+      idempotency_key: `MISSION-UNSAFE-${crypto.randomUUID()}`,
+      task_type: "customer_outreach",
+      title: "Buy a lead list",
+      goal: "This must remain owner-reviewed",
+      approved_scope: "Purchase email lists and send bulk messages."
+    };
+    const unsafeResponse = await request("/v1/tasks", { method: "POST", body: JSON.stringify(unsafePayload) });
+    expect(unsafeResponse.status).toBe(201);
+    const unsafe = await unsafeResponse.json<{ task: { status: string; owner_approved: boolean; mission_authorized: boolean }; mission_authorized: boolean }>();
+    expect(unsafe.mission_authorized).toBe(false);
+    expect(unsafe.task).toMatchObject({ status: "proposed", owner_approved: false, mission_authorized: false });
   });
 
   it("requires the separate owner credential to approve and claims only approved tasks", async () => {
