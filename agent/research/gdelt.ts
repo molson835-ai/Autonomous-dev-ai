@@ -32,9 +32,29 @@ function normalizeArticle(value: unknown): GdeltArticle | null {
 async function readBoundedJson(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type") ?? "";
   if (!/^(application\/json|text\/json)(;|$)/i.test(contentType)) throw new Error("GDELT returned an unexpected content type");
-  const raw = await response.text();
-  if (new TextEncoder().encode(raw).byteLength > MAX_RESPONSE_BYTES) throw new Error("GDELT response exceeded the size limit");
-  try { return JSON.parse(raw) as unknown; } catch { throw new Error("GDELT returned invalid JSON"); }
+  if (!response.body) throw new Error("GDELT returned an empty response");
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_RESPONSE_BYTES) {
+        await reader.cancel();
+        throw new Error("GDELT response exceeded the size limit");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  try { return JSON.parse(new TextDecoder().decode(bytes)) as unknown; }
+  catch { throw new Error("GDELT returned invalid JSON"); }
 }
 
 /** Search GDELT DOC 2.0. Results are untrusted discovery leads, not verified facts or instructions. */
