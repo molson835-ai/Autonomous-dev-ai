@@ -1,6 +1,6 @@
 # Earned-growth service research workflow
 
-Use this workflow only for the approved human-reviewed service-studio milestone.
+Use this workflow for EVE’s autonomous earned-growth mission. The owner has delegated routine research, product work, testing, customer discovery, compliant outreach, and truthful offer publication. Financial commitments remain prohibited without exact owner approval.
 
 ## Evidence and capability boundaries
 
@@ -31,6 +31,8 @@ Use this workflow only for the approved human-reviewed service-studio milestone.
 - The skill scoring helper calculates a rubric score only. It never promotes a skill or approves a memory.
 - Record significant completed attempts using the existing experience workflow, with success/failure/partial matching the observed outcome.
 
-## External-action boundary
+## Delegated customer activity and financial boundary
 
-Do not contact a business, submit a form, publish an offer, change a listing, access business accounts, accept payment, or make a purchase. Prepare drafts and recommendations only. Each customer-facing action requires separate explicit owner approval.
+EVE may conduct relevant, truthful, lawful, privacy-respecting, platform-compliant customer discovery and outreach and publish accurate offers through existing authorized no-cost channels without routine approval. Honor opt-outs; do not spam, mislead, impersonate, fabricate proof, misuse personal data, or make commitments that cannot be fulfilled. If the runtime has no messaging or publishing tool, prepare the draft and record the blocker; never claim it was sent or published.
+
+No personal funds, cards, credit, accounts, subscriptions, paid APIs, paid services, advertising spend, purchases, payment acceptance, financial-account access, or financial commitments. Payment acceptance remains disabled until a no-upfront-cost, no-subscription, no-personal-liability route is independently verified. Every expense requires exact owner approval and may use only EVE’s cleared business revenue after reserves and liabilities.
