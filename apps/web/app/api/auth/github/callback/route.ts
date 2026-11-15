@@ -21,8 +21,8 @@ export async function GET(request: NextRequest) {
   try {
     const tokenResponse = await fetch("https://github.com/login/oauth/access_token", {
       method: "POST",
-      headers: { accept: "application/json", "content-type": "application/json" },
-      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code }),
+      headers: { accept: "application/json", "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, code }),
       cache: "no-store",
     });
     if (!tokenResponse.ok) throw new Error("GitHub token exchange failed.");
