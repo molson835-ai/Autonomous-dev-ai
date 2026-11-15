@@ -4,6 +4,12 @@ const TASK_STATUSES = Object.freeze([
 ]);
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
+
+export const MISSION_TASK_TYPES = Object.freeze(new Set(["market_research", "product_development", "testing", "documentation", "customer_discovery", "customer_outreach", "offer_publication"]));
+const BLOCKED_MISSION_SCOPE = /\b(?:purchase|buy|spend|payment|checkout|billing|subscription|credit card|bank account|transfer funds|refund|charge|paid api|paid service|production deployment|merge to main|access credentials)\b/i;
+export function isMissionAuthorizedTask(input) {
+  return !!input && MISSION_TASK_TYPES.has(input.task_type) && typeof input.approved_scope === "string" && input.approved_scope.trim().length >= 3 && !BLOCKED_MISSION_SCOPE.test(input.approved_scope);
+}
 const TRANSITIONS = Object.freeze({
   proposed: new Set(["queued", "cancelled"]),
   queued: new Set(["running", "paused", "failed", "cancelled"]),
@@ -17,7 +23,7 @@ const TRANSITIONS = Object.freeze({
 
 const REQUIRED = [
   "id", "idempotency_key", "task_type", "title", "goal",
-  "approved_scope", "created_at", "updated_at", "status"
+  "approved_scope", "created_at", "updated_at", "status", "mission_authorized"
 ];
 
 function nonEmpty(value) {
@@ -47,7 +53,8 @@ export function validateTaskRecord(task) {
     return { valid: false, reason: "invalid_max_attempts" };
   }
   if (task.attempt_count > task.max_attempts) return { valid: false, reason: "attempt_budget_exceeded" };
-  if (task.status !== "proposed" && task.owner_approved !== true) {
+  if (typeof task.mission_authorized !== "boolean") return { valid: false, reason: "missing_mission_authorization_state" };
+  if (task.status !== "proposed" && task.owner_approved !== true && task.mission_authorized !== true) {
     return { valid: false, reason: "unapproved_task_cannot_be_active" };
   }
   if (task.next_run_at != null && !validTimestamp(task.next_run_at)) {
@@ -57,7 +64,7 @@ export function validateTaskRecord(task) {
 }
 
 /** Create a metadata-only task record. Persistence and ID generation belong to the caller. */
-export function createTaskRecord(input, { now = new Date().toISOString(), maxAttempts = 3 } = {}) {
+export function createTaskRecord(input, { now = new Date().toISOString(), maxAttempts = 3, missionAuthorized = false } = {}) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new TypeError("Task input must be an object");
   }
@@ -68,8 +75,9 @@ export function createTaskRecord(input, { now = new Date().toISOString(), maxAtt
     title: input.title,
     goal: input.goal,
     approved_scope: input.approved_scope,
-    status: "proposed",
+    status: missionAuthorized === true ? "queued" : "proposed",
     owner_approved: false,
+    mission_authorized: missionAuthorized === true,
     created_at: now,
     updated_at: now,
     attempt_count: 0,
@@ -104,7 +112,7 @@ export function selectNextTask(tasks, { now = Date.now() } = {}) {
     const dueQueued = task.status === "queued" && (!task.next_run_at || Date.parse(task.next_run_at) <= now);
     const dueWaiting = task.status === "waiting" && task.next_run_at !== null && task.next_run_at !== undefined && Date.parse(task.next_run_at) <= now;
     if (!dueQueued && !dueWaiting) return false;
-    if (task.owner_approved !== true) return false;
+    if (task.owner_approved !== true && task.mission_authorized !== true) return false;
     if (task.attempt_count >= task.max_attempts) return false;
     return true;
   });
@@ -134,7 +142,7 @@ export function transitionTask(task, nextStatus, {
   if (task.status === "proposed" && nextStatus === "queued" && ownerApproved !== true) {
     throw new Error("owner_approval_required");
   }
-  if (nextStatus === "queued" && task.owner_approved !== true && ownerApproved !== true) {
+  if (nextStatus === "queued" && task.owner_approved !== true && ownerApproved !== true && !(task.status === "waiting" && task.mission_authorized === true)) {
     throw new Error("owner_approval_required");
   }
   if (nextStatus === "running" && task.attempt_count >= task.max_attempts) {
