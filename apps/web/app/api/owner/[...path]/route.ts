@@ -14,10 +14,7 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   const { path } = await context.params;
   const workerPath = "/" + path.join("/");
   const allowedGet = ["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status"];
-  const allowedPost = [
-    "/v1/owner/control",
-    ...Array.from({ length: 0 }, () => ""),
-  ];
+  const allowedPost = ["/v1/owner/control"];
   const taskAction = /^\/v1\/tasks\/[0-9a-f-]{36}\/(approve|owner-control)$/i.test(workerPath);
   const proposalAction = /^\/v1\/proposals\/[0-9a-f-]{36}\/decision$/i.test(workerPath);
   if (request.method === "GET" ? !allowedGet.includes(workerPath) : !(allowedPost.includes(workerPath) || taskAction || proposalAction)) {
