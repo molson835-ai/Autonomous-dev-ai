@@ -9,6 +9,13 @@ import {
   validateSkillEvidence,
 } from "../agent/lib/earned-growth-policy.mjs";
 
+const approvalFor = (overrides = {}) => ({
+  status: "approved", reference: "approval-001",
+  item: "Research hardware", seller: "Example seller",
+  purpose: "Remove measured bottleneck", totalCost: 80, spendingCap: 100,
+  expiresAt: "2027-01-01T00:00:00.000Z", ...overrides,
+});
+
 test("demonstrated skills require reproducible evaluation evidence", () => {
   assert.equal(validateSkillEvidence({ skill: "research", status: "practiced" }).valid, true);
   assert.equal(validateSkillEvidence({ skill: "research", status: "demonstrated" }).valid, false);
@@ -55,13 +62,18 @@ test("verified receipts require positive amount, currency, and evidence but rema
   assert.equal(result.verifiedReceipt, true);
 });
 
-test("every expense fails closed without exact approval and cleared EVE funds", () => {
+test("expenses require a current owner approval record matching the exact expense", () => {
   const base = {
     item: "Research hardware", seller: "Example seller", purpose: "Remove measured bottleneck",
     totalCost: 80, spendingCap: 100, fundsStatus: "cleared_business_revenue",
-    availableClearedFunds: 100, ownerApproved: true, approvalReference: "approval-001",
+    availableClearedFunds: 100, approval: approvalFor(), nowMs: Date.parse("2026-11-15T00:00:00Z"),
   };
-  assert.equal(evaluateExpenseApproval({ ...base, ownerApproved: false }).allowed, false);
+  assert.equal(evaluateExpenseApproval({ ...base, approval: undefined }).allowed, false);
+  assert.equal(evaluateExpenseApproval({ ...base, approval: approvalFor({ status: "pending" }) }).allowed, false);
+  assert.equal(evaluateExpenseApproval({ ...base, approval: approvalFor({ item: "Different item" }) }).allowed, false);
+  assert.equal(evaluateExpenseApproval({ ...base, approval: approvalFor({ totalCost: 79 }) }).allowed, false);
+  assert.equal(evaluateExpenseApproval({ ...base, approval: approvalFor({ spendingCap: 90 }) }).allowed, false);
+  assert.equal(evaluateExpenseApproval({ ...base, approval: approvalFor({ expiresAt: "2026-11-14T23:59:59Z" }) }).allowed, false);
   assert.equal(evaluateExpenseApproval({ ...base, fundsStatus: "pending_payment" }).allowed, false);
   assert.equal(evaluateExpenseApproval({ ...base, availableClearedFunds: 79 }).allowed, false);
   assert.equal(evaluateExpenseApproval({ ...base, totalCost: 110 }).allowed, false);
@@ -70,15 +82,14 @@ test("every expense fails closed without exact approval and cleared EVE funds", 
   assert.equal(evaluateExpenseApproval(base).allowed, true);
 });
 
-test("hardware expenses require exact approval, net cleared business funds, and destination", () => {
+test("hardware expenses require exact owner approval, net cleared business funds, and destination", () => {
   const base = {
-    item: "RAM upgrade", seller: "Example seller", purpose: "Remove measured memory bottleneck",
+    item: "Research hardware", seller: "Example seller", purpose: "Remove measured bottleneck",
     shippingDestination: "Owner-confirmed destination", totalLandedCost: 80, spendingCap: 100,
     fundsStatus: "cleared_business_revenue", clearedBusinessFunds: 100,
-    ownerApproved: true, approvalReference: "approval-001",
+    approval: approvalFor(), nowMs: Date.parse("2026-11-15T00:00:00Z"),
   };
-  assert.equal(evaluateHardwarePurchaseApproval({ ...base, ownerApproved: false }).allowed, false);
-  assert.equal(evaluateHardwarePurchaseApproval({ ...base, fundsStatus: "pending_payment" }).allowed, false);
+  assert.equal(evaluateHardwarePurchaseApproval({ ...base, approval: undefined }).allowed, false);
   assert.equal(evaluateHardwarePurchaseApproval({ ...base, totalLandedCost: 110 }).allowed, false);
   assert.equal(evaluateHardwarePurchaseApproval({ ...base, shippingDestination: "" }).allowed, false);
   assert.equal(evaluateHardwarePurchaseApproval(base).allowed, true);
