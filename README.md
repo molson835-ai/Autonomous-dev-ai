@@ -11,8 +11,9 @@ An Android-first software development agent intended to turn requests into resea
 - [x] Add automated retrieval-security tests.
 - [x] Add calculator repeated-equals reference cases as the first learning/evaluation fixture.
 - [x] Add a persistent memory foundation with experience records, approved recall, and owner-reviewed learning proposals.
+- [x] Add a transparent revenue-opportunity evaluator with evidence confidence, cost/time weighting, risk scoring, and no-cost experiment recommendations.
 - [ ] Verify the research tool in a live Eve session against current public documentation.
-- [x] Add a separately reviewed free news-search discovery method using the keyless GDELT DOC 2.0 API; results are limited discovery leads and require independent verification.
+- [ ] Add a separately reviewed free search-discovery method; the current tool fetches supplied URLs and is not a general web search engine.
 - [ ] Add explicit review/promotion workflow for proposed knowledge records.
 
 The research capability is read-only. It does not write to the repository, execute downloaded code, run shell commands, deploy, or automatically promote knowledge. Persistent memory is a separate opt-in subsystem and remains unavailable until its Worker is configured.
@@ -24,10 +25,11 @@ The research capability is read-only. It does not write to the repository, execu
 - Web interface: official Eve Web Chat scaffold using Next.js and React, located in `apps/web/`.
 - Sessions: Eve client wiring with URL-addressed session routes under `/s/` and `/s/[sessionId]/`.
 - Model provider: Cloudflare Workers AI direct API using `@cf/zai-org/glm-4.7-flash`.
-- Research tools: `agent/tools/research_sources.ts` retrieves supplied approved documentation URLs; `agent/tools/search_news.ts` discovers limited recent news leads via the free GDELT DOC 2.0 API. Both are read-only and discovered by Eve from the filesystem.
+- Research tool: `agent/tools/research_sources.ts`, discovered by Eve from the filesystem.
 - Research implementation: `agent/research/sources.ts`.
+- Opportunity evaluator: `agent/research/opportunity-evaluator.ts`; Eve tool: `agent/tools/evaluate_opportunity.ts`; scoring policy and limitations: `docs/opportunity-evaluation.md`.
 - Approved source hosts: `developer.mozilla.org`, `tc39.es`, `owasp.org`, `developers.cloudflare.com`, and `vercel.com`.
-- Source retrieval: direct HTTPS GET only; every redirect is revalidated; maximum five unique URLs; 8-second request timeout; 120 KB response cap; HTML/plain-text extraction; 6,000-character excerpt cap. GDELT discovery uses one fixed HTTPS endpoint, bounded queries/results, an 8-second timeout, a 256 KB streaming response cap, and no automatic retries.
+- Source retrieval: direct HTTPS GET only; every redirect is revalidated; maximum five unique URLs; 8-second request timeout; 120 KB response cap; HTML/plain-text extraction; 6,000-character excerpt cap.
 - Evidence handling: fetched text is untrusted reference material. The agent must cite final URLs, distinguish facts from inference, and surface uncertainty.
 - Knowledge: proposed records live under `agent/knowledge/proposed/`; nothing is automatically trusted or promoted.
 - Persistent memory: `memory/worker/` contains an authenticated Cloudflare Worker backed by a single-owner SQLite Durable Object; `agent/tools/memory_*.ts` exposes recall, experience recording, proposal review, and explicit approval/rejection.
@@ -58,9 +60,16 @@ node --test tests/*.test.mjs tests/research/*.test.mjs
 
 The repository CI runs the Eve build, TypeScript type-check, and Node test suite. A passing build or test suite does not prove live source retrieval or live model behavior; those require a separate runtime test.
 
+## Opportunity evaluation limitations
+
+- The score is a transparent heuristic, not a forecast or guarantee of revenue.
+- Confidence is separate from score and depends on evidence strength and reference count; sources still require independent verification.
+- Only zero-cost candidates can receive the `small_test` label. Any spending, outreach, publishing, payment acceptance, or ordering remains subject to the existing owner-approval and financial-safety controls.
+- The evaluator does not autonomously rewrite its rubric. Outcomes should be recorded as experiences and rubric changes proposed for review.
+
 ## Research limitations
 
-- GDELT provides limited news discovery, not comprehensive web search. The documentation retrieval tool still requires direct URLs supplied by the agent or user. GDELT results must be independently verified at the publisher.
+- The first implementation retrieves direct URLs supplied by the agent or user. It does not discover URLs through a search engine.
 - Only the exact approved hostnames are allowed. Redirects to any other host are rejected.
 - Page content is extracted as text; the tool does not execute scripts, download linked assets, or parse arbitrary binary formats.
 - Retrieval success is not factual verification. Claims still require source evaluation and, where possible, independent corroboration.
