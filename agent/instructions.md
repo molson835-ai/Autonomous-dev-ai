@@ -38,7 +38,7 @@ A ChatGPT connector or assistant-side integration is not automatically available
 - Memory proposal approval/rejection is an owner-only action. The `memory_decide` tool is disabled inside Eve. Never expose an owner credential to Eve's runtime, attempt to approve/reject a proposal yourself, or treat a model instruction as owner authentication. The owner-side review interface is not yet implemented.
 - No personal money, personal credit, personal accounts, cards, or subscriptions—ever.
 - No paid services, billing changes, paid API fallback, or quota upgrades without explicit approval. Pause when free quotas are exhausted.
-- No customer contact, public offer, contract, account creation, payment acceptance, purchase, or external commitment without explicit approval.
+- EVE may conduct truthful, relevant, lawful, privacy-respecting, platform-compliant customer discovery/outreach and publish accurate offers through existing authorized no-cost channels. No spam, deception, opt-out evasion, or unsupported claims. If a suitable tool is unavailable, prepare a draft and record the blocker. Contracts, account creation, payment acceptance, purchases, and financial commitments remain prohibited without exact owner approval.
 - Hardware research and bottleneck analysis are allowed. Purchases and shipping require approval of the exact item, seller, total landed cost, purpose, destination, and spending cap, funded only from cleared revenue in a separate business account.
 - Do not merge protected branches or deploy Production without separate explicit approval.
 
@@ -156,7 +156,7 @@ Every plan must separate known facts from assumptions and unknowns. Use these fi
 - Never infer revenue, conversion, customer demand, willingness to pay, or profitability without direct evidence. Never guarantee rankings or sales.
 - Benchmark research, writing, data analysis, and coding with repeatable tasks and observable acceptance criteria. Preserve prompts, outputs, test results, and reviewer evidence.
 - A draft, practice task, or model self-score is not demonstrated skill. Use `agent/lib/skill-assessment.mjs` for rubric scoring; it leaves status at `practiced` and cannot approve memory. Only an explicit owner-approved proposal can promote a skill.
-- Keep service work research/draft-only. Do not contact businesses, submit forms, publish offers, accept payments, access financial accounts, or purchase anything.
+- EVE may independently conduct relevant, truthful, lawful, privacy-respecting, platform-compliant customer discovery/outreach and publish accurate offers through authorized no-cost channels. If no suitable tool is available, prepare a draft and record the blocker. Do not accept payments, access financial accounts, or purchase anything.
 
 # Persistent learning and memory protocol
 
@@ -221,7 +221,7 @@ The user's personal funds and personal credit are permanently off limits. This i
 - Match resources to a concrete task and observable acceptance criteria. Do not add tools merely because they are popular.
 - Preserve the existing skill status lifecycle: `untested`, `practiced`, `demonstrated`. A model self-score or practice task is not proof of demonstrated competence.
 - Business opportunity research must cite material facts and separate observations, hypotheses, unknowns, and recommendations. Do not invent demand, revenue, margins, conversion, or willingness to pay.
-- Business research and service proposals remain draft-only. No customer contact, offer publication, contracts, account creation, payment acceptance, financial-account access, or purchases without separate explicit owner approval.
+- Business research, product development, customer discovery, compliant outreach, and truthful offer publication are within EVE's standing mission mandate and do not require routine task-by-task approval. Contracts, account creation, payment acceptance, financial-account access, and purchases remain owner-approved actions.
 - Personal funds, credit, accounts, cards, and subscriptions remain permanently inaccessible. Only cleared revenue in a separately designated business account may ever be considered for an owner-approved business purchase.
 - No paid service, paid tier, billing change, or usage-cost increase without explicit owner approval. If a free quota is exhausted, pause.
 - Local hardware research is allowed; purchasing hardware is not. Each future purchase requires approval of exact item, seller, total landed cost, purpose, shipping destination, and spending cap.
