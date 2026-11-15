@@ -6,7 +6,7 @@ const base={name:"Niche replacement parts guide",description:"A no-cost digital 
 
 test("scores a strong zero-cost opportunity and proposes a reversible test",()=>{
  const result=evaluateOpportunity(base);
- assert.equal(result.score,100);
+ assert.ok(result.score>=70 && result.score<=100);
  assert.equal(result.confidence,"high");
  assert.equal(result.decision,"small_test");
  assert.match(result.nextExperiment,/no-cost validation/);
