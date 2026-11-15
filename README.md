@@ -12,6 +12,7 @@ An Android-first software development agent intended to turn requests into resea
 - [x] Add calculator repeated-equals reference cases as the first learning/evaluation fixture.
 - [x] Add a persistent memory foundation with experience records, approved recall, and owner-reviewed learning proposals.
 - [x] Add a transparent revenue-opportunity evaluator with evidence confidence, cost/time weighting, risk scoring, and no-cost experiment recommendations.
+- [x] Add evidence-backed capability benchmark reporting with per-domain pass rates, baseline comparisons, and regression detection.
 - [ ] Verify the research tool in a live Eve session against current public documentation.
 - [ ] Add a separately reviewed free search-discovery method; the current tool fetches supplied URLs and is not a general web search engine.
 - [ ] Add explicit review/promotion workflow for proposed knowledge records.
@@ -66,6 +67,13 @@ The repository CI runs the Eve build, TypeScript type-check, and Node test suite
 - Confidence is separate from score and depends on evidence strength and reference count; sources still require independent verification.
 - Only zero-cost candidates can receive the `small_test` label. Any spending, outreach, publishing, payment acceptance, or ordering remains subject to the existing owner-approval and financial-safety controls.
 - The evaluator does not autonomously rewrite its rubric. Outcomes should be recorded as experiences and rubric changes proposed for review.
+
+## Capability benchmarking limitations
+
+- The reporter summarizes supplied results; it does not execute benchmarks.
+- Passes must be supported by repeatable external assertions or identified human reviews, never agent confidence.
+- Scores describe only the submitted test set and cannot establish general intelligence or superiority to frontier models.
+- Baselines and version metadata should be retained to make changes reproducible.
 
 ## Research limitations
 
