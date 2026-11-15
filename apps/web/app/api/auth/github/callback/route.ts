@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
   if (!state || !savedState || state !== savedState || !code) {
     const response = redirectToOwner();
-    response.cookies.delete(OWNER_OAUTH_STATE_COOKIE);
+    response.cookies.set(OWNER_OAUTH_STATE_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
     return response;
   }
 
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     const user: unknown = await userResponse.json();
     if (!user || typeof user !== "object" || !("login" in user) || typeof user.login !== "string" || user.login.toLowerCase() !== OWNER_GITHUB_LOGIN) {
       const response = redirectToOwner();
-      response.cookies.delete(OWNER_OAUTH_STATE_COOKIE);
+      response.cookies.set(OWNER_OAUTH_STATE_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
       return response;
     }
 
@@ -48,11 +48,11 @@ export async function GET(request: NextRequest) {
       httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax",
       path: "/api/owner", maxAge: 8 * 60 * 60,
     });
-    response.cookies.delete(OWNER_OAUTH_STATE_COOKIE);
+    response.cookies.set(OWNER_OAUTH_STATE_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
     return response;
   } catch {
     const response = redirectToOwner();
-    response.cookies.delete(OWNER_OAUTH_STATE_COOKIE);
+    response.cookies.set(OWNER_OAUTH_STATE_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
     return response;
   }
 }
