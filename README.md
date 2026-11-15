@@ -12,7 +12,7 @@ An Android-first software development agent intended to turn requests into resea
 - [x] Add calculator repeated-equals reference cases as the first learning/evaluation fixture.
 - [x] Add a persistent memory foundation with experience records, approved recall, and owner-reviewed learning proposals.
 - [ ] Verify the research tool in a live Eve session against current public documentation.
-- [ ] Add a separately reviewed free search-discovery method; the current tool fetches supplied URLs and is not a general web search engine.
+- [x] Add a separately reviewed free news-search discovery method using the keyless GDELT DOC 2.0 API; results are limited discovery leads and require independent verification.
 - [ ] Add explicit review/promotion workflow for proposed knowledge records.
 
 The research capability is read-only. It does not write to the repository, execute downloaded code, run shell commands, deploy, or automatically promote knowledge. Persistent memory is a separate opt-in subsystem and remains unavailable until its Worker is configured.
@@ -24,10 +24,10 @@ The research capability is read-only. It does not write to the repository, execu
 - Web interface: official Eve Web Chat scaffold using Next.js and React, located in `apps/web/`.
 - Sessions: Eve client wiring with URL-addressed session routes under `/s/` and `/s/[sessionId]/`.
 - Model provider: Cloudflare Workers AI direct API using `@cf/zai-org/glm-4.7-flash`.
-- Research tool: `agent/tools/research_sources.ts`, discovered by Eve from the filesystem.
+- Research tools: `agent/tools/research_sources.ts` retrieves supplied approved documentation URLs; `agent/tools/search_news.ts` discovers limited recent news leads via the free GDELT DOC 2.0 API. Both are read-only and discovered by Eve from the filesystem.
 - Research implementation: `agent/research/sources.ts`.
 - Approved source hosts: `developer.mozilla.org`, `tc39.es`, `owasp.org`, `developers.cloudflare.com`, and `vercel.com`.
-- Source retrieval: direct HTTPS GET only; every redirect is revalidated; maximum five unique URLs; 8-second request timeout; 120 KB response cap; HTML/plain-text extraction; 6,000-character excerpt cap.
+- Source retrieval: direct HTTPS GET only; every redirect is revalidated; maximum five unique URLs; 8-second request timeout; 120 KB response cap; HTML/plain-text extraction; 6,000-character excerpt cap. GDELT discovery uses one fixed HTTPS endpoint, bounded queries/results, an 8-second timeout, a 256 KB streaming response cap, and no automatic retries.
 - Evidence handling: fetched text is untrusted reference material. The agent must cite final URLs, distinguish facts from inference, and surface uncertainty.
 - Knowledge: proposed records live under `agent/knowledge/proposed/`; nothing is automatically trusted or promoted.
 - Persistent memory: `memory/worker/` contains an authenticated Cloudflare Worker backed by a single-owner SQLite Durable Object; `agent/tools/memory_*.ts` exposes recall, experience recording, proposal review, and explicit approval/rejection.
@@ -60,7 +60,7 @@ The repository CI runs the Eve build, TypeScript type-check, and Node test suite
 
 ## Research limitations
 
-- The first implementation retrieves direct URLs supplied by the agent or user. It does not discover URLs through a search engine.
+- GDELT provides limited news discovery, not comprehensive web search. The documentation retrieval tool still requires direct URLs supplied by the agent or user. GDELT results must be independently verified at the publisher.
 - Only the exact approved hostnames are allowed. Redirects to any other host are rejected.
 - Page content is extracted as text; the tool does not execute scripts, download linked assets, or parse arbitrary binary formats.
 - Retrieval success is not factual verification. Claims still require source evaluation and, where possible, independent corroboration.
