@@ -29,7 +29,7 @@ test("competition and execution risk reduce score",()=>{
  const high=evaluateOpportunity({...base,competition:5,executionRisk:5});
  assert.ok(high.score<low.score);
 });
-test("rejects out-of-range or malformed inputs",()=>{
+test("blank and duplicate evidence references cannot inflate confidence",()=>{\n assert.throws(()=>evaluateOpportunity({...base,evidenceRefs:["https://example.com/a","   ","https://example.net/c"]}),/non-empty/);\n assert.throws(()=>evaluateOpportunity({...base,evidenceRefs:["https://example.com/a"," https://example.com/a ","https://example.net/c"]}),/distinct/);\n const oneSource=evaluateOpportunity({...base,evidenceRefs:["https://example.com/a"," https://example.com/a "]});\n assert.equal(oneSource.confidence,"medium");\n assert.match(oneSource.concerns.join(" "),/independent evidence/);\n});\n\ntest("rejects out-of-range or malformed inputs",()=>{
  assert.throws(()=>evaluateOpportunity({...base,demandEvidence:6}),/scores from 0 to 5/);
  assert.throws(()=>evaluateOpportunity({...base,startupCostUsd:-1}),/Startup cost/);
  assert.throws(()=>evaluateOpportunity({...base,grossMarginPercent:101}),/Gross margin/);
