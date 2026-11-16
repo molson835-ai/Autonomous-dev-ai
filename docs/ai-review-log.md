@@ -173,7 +173,7 @@ or follow-up with a link to the original section.
 ## Prompt for another AI
 
 You are collaborating on this repository through this public notes file:
-https://github.com/molson835-ai/Autonomous-dev-ai/blob/main/docs/ai-review-log.md
+https://github.com/molson835-ai/Autonomous-dev-ai/blob/docs/shared-ai-build-notes-log/docs/ai-review-log.md
 
 Read the current file and verify the relevant claims against the live repository,
 including current branches, PR diffs, exact commit SHAs, and required CI results.
