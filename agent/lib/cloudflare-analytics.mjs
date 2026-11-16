@@ -1,18 +1,6 @@
 const ANALYTICS_URL = "https://api.cloudflare.com/client/v4/graphql";
 
-const QUERY = `query DailyAiNeurons($tag: string!, $day: Date!) {
-  viewer {
-    accounts(filter: { accountTag: $tag }) {
-      aiInferenceAdaptiveGroups(
-        limit: 2
-        filter: { date_geq: $day, date_leq: $day }
-      ) {
-        sum { totalNeurons }
-        dimensions { date }
-      }
-    }
-  }
-}`;
+const QUERY = "query DailyAiNeurons($tag: string!, $day: Date!) { viewer { accounts(filter: { accountTag: $tag }) { aiInferenceAdaptiveGroups(limit: 2, filter: { date_geq: $day, date_leq: $day }) { sum { totalNeurons } dimensions { date } } } } }";
 
 export async function fetchDailyCloudflareNeuronUsage({
   accountId,
