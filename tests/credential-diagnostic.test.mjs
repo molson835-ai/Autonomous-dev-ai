@@ -15,19 +15,19 @@ test("Cloudflare credential diagnostic is operator-authenticated and read-only",
 
 test("diagnostic verifies account-owned token status before querying Analytics", () => {
   assert.match(route, /\/accounts\/\$\{accountId\}\/tokens\/verify/);
-  assert.match(route, /tokenStatus !== "active"/);
+  assert.match(route, /verifyPayload\?\.result\?\.status !== "active"/);
   assert.match(route, /aiInferenceAdaptiveGroups/);
   assert.match(route, /totalNeurons/);
 });
 
 test("diagnostic returns safe Cloudflare errors with sensitive values redacted", () => {
-  assert.match(route, /safeCloudflareErrors/);
-  assert.match(route, /replaceAll\(accountId, "\[account\]"\)/);
+  assert.match(route, /safeErrors/);
+  assert.match(route, /replaceAll\(accountId, "\\[account\\]"\)/);
   assert.match(route, /redacted-token/);
-  assert.match(route, /cloudflareErrors: errors/);
+  assert.match(route, /cloudflareErrors: safeErrors\(/);
+  assert.match(route, /errors: result\.errors/);
   assert.match(route, /Cache-Control.*no-store/);
-  // Local variable/type names are fine; credential/account values must not be
-  // emitted as named response fields.
+  // Credential/account values must never be emitted as named response fields.
   assert.doesNotMatch(route, /\bapiToken\s*:/);
   assert.doesNotMatch(route, /\baccountId\s*:\s*accountId\b/);
 });
