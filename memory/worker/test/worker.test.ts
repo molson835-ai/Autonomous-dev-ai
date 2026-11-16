@@ -44,14 +44,22 @@ describe("shared daily neuron quota coordinator", () => {
     expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify({...observation,usedNeurons:6900})})).status).toBe(429);
   });
   it("releases unused reservation capacity when actual usage is below 200", async () => {
-    const day=new Date().toISOString().slice(0,10);
-    const observation={day,usedNeurons:1000,observedAt:new Date().toISOString(),reserve_neurons:200,model_id:"@cf/zai-org/glm-4.7-flash"};
-    const reserved=await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify(observation)});
-    expect(reserved.status).toBe(200);
-    const {reservation_id}=await reserved.json<{reservation_id:string}>();
-    const settled=await request("/v1/quota/settle",{method:"POST",body:JSON.stringify({reservation_id,actual_neurons:12})});
-    expect(settled.status).toBe(200);
-    expect(await settled.json()).toMatchObject({settled:true,charged_neurons:12});
+    // Use a separate UTC day so this test is independent of the circuit-breaker
+    // state left by the preceding quota test in the shared Durable Object.
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 48 * 60 * 60 * 1000);
+    try {
+      const day=new Date().toISOString().slice(0,10);
+      const observation={day,usedNeurons:1000,observedAt:new Date().toISOString(),reserve_neurons:200,model_id:"@cf/zai-org/glm-4.7-flash"};
+      const reserved=await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify(observation)});
+      expect(reserved.status).toBe(200);
+      const {reservation_id}=await reserved.json<{reservation_id:string}>();
+      const settled=await request("/v1/quota/settle",{method:"POST",body:JSON.stringify({reservation_id,actual_neurons:12})});
+      expect(settled.status).toBe(200);
+      expect(await settled.json()).toMatchObject({settled:true,charged_neurons:12});
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it("fails closed when authoritative telemetry moves backwards", async () => {
     vi.useFakeTimers();
