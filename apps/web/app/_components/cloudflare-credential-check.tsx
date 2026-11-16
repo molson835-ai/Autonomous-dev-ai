@@ -3,9 +3,12 @@
 import { useState, type FormEvent } from "react";
 
 type ResultState = "idle" | "checking" | "success" | "failure";
+type DiagnosticResult = { ok?: boolean; credential?: string; permission?: string; tokenStatus?: string; error?: string; verificationHttpStatus?: number; graphqlHttpStatus?: number; cloudflareErrors?: Array<{ code?: number; extensionCode?: string | number; message?: string }> };
 
 const safeMessages: Record<string, string> = {
-  cloudflare_permission_denied: "Cloudflare rejected the token's access to account analytics. The token needs the appropriate read permission.",
+  cloudflare_token_verification_failed: "Cloudflare could not verify the account-owned token against the configured account.",
+  cloudflare_token_inactive: "Cloudflare recognized the token, but its status is not active.",
+  cloudflare_permission_denied: "The token is active, but Cloudflare denied Analytics access. Check Account Analytics: Read and account resource scope.",
   analytics_query_rejected: "Cloudflare rejected the analytics query. The query or requested analytics field needs correction.",
   cloudflare_account_not_available: "Cloudflare did not return the expected account. Check the configured account selection and token access.",
   cloudflare_graphql_error: "Cloudflare returned a GraphQL error that needs server-side investigation.",
@@ -13,8 +16,9 @@ const safeMessages: Record<string, string> = {
   cloudflare_invalid_response: "Cloudflare returned a response that was not valid JSON.",
   analytics_result_invalid: "Cloudflare responded, but the analytics result did not match the expected structure.",
   cloudflare_request_timeout: "The Cloudflare analytics request timed out.",
-  cloudflare_network_error: "The Preview server could not complete its connection to Cloudflare.",
-  preview_environment_incomplete: "The Preview runtime is missing a required Cloudflare environment variable.",
+  cloudflare_network_error: "The server could not complete its connection to Cloudflare.",
+  production_environment_incomplete: "This deployment is missing a required Cloudflare environment variable.",
+  cloudflare_graphql_http_error: "Token verification succeeded, but the Analytics GraphQL endpoint returned an HTTP error.",
 };
 
 export default function CloudflareCredentialCheck() {
@@ -26,7 +30,7 @@ export default function CloudflareCredentialCheck() {
     event.preventDefault();
     const suppliedToken = token.trim();
     if (suppliedToken.length < 32) {
-      setMessage("Enter the diagnostic token from the Vercel Preview environment.");
+      setMessage("Enter the EVE diagnostic token configured for this deployment.");
       setState("failure");
       return;
     }
@@ -42,7 +46,7 @@ export default function CloudflareCredentialCheck() {
         cache: "no-store",
         credentials: "same-origin",
       });
-      const result: { ok?: boolean; credential?: string; permission?: string; error?: string } =
+      const result: DiagnosticResult =
         await response.json();
 
       if (response.ok && result.ok === true &&
@@ -53,7 +57,7 @@ export default function CloudflareCredentialCheck() {
         setMessage("The diagnostic token was not accepted. Check that EVE_DIAGNOSTIC_TOKEN is set for Preview.");
         setState("failure");
       } else {
-        setMessage(safeMessages[result.error ?? ""] ??
+        setMessage([safeMessages[result.error ?? ""] ?? "The credential check could not be completed.", result.tokenStatus ? "Token status: " + result.tokenStatus : "", result.verificationHttpStatus ? "Verification HTTP: " + result.verificationHttpStatus : "", result.graphqlHttpStatus ? "Analytics HTTP: " + result.graphqlHttpStatus : "", ...(result.cloudflareErrors ?? []).map((item) => [item.code ? "Cloudflare code " + item.code : "", item.extensionCode ? "(" + item.extensionCode + ")" : "", item.message ?? ""].filter(Boolean).join(" "))].filter(Boolean).join("\n"));
           "The credential check could not be completed. No token or account details were returned.");
         setState("failure");
       }
@@ -71,8 +75,8 @@ export default function CloudflareCredentialCheck() {
         </p>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight">Cloudflare credential check</h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          This one-time check verifies that the Cloudflare API token stored in this Vercel Preview
-          can read AI analytics. It does not run AI inference, change settings, or consume Workers AI
+          This one-time check verifies the account-owned token first, then tests access to the AI Analytics dataset EVE uses.
+
           neurons.
         </p>
 
@@ -118,7 +122,7 @@ export default function CloudflareCredentialCheck() {
 
         <p className="mt-6 text-xs leading-5 text-muted-foreground">
           The token is held only in this page’s temporary input state, cleared before the request,
-          and sent directly to this Preview deployment over HTTPS. It is never saved in browser
+          and sent to this deployment over HTTPS. It is never saved in browser
           storage or displayed in the result.
         </p>
       </section>
