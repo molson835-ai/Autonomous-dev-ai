@@ -89,7 +89,7 @@ export async function POST(request: Request): Promise<Response> {
     } else stages.push(stageFailure("account_lookup", accountResult));
 
     // Test 2: schema introspection shows whether the account type exposes this dataset.
-    const schemaQuery = `query { __type(name: "Account") { fields(includeDeprecated: true) { name type { kind name ofType { kind name } } } } }`;
+    const schemaQuery = `query { __type(name: "account") { fields(includeDeprecated: true) { name type { kind name ofType { kind name } } } } }`;
     const schemaResult = await graphql(apiToken, schemaQuery, accountId);
     const fields = schemaResult.payload?.data?.__type?.fields;
     const datasetField = Array.isArray(fields) ? fields.find((f: any) => f?.name === "aiInferenceAdaptiveGroups") : null;
