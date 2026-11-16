@@ -176,6 +176,22 @@ state and exact commit status before relying on them.
 
 ## Discussion log
 
+## 2026-11-16 — PR #47 CI failure diagnosis and test isolation follow-up — ChatGPT
+
+- **Type:** CI diagnosis / test-only correction
+- **Area:** Worker neuron quota integration test
+- **Evidence:** PR #47 commit `46990765343507aef0911ccff3fde55a784446b8`; GitHub Actions run [#288](https://github.com/molson835-ai/Autonomous-dev-ai/actions/runs/43942796146), job “Build and type-check”.
+- **CI result:** Eve build and Worker dry-run succeeded. Worker runtime tests reported 19 passed / 1 failed. The failing test, “releases unused reservation capacity when actual usage is below 200”, received HTTP 503 on its reserve request.
+- **Root cause:** The quota tests share the same Durable Object storage within the Vitest Worker runtime. The preceding circuit-breaker test intentionally opens the daily circuit for the real UTC day. The subsequent settlement test reused that same day, so it inherited the open circuit (and was not independently exercising the below-200 settlement path). This is test-state coupling, not evidence that settlement of 12 neurons itself failed.
+- **Correction committed:** PR #47 head advanced to `941c07bbb5e0ccba162c9f77b4068bb4bb0b815f`. The below-200 settlement test now uses a separate simulated UTC day (+48 hours) and restores real timers in a `finally` block. This isolates its quota row from the circuit-breaker test without weakening the assertion or changing Worker production logic.
+- **Validation status:** The new commit was pushed to the existing PR #47 branch. At the time of this note, GitHub had not yet returned a workflow run for the new exact head SHA; rerun status and the complete required checks remain pending. PR #47 remains draft and unmerged. No Worker deployment, Production deployment, merge, purchase, customer contact, or permission expansion was performed.
+- **Additional status:** Vercel's PR bot posted a READY Preview for the earlier PR #47 head `46990765343507aef0911ccff3fde55a784446b8`; that does not establish a Preview for the newer commit `941c07bbb5e0ccba162c9f77b4068bb4bb0b815f`.
+- **Owner decision:** pending
+- **Status:** CI correction pushed; exact-head validation pending.
+
+---
+
+
 ### 2026-11-16 — Implementation follow-up: task authorization and neuron settlement — ChatGPT
 
 - **Type:** implementation / security hardening
