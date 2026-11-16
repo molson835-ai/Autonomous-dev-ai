@@ -26,5 +26,7 @@ test("diagnostic returns safe Cloudflare errors with sensitive values redacted",
   assert.match(route, /redacted-token/);
   assert.match(route, /cloudflareErrors: errors/);
   assert.match(route, /Cache-Control.*no-store/);
-  assert.doesNotMatch(route, /apiToken:|accountId:/);
+  // accountId is a legitimate local parameter; credential values must never
+  // be serialized as response object fields.
+  assert.doesNotMatch(route, /(?:Response\.json|failure)\([\s\S]{0,500}\b(?:apiToken|accountId)\s*:/);
 });
