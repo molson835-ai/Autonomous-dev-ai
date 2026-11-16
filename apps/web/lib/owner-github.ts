@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 export const OWNER_SESSION_COOKIE = "eve_owner_github";
 export const OWNER_OAUTH_STATE_COOKIE = "eve_github_oauth_state";
 export const OWNER_GITHUB_LOGIN = "molson835-ai";
+export const OWNER_GITHUB_ID = 341732270;
 
 export async function getVerifiedOwnerLogin(): Promise<string | null> {
   const token = (await cookies()).get(OWNER_SESSION_COOKIE)?.value;
@@ -19,7 +20,7 @@ export async function getVerifiedOwnerLogin(): Promise<string | null> {
     });
     if (!response.ok) return null;
     const user: unknown = await response.json();
-    if (!user || typeof user !== "object" || !("login" in user) || typeof user.login !== "string") return null;
+    if (!user || typeof user !== "object" || !("login" in user) || typeof user.login !== "string" || !("id" in user) || typeof user.id !== "number" || user.id !== OWNER_GITHUB_ID) return null;
     return user.login.toLowerCase() === OWNER_GITHUB_LOGIN ? user.login : null;
   } catch {
     return null;
