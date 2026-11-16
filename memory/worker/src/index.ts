@@ -7,6 +7,9 @@ interface Env {
   MEMORY: DurableObjectNamespace<MemoryStore>;
   MEMORY_API_TOKEN: string;
   TASK_OWNER_APPROVAL_TOKEN?: string;
+  GITHUB_CLIENT_ID?: string;
+  GITHUB_CLIENT_SECRET?: string;
+  OWNER_GITHUB_ID?: string;
 }
 
 type MemoryRow = {
@@ -393,23 +396,97 @@ export class MemoryStore extends DurableObject<Env> {
   }
 }
 
-async function isAuthorizedGithubOwner(accessToken: string): Promise<boolean> {
-  if (!accessToken || accessToken.length > 4096) return false;
+const ownerVerificationCache = new Map<string, number>();
+const ownerFailureWindows = new Map<string, { startedAt: number; failures: number }>();
+const OWNER_CACHE_MS = 60_000;
+const OWNER_FAILURE_LIMIT = 10;
+const OWNER_FAILURE_WINDOW_MS = 60_000;
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function ownerAuthRateLimited(request: Request): boolean {
+  const key = request.headers.get("cf-connecting-ip") ?? "unknown";
+  const now = Date.now();
+  const window = ownerFailureWindows.get(key);
+  if (!window || now - window.startedAt >= OWNER_FAILURE_WINDOW_MS) {
+    ownerFailureWindows.set(key, { startedAt: now, failures: 0 });
+    return false;
+  }
+  return window.failures >= OWNER_FAILURE_LIMIT;
+}
+
+function recordOwnerAuthFailure(request: Request): void {
+  const key = request.headers.get("cf-connecting-ip") ?? "unknown";
+  const now = Date.now();
+  const window = ownerFailureWindows.get(key);
+  if (!window || now - window.startedAt >= OWNER_FAILURE_WINDOW_MS) {
+    ownerFailureWindows.set(key, { startedAt: now, failures: 1 });
+  } else {
+    window.failures += 1;
+  }
+}
+
+async function isAuthorizedGithubOwner(accessToken: string, env: Env, request: Request): Promise<boolean> {
+  if (!accessToken || accessToken.length > 4096 || ownerAuthRateLimited(request)) return false;
+  const expectedId = Number(env.OWNER_GITHUB_ID);
+  const clientId = env.GITHUB_CLIENT_ID ?? "";
+  const clientSecret = env.GITHUB_CLIENT_SECRET ?? "";
+  if (!Number.isSafeInteger(expectedId) || expectedId <= 0 || !clientId || !clientSecret) return false;
+  const tokenHash = await sha256Hex(accessToken);
+  const cachedUntil = ownerVerificationCache.get(tokenHash);
+  if (cachedUntil && cachedUntil > Date.now()) return true;
   try {
-    const response = await fetch("https://api.github.com/user", {
+    // GitHub's application token check proves the supplied token was issued to this OAuth app.
+    const checkResponse = await fetch("https://api.github.com/applications/" + encodeURIComponent(clientId) + "/token", {
+      method: "POST",
+      headers: {
+        authorization: "Basic " + btoa(clientId + ":" + clientSecret),
+        accept: "application/vnd.github+json",
+        "content-type": "application/json",
+        "x-github-api-version": "2022-11-28",
+        "user-agent": "EVE-owner-console",
+      },
+      body: JSON.stringify({ access_token: accessToken }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!checkResponse.ok) {
+      recordOwnerAuthFailure(request);
+      return false;
+    }
+    const checked: unknown = await checkResponse.json();
+    if (!checked || typeof checked !== "object" || !("app" in checked) ||
+        !checked.app || typeof checked.app !== "object" ||
+        !("client_id" in checked.app) || checked.app.client_id !== clientId) {
+      recordOwnerAuthFailure(request);
+      return false;
+    }
+    const userResponse = await fetch("https://api.github.com/user", {
       headers: {
         authorization: "Bearer " + accessToken,
         accept: "application/vnd.github+json",
         "x-github-api-version": "2022-11-28",
         "user-agent": "EVE-owner-console",
       },
+      signal: AbortSignal.timeout(5000),
     });
-    if (!response.ok) return false;
-    const user: unknown = await response.json();
-    return !!user && typeof user === "object" && "login" in user &&
-      typeof (user as { login: unknown }).login === "string" &&
-      (user as { login: string }).login.toLowerCase() === "molson835-ai";
+    if (!userResponse.ok) {
+      recordOwnerAuthFailure(request);
+      return false;
+    }
+    const user: unknown = await userResponse.json();
+    const authorized = !!user && typeof user === "object" && "id" in user &&
+      typeof user.id === "number" && user.id === expectedId;
+    if (!authorized) {
+      recordOwnerAuthFailure(request);
+      return false;
+    }
+    ownerVerificationCache.set(tokenHash, Date.now() + OWNER_CACHE_MS);
+    return true;
   } catch {
+    recordOwnerAuthFailure(request);
     return false;
   }
 }
@@ -443,7 +520,7 @@ export default {
       return withOwnerCors(new Response(null, { status: 204 }));
     }
     if (ownerOnlyRoute) {
-      let authorizedOwner = supplied ? await isAuthorizedGithubOwner(supplied) : false;
+      let authorizedOwner = supplied ? await isAuthorizedGithubOwner(supplied, env, request) : false;
       const legacyOwnerToken = env.TASK_OWNER_APPROVAL_TOKEN ?? "";
       if (!authorizedOwner && legacyOwnerToken && legacyOwnerToken !== env.MEMORY_API_TOKEN) {
         authorizedOwner = constantTimeEqual(supplied, legacyOwnerToken);
