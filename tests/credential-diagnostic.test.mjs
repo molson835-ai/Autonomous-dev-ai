@@ -16,6 +16,7 @@ test("Cloudflare credential diagnostic is operator-authenticated and read-only",
 test("diagnostic verifies account-owned token status before querying Analytics", () => {
   assert.match(route, /\/accounts\/\$\{accountId\}\/tokens\/verify/);
   assert.match(route, /verifyPayload\?\.result\?\.status !== "active"/);
+  assert.match(route, /__type\(name: "account"\)/);
   assert.match(route, /aiInferenceAdaptiveGroups/);
   assert.match(route, /totalNeurons/);
 });
