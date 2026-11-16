@@ -5,10 +5,22 @@
   "compatibility_date": "2026-11-01",
   "durable_objects": {
     "bindings": [
-      { "name": "MEMORY", "class_name": "MemoryStore" }
+      {
+        "name": "MEMORY",
+        "class_name": "MemoryStore"
+      }
     ]
   },
   "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["MemoryStore"] }
-  ]
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "MemoryStore"
+      ]
+    }
+  ],
+  "vars": {
+    "CLOUDFLARE_ACCOUNT_ID": "485e3a6cf433f8e7bf90fcc4b6f00b47",
+    "OWNER_GITHUB_ID": "341732270"
+  }
 }
