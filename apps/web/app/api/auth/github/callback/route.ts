@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createOwnerSession } from "@/lib/owner-session.mjs";
 import { OWNER_GITHUB_ID, OWNER_GITHUB_LOGIN, OWNER_OAUTH_STATE_COOKIE, OWNER_SESSION_COOKIE } from "@/lib/owner-github";
 
 export const runtime = "nodejs";
@@ -43,8 +44,13 @@ export async function GET(request: NextRequest) {
       return response;
     }
 
+    const signingSecret = process.env.OWNER_SESSION_SIGNING_SECRET;
+    if (!signingSecret || signingSecret.length < 32) {
+      return NextResponse.json({ error: "Owner session signing is not configured." }, { status: 503 });
+    }
+    const ownerSession = createOwnerSession(String(OWNER_GITHUB_ID), signingSecret);
     const response = NextResponse.redirect(new URL("/owner", request.url));
-    response.cookies.set(OWNER_SESSION_COOKIE, accessToken, {
+    response.cookies.set(OWNER_SESSION_COOKIE, ownerSession, {
       httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax",
       path: "/api/owner", maxAge: 8 * 60 * 60,
     });
