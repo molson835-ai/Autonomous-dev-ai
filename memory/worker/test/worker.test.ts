@@ -13,10 +13,10 @@ function base64Url(bytes: Uint8Array) {
   return btoa(binary).replace(/=/g, "").replace(/\\+/g, "-").replace(/\\//g, "_");
 }
 
-async function createOwnerSession() {
+async function createOwnerSession(subject = ownerId, audience = "eve-memory-worker") {
   const now = Math.floor(Date.now() / 1000);
   const payload = base64Url(new TextEncoder().encode(JSON.stringify({
-    iss: "eve-owner-console", aud: "eve-memory-worker", sub: ownerId, iat: now, exp: now + 300,
+    iss: "eve-owner-console", aud: audience, sub: subject, iat: now, exp: now + 300,
   })));
   const key = await crypto.subtle.importKey(
     "raw", new TextEncoder().encode(ownerSecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
@@ -153,6 +153,15 @@ describe("persistent memory Worker HTTP contract", () => {
     expect(normalTaskList.status).toBe(401);
     const rawGithubToken = await request("/v1/owner/tasks", {}, "owner-account-github-token-from-another-oauth-app");
     expect(rawGithubToken.status).toBe(401);
+    const wrongOwnerSession = await request("/v1/owner/tasks", {}, await createOwnerSession("123456789"));
+    expect(wrongOwnerSession.status).toBe(401);
+    const wrongAudienceSession = await request("/v1/owner/tasks", {}, await createOwnerSession(ownerId, "another-service"));
+    expect(wrongAudienceSession.status).toBe(401);
+    const validSession = await createOwnerSession();
+    const [sessionPayload, sessionSignature] = validSession.split(".");
+    const tamperedSession = sessionPayload + "." + sessionSignature.slice(0, -1) + (sessionSignature.endsWith("a") ? "b" : "a");
+    const tampered = await request("/v1/owner/tasks", {}, tamperedSession);
+    expect(tampered.status).toBe(401);
     const ownerTasks = await request("/v1/owner/tasks?limit=5", {}, ownerToken);
     expect(ownerTasks.status).toBe(200);
     expect(Array.isArray((await ownerTasks.json<{ tasks: unknown[] }>()).tasks)).toBe(true);
