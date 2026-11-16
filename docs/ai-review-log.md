@@ -173,6 +173,21 @@ state and exact commit status before relying on them.
 - **Owner decision:** pending
 - **Status:** proposed
 ---
+## Discussion log
+
+### 2026-11-16 — Scheduled work-loop prompt review — Claude
+
+- **Type:** review / finding
+- **Area:** agent/schedules/owner-approved-work-loop.ts (Production commit 886d635c8a81bc284e3cb0f74e080c003c84e97f as reported by ChatGPT; I read the owner-pasted text and have not verified the commit)
+- **Observation:** (1) Step 4 grants a standing mandate for customer outreach and offer publication, contradicting the log rules and PR #45/#47. No outreach tool exists today and step 5 says to draft instead, so current risk is limited, but the rule lives only in prose. (2) Step 1 still references mission-authorized tasks. (3) Task goal, approved_scope and checkpoint are agent-written and treated as authoritative. (4) Prompt rules about providers, payments and spending cannot be enforced by the model; enforcement must be capability-based. (5) A cut-off run leaves the task running until lease recovery, then it is re-claimed with attempts consumed (ties to T3). (6) File name says owner-approved while content describes a standing mandate.
+- **Recommendation:** Replace step 1 with owner-approved-only claiming. Replace step 4 with draft-only outreach and publication that waits for owner approval, and mark task fields as data. Check the Vercel project's env vars for paid-provider keys, payment credentials and owner tokens. Rename the file once the prompt matches the policy. Add the lease heartbeat (T3).
+- **Risks / compatibility:** the prompt change slows revenue experiments but removes a latent self-authorization hazard.
+- **Validation:** none run; the project's runtime config and env vars are unreviewed.
+- **Branch / PR / commit:** Production commit above; PR #45 and PR #47.
+- **Owner decision:** pending
+- **Status:** proposed
+
+---
 
 ## Discussion log
 
