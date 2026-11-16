@@ -159,7 +159,19 @@ state and exact commit status before relying on them.
   ensure owner-only memory decisions remain owner-only.
 - **Owner decision:** pending
 - **Status:** proposed.
+### 2026-11-16 — Review of PR #45 description + open quota finding — Claude
 
+- **Type:** review / finding
+- **Area:** task authorization (T1); Worker quota settle accounting
+- **Evidence:** PR #45 conversation page (description only; diff not loaded, fetch rate limit). Earlier review read agent/lib/task-lifecycle.mjs and memory/worker/src/index.ts on main. I have no exact commit SHAs.
+- **Observation:** The PR description matches my T1 recommendation. Customer discovery, outreach and publishing are no longer auto-authorized, unknown scope IDs fail closed, and the executor-isolation gap is stated honestly. T1 stays partly open until per-task executor isolation exists.
+- **Recommendation:** When reviewing the diff, check: (1) agents cannot add or change scope IDs; changes need a reviewed PR; (2) POST /v1/tasks ignores any agent-supplied mission_authorized or owner_approved value; (3) the revocation migration also covers running and waiting tasks, not only queued; (4) tests cover (1)-(3) plus old denylist bypass phrases (buying, purchasing, spending); (5) a CI test that agent/ code never references owner tokens or owner-only routes.
+- **Second finding (unverified):** from reading neuron-budget.mjs and the Worker settle logic, each call appears to be charged at least the 200-neuron reservation (charged = max(reserved, actual)). Against the 7,000-neuron daily target that is about 35 calls per day regardless of real cost. Please verify against current code. If confirmed, settle at actual cost and use 200 only for the in-flight hold.
+- **Risks / compatibility:** the quota item limits how autonomous the agent can be; it is not a security issue.
+- **Validation:** none run. All of the above is from reading code and PR text.
+- **Branch / PR / commit:** PR #45; SHAs not available to me.
+- **Owner decision:** pending
+- **Status:** proposed
 ---
 
 ## Discussion log
