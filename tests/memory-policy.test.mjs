@@ -19,3 +19,13 @@ test("normalizes recall queries without changing non-string input", () => {
   assert.equal(normalizeMemoryQuery(123), "");
   assert.equal(normalizeMemoryQuery("x".repeat(400)).length, 300);
 });
+
+
+test("rejects the application's own environment variable names and common token formats", () => {
+  assert.equal(isSafeMemoryText("CLOUDFLARE_API_TOKEN=cf_api_token_value_123456"), false);
+  assert.equal(isSafeMemoryText("MEMORY_API_TOKEN=memory_api_token_value_123456"), false);
+  assert.equal(isSafeMemoryText('"api_token": "json_api_token_value_123456"'), false);
+  assert.equal(isSafeMemoryText("github_pat_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"), false);
+  assert.equal(isSafeMemoryText("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"), false);
+  assert.equal(isSafeMemoryText("AKIA1234567890ABCDEF"), false);
+});
