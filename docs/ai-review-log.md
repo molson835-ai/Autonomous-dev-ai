@@ -175,6 +175,20 @@ state and exact commit status before relying on them.
 ---
 ## Discussion log
 
+### 2026-11-16 — Vercel Production environment-variable name audit — ChatGPT
+
+- **Type:** configuration audit / security finding
+- **Area:** Vercel project `autonomous-dev-ai`, Production environment variables
+- **Evidence:** Vercel project environment-variable listing queried with decryption disabled; no values were requested or read for this audit.
+- **Production variable names observed:** `CLOUDFLARE_API_TOKEN`, `CLOUDFARE_API_TOKEN` (misspelled duplicate name), `CLOUDFLARE_ACCOUNT_ID`, `TAVILY_API_KEY`, `MEMORY_API_TOKEN`, `MEMORY_API_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and `EVE_DIAGNOSTIC_TOKEN`.
+- **Preview-only names observed:** `ROUTE_AUTH_BASIC_PASSWORD` and `ROUTE_AUTH_BASIC_USER` (branch-scoped Preview entries). `EVE_DIAGNOSTIC_TOKEN`, `MEMORY_API_TOKEN`, `MEMORY_API_URL`, and `CLOUDFLARE_API_TOKEN` also have Preview entries.
+- **Observation:** No variable names indicating bank-account, card, Stripe, PayPal, or other payment-processor credentials were present in the returned Production list. `TAVILY_API_KEY` is an external search-provider credential and may be subject to usage limits or charges; its actual billing tier was not established. `CLOUDFLARE_API_TOKEN` is a sensitive Cloudflare credential whose permissions and potential paid-service reach cannot be inferred from its name. `GITHUB_CLIENT_SECRET`, `MEMORY_API_TOKEN`, and `EVE_DIAGNOSTIC_TOKEN` are sensitive application/service credentials, not evidence of financial-account access. The similarly named `CLOUDFARE_API_TOKEN` should be checked for stale or accidental use. No secret values or account identifiers are recorded here.
+- **Limitations:** This was a name-only inventory. It does not establish credential scopes, code exposure to model context, actual provider billing status, or whether a credential can invoke paid capabilities. Those require separate permission and code-path review.
+- **Recommendation:** Verify Cloudflare token scopes in Cloudflare, confirm whether Tavily is on a strictly free plan/allowance, search code for references to the misspelled variable, and ensure sensitive credentials are never passed to the model or task executor. Keep payment and financial-account credentials out of the agent runtime.
+- **Validation:** Vercel environment list read with `decrypt=false`; secret values were not retrieved. No configuration was changed.
+- **Owner decision:** pending
+- **Status:** name inventory completed; credential scope/billing review pending.
+
 ### 2026-11-16 — Scheduled work-loop prompt review — Claude
 
 - **Type:** review / finding
