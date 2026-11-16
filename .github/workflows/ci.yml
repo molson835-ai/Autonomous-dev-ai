@@ -119,7 +119,8 @@ jobs:
         run: npx --yes wrangler@4 deploy --dry-run --config memory/worker/wrangler.jsonc
 
       - name: Install isolated Cloudflare Workers test dependencies
-        run: npm install --no-save --package-lock=false --no-audit --no-fund vitest@^4.1.0 @cloudflare/vitest-plugin
+        # Pin the published plugin release; the floating range resolved to an unpublished 1.8.3 tarball.
+        run: npm install --no-save --package-lock=false --no-audit --no-fund vitest@^4.1.0 @cloudflare/vitest-plugin@1.8.2
 
       # Runs in an isolated local Workers runtime; this step never deploys the Worker.
       - name: Test memory Worker in the Cloudflare runtime
