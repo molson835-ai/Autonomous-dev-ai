@@ -7,7 +7,9 @@ This milestone defines pure, testable task metadata and state-transition rules. 
 ## Safety properties
 
 - New tasks start as `proposed` and unapproved.
-- Only an explicit owner-approval signal can move a proposal into the queued backlog.
+- The only exception to individual task approval is the narrow standing mission allowlist: a task type must match an owner-defined `scope_id` in `agent/lib/task-lifecycle.mjs`. Free-text scope written by Eve never grants authority.
+- Customer discovery involving contact, customer outreach, and offer publication always require explicit owner approval.
+- Existing tasks created under the old free-text mission authorization are demoted to `proposed` during the Worker schema migration unless they match a fixed owner-defined scope ID.
 - Only approved queued tasks are eligible for selection.
 - The selector returns at most one task and refuses to select another while any task is running.
 - Idempotency keys allow a future persistent store to return an existing task instead of inserting a duplicate.
@@ -26,7 +28,7 @@ A running task may instead become `paused`, `succeeded`, `failed`, or `cancelled
 
 - Three attempts maximum.
 - One active task at a time.
-- No self-approval, automatic queueing, or unbounded task creation.
+- No agent self-approval or free-text self-authorization. Automatic queueing is limited to the four fixed internal-only scope IDs. Task creation remains bounded and idempotent.
 - No secrets should be placed in task metadata, checkpoints, or summaries.
 - The helper functions do not persist state or make transitions atomic; these are mandatory responsibilities of the next storage/API layer.
 
