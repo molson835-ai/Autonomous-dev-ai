@@ -124,16 +124,33 @@ test("duplicate enqueue keys and malformed task records are handled explicitly",
   assert.equal(validateTaskRecord({ ...proposed(), status: "running" }).valid, false);
 });
 
-test("standing mission mandate auto-queues only allowlisted non-financial tasks", () => {
-  const safe = { task_type: "customer_outreach", approved_scope: "Research relevant sellers and draft truthful, respectful messages using authorized no-cost channels." };
+test("standing mission mandate authorizes only exact owner-defined internal scope IDs", () => {
+  const safe = {
+    task_type: "market_research",
+    scope_id: "internal_research",
+    title: "Compare product categories",
+    goal: "Research public sources and summarize market demand",
+    approved_scope: "Read public sources only; prepare an internal report"
+  };
   assert.equal(isMissionAuthorizedTask(safe), true);
-  const task = createTaskRecord({ id: "mission-1", idempotency_key: "mission-task-001", title: "Validate seller workflow", goal: "Conduct bounded customer discovery", ...safe }, { now, missionAuthorized: true });
+  const task = createTaskRecord({
+    id: "mission-1", idempotency_key: "mission-task-001",
+    title: safe.title, goal: safe.goal, approved_scope: safe.approved_scope, ...safe
+  }, { now, missionAuthorized: true });
   assert.equal(task.status, "queued");
   assert.equal(task.owner_approved, false);
   assert.equal(task.mission_authorized, true);
+  assert.equal(task.scope_id, "internal_research");
   assert.equal(validateTaskRecord(task).valid, true);
   assert.equal(selectNextTask([task], { now: Date.parse(now) }).id, task.id);
-  assert.equal(isMissionAuthorizedTask({ task_type: "customer_outreach", approved_scope: "Purchase email lists and send bulk sales messages." }), false);
-  assert.equal(isMissionAuthorizedTask({ task_type: "payments", approved_scope: "Set up checkout." }), false);
-  assert.throws(() => createTaskRecord({ id: "mission-unsafe", idempotency_key: "mission-unsafe-001", task_type: "payments", title: "Set up checkout", goal: "Accept money", approved_scope: "Set up checkout." }, { now, missionAuthorized: true }), /Invalid mission-authorized task scope/);
+
+  assert.equal(isMissionAuthorizedTask({ ...safe, task_type: "customer_outreach" }), false);
+  assert.equal(isMissionAuthorizedTask({ ...safe, scope_id: "unreviewed_free_text" }), false);
+  assert.equal(isMissionAuthorizedTask({ ...safe, goal: "Email 500 prospects and publish an offer" }), false);
+  assert.equal(isMissionAuthorizedTask({ ...safe, goal: "Purchase a lead list" }), false);
+  assert.throws(() => createTaskRecord({
+    id: "mission-unsafe", idempotency_key: "mission-unsafe-001",
+    task_type: "customer_outreach", title: "Contact sellers", goal: "Send messages",
+    approved_scope: "External outreach", scope_id: "internal_research"
+  }, { now, missionAuthorized: true }), /Invalid mission-authorized task scope/);
 });
