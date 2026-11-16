@@ -77,7 +77,7 @@ export class MemoryStore extends DurableObject<Env> {
       // Revoke all legacy mission authorization until trusted owner delegation exists.
       // Preserve history; stop every nonterminal unapproved task by returning it to proposed.
       ctx.storage.sql.exec(
-        "UPDATE tasks SET mission_authorized=0, status=CASE WHEN status IN ('succeeded','failed','cancelled') THEN status ELSE 'proposed' END, updated_at=? WHERE mission_authorized=1 AND owner_approved=0",
+        "UPDATE tasks SET mission_authorized=0, status=CASE WHEN owner_approved=0 AND status NOT IN ('succeeded','failed','cancelled') THEN 'proposed' ELSE status END, updated_at=? WHERE mission_authorized=1",
         new Date().toISOString()
       );
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS task_control (id INTEGER PRIMARY KEY CHECK (id=1), queue_paused INTEGER NOT NULL CHECK (queue_paused IN (0,1)), reason TEXT, updated_at TEXT NOT NULL)");
