@@ -1,3 +1,7 @@
+## Owner authentication configuration
+
+The owner console verifies the immutable numeric GitHub user ID, not a reusable login name. The memory Worker additionally verifies that a supplied OAuth access token belongs to the configured GitHub OAuth App before accepting it for owner-only routes. See [owner authentication setup](docs/owner-authentication.md) for required Vercel and Cloudflare configuration. Missing or mismatched configuration fails closed.
+
 # Autonomous Dev AI
 
 An Android-first software development agent intended to turn requests into researched plans and, in later permissioned milestones, tested software deliverables.
