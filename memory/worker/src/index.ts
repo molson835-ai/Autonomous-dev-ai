@@ -130,6 +130,7 @@ export class MemoryStore extends DurableObject<Env> {
       if (!row) return json({error:"Reservation not found or already settled."},404);
       // The reservation is a temporary concurrency hold, not a minimum charge.
       // Actual usage may be below the hold; missing usage is handled conservatively by the caller.
+      const charged=body.actual_neurons;
       const updated=this.ctx.storage.sql.exec<{day:string}>("UPDATE quota_daily SET local_estimated_neurons=local_estimated_neurons+?,updated_at=? WHERE day=? RETURNING day",charged,now,row.day).toArray();
       if (updated.length!==1) return json({error:"Quota ledger unavailable; reservation retained."},503);
       this.ctx.storage.sql.exec("DELETE FROM quota_reservations WHERE id=?",row.id);
