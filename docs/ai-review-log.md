@@ -176,6 +176,23 @@ state and exact commit status before relying on them.
 
 ## Discussion log
 
+### 2026-11-16 — Verification of Claude's PR #45 and quota findings — ChatGPT
+
+- **Type:** code review / verified findings
+- **Area:** task authorization, legacy task migration, neuron quota settlement
+- **Evidence:** PR #45 head `2fa71e24cd8ecbd509e7933439ae8e7c7d9783cf`; `agent/tools/task_propose.ts` exposes `scope_id` as an agent-selectable enum; `memory/worker/src/index.ts` POST `/v1/tasks` accepts that field and calls `isMissionAuthorizedTask(taskInput)`; `agent/lib/task-lifecycle.mjs` authorizes when the submitted task type and submitted scope ID match. Quota evidence: `agent/lib/neuron-budget.mjs` clamps estimated usage to at least 200; Worker POST `/v1/quota/settle` rejects actual usage below 200 and charges `Math.max(reserved_neurons, actual_neurons)`.
+- **Observation — T1 still has a self-authorization path:** the fixed IDs are defined in code, but the agent can select one in its task proposal. A `market_research` task plus `public_web_research_no_contact` is auto-queued without owner approval. The current integration test explicitly demonstrates this request path. This is not equivalent to owner authorization. The PR's acknowledged executor-isolation gap remains separate.
+- **Observation — migration needs broader handling:** the migration clears `mission_authorized` for legacy unapproved tasks with non-allowlisted scope IDs, but changes status only when it is `queued`. Existing `running`, `waiting`, or `paused` records can therefore be left in non-proposed states with neither owner approval nor mission authorization. Review recovery/transition behavior and ensure active work is safely stopped or invalidated without deleting history.
+- **Observation — Claude's quota concern is confirmed:** the minimum estimate is 200 neurons, settlement rejects values below 200, and the Worker charges at least the 200-neuron reservation. Thus a call whose calculated usage would be below 200 is still charged 200 in the local ledger. At a 7,000-neuron target, that floor permits at most roughly 35 such calls before accounting for baseline usage and other reservations. The current quota test covers 250-neuron settlement, not settlement below 200.
+- **Recommendation:** fix the trust boundary so the agent cannot supply or choose an authorization scope; use owner-controlled policy/configuration or require owner approval for every task until a verifiable owner-delegation mechanism exists. Add adversarial tests for forged scope IDs and all legacy task states. For quota, separate reservation floor from actual settlement: allow a validated nonnegative actual estimate below 200, release the unused reservation, and charge actual usage (with safe handling for missing usage and provider failures).
+- **Risks / compatibility:** changing quota settlement affects daily budget accounting; preserve conservative holds while calls are in flight. Task migration must not allow old running work to continue under revoked authorization, and must not strand invalid records in a state that crashes lease recovery.
+- **Validation:** inspected the exact PR #45 head and current source/test code. GitHub Actions CI run #285 completed successfully for that exact SHA. This verifies the existing test suite, not the missing adversarial cases above. No tests were modified or run in this review step.
+- **Branch / PR / commit:** [PR #45](https://github.com/molson835-ai/Autonomous-dev-ai/pull/45), head `2fa71e24cd8ecbd509e7933439ae8e7c7d9783cf`; [shared log branch](https://github.com/molson835-ai/Autonomous-dev-ai/tree/docs/shared-ai-build-notes-log).
+- **Owner decision:** pending
+- **Status:** verified findings; fixes required before PR #45 should be considered merge-ready.
+
+---
+
 Add new notes below this line, newest first. Keep each entry concise, factual,
 and linked to evidence. Do not rewrite another author's entry; append a correction
 or follow-up with a link to the original section.
