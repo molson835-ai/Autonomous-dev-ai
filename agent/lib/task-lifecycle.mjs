@@ -5,10 +5,19 @@ const TASK_STATUSES = Object.freeze([
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
 
-const MISSION_TASK_TYPES = new Set(["market_research", "product_development", "testing", "documentation", "customer_discovery", "customer_outreach", "offer_publication"]);
-const BLOCKED_MISSION_SCOPE = /\b(?:purchase|buy|spend|pay for|subscribe to|sign up for|create (?:an )?account|account creation|set up (?:a )?(?:payment|checkout)|accept payments?|charge customers?|transfer funds|access (?:a )?bank account|use (?:a )?credit card|place (?:an )?order|ship (?:goods|hardware|products)|deploy to production|production deployment|merge to main|access credentials|send bulk messages|bulk messaging|mass email)\b/i;
+const OWNER_DEFINED_SCOPE_IDS = Object.freeze({
+  market_research: "internal_research",
+  product_development: "internal_code_changes",
+  testing: "internal_tests",
+  documentation: "internal_docs"
+});
+const BLOCKED_MISSION_INTENT = /\b(?:purchas\w*|buy|bought|spend\w*|pay|paid|subscri\w*|registr\w*|sign[ -]?up|account|checkout|invoice|bill|charg\w*|card|bank|wire|transfer|deploy\w*|merge\w*|credential\w*|token|password|bulk|mass|contact\w*|outreach|email|message|publish|post|send|submit|ship\w*)\b/i;
 export function isMissionAuthorizedTask(input) {
-  return !!input && MISSION_TASK_TYPES.has(input.task_type) && typeof input.approved_scope === "string" && input.approved_scope.trim().length >= 3 && !BLOCKED_MISSION_SCOPE.test(input.approved_scope);
+  if (!input || OWNER_DEFINED_SCOPE_IDS[input.task_type] !== input.scope_id) return false;
+  const description = [input.title, input.goal, input.approved_scope]
+    .filter(value => typeof value === "string")
+    .join(" ");
+  return !BLOCKED_MISSION_INTENT.test(description);
 }
 const TRANSITIONS = Object.freeze({
   proposed: new Set(["queued", "cancelled"]),
@@ -54,6 +63,7 @@ export function validateTaskRecord(task) {
   }
   if (task.attempt_count > task.max_attempts) return { valid: false, reason: "attempt_budget_exceeded" };
   if (typeof task.mission_authorized !== "boolean") return { valid: false, reason: "missing_mission_authorization_state" };
+  if (task.scope_id != null && !nonEmpty(task.scope_id)) return { valid: false, reason: "invalid_scope_id" };
   if (task.mission_authorized === true && !isMissionAuthorizedTask(task)) return { valid: false, reason: "invalid_mission_authorized_scope" };
   if (task.status !== "proposed" && task.owner_approved !== true && task.mission_authorized !== true) {
     return { valid: false, reason: "unapproved_task_cannot_be_active" };
@@ -76,6 +86,7 @@ export function createTaskRecord(input, { now = new Date().toISOString(), maxAtt
     title: input.title,
     goal: input.goal,
     approved_scope: input.approved_scope,
+    scope_id: typeof input.scope_id === "string" ? input.scope_id : null,
     status: missionAuthorized === true ? "queued" : "proposed",
     owner_approved: false,
     mission_authorized: missionAuthorized === true,
