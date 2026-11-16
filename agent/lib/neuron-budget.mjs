@@ -4,5 +4,5 @@ export const MINIMUM_CALL_RESERVATION_NEURONS = 200;
 export function estimateGlm47FlashNeurons(inputTokens, outputTokens) {
   if (!Number.isFinite(inputTokens) || !Number.isFinite(outputTokens) || inputTokens < 0 || outputTokens < 0)
     return MINIMUM_CALL_RESERVATION_NEURONS;
-  return Math.max(MINIMUM_CALL_RESERVATION_NEURONS, Math.ceil(((inputTokens * INPUT_RATE + outputTokens * OUTPUT_RATE) / 1_000_000) * MARGIN));
+  return Math.ceil(((inputTokens * INPUT_RATE + outputTokens * OUTPUT_RATE) / 1_000_000) * MARGIN);
 }
