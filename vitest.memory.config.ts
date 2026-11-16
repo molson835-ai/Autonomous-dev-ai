@@ -11,7 +11,10 @@ export default defineConfig({
         // Test-only credential. Never read or reuse a deployed Worker secret.
         bindings: {
           MEMORY_API_TOKEN: "local-vitest-only-token",
-          TASK_OWNER_APPROVAL_TOKEN: "local-vitest-only-owner-token",
+          CLOUDFLARE_ACCOUNT_ID: "local-cloudflare-account-id",
+          CLOUDFLARE_ANALYTICS_API_TOKEN: "local-cloudflare-analytics-token",
+          OWNER_GITHUB_ID: "341732270",
+          OWNER_SESSION_SIGNING_SECRET: "local-owner-session-signing-secret-for-tests-only",
         },
       },
     }),
