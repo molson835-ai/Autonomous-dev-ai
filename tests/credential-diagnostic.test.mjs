@@ -21,9 +21,18 @@ test("diagnostic verifies account-owned token status before querying Analytics",
   assert.match(route, /totalNeurons/);
 });
 
+test("diagnostic preserves Cloudflare query errors instead of masking them as invalid data", () => {
+  const usageHandling = route.slice(route.indexOf("const usageResult"), route.indexOf("return Response.json"));
+  assert.match(usageHandling, /usageResult\.httpStatus < 200/);
+  assert.match(usageHandling, /usageResult\.errors\.length > 0/);
+  assert.match(usageHandling, /stageFailure\("quota_guard_query", usageResult\)/);
+  assert.match(usageHandling, /analytics_result_invalid/);
+  assert.match(route, /extensionCode \?\? \(e as any\)\.extensions\?\.code/);
+});
+
 test("diagnostic returns safe Cloudflare errors with sensitive values redacted", () => {
   assert.match(route, /safeErrors/);
-  assert.match(route, /replaceAll\(accountId, "\[account\]"\)/);
+  assert.match(route, /replaceAll\(accountId, "\\[account\\]"\)/);
   assert.match(route, /redacted-token/);
   assert.match(route, /cloudflareErrors: safeErrors\(/);
   assert.match(route, /errors: result\.errors/);
