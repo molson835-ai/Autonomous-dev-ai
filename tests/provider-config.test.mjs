@@ -16,9 +16,14 @@ test("Cloudflare Workers AI is the only configured model provider", () => {
   assert.equal(packageJson.dependencies["@ai-sdk/openai-compatible"], "^3.0.87");
 });
 
-test("provider configuration cannot silently use a real credential when unset", () => {
-  assert.match(agent, /"missing-account-id"/);
-  assert.match(agent, /"missing-api-token"/);
+test("provider configuration defers required credentials until the first model invocation", () => {
+  assert.match(agent, /function requireEnv\(name: string\): string/);
+  assert.match(agent, /requireEnv\("CLOUDFLARE_ACCOUNT_ID"\)/);
+  assert.match(agent, /requireEnv\("CLOUDFLARE_API_TOKEN"\)/);
+  assert.match(agent, /function getCloudflareModel\(\)/);
+  assert.match(agent, /doGenerate: async/);
+  assert.match(agent, /doStream: async/);
+  assert.doesNotMatch(agent, /missing-account-id|missing-api-token/);
   assert.doesNotMatch(agent, /fallback|backup|secondary/i);
 });
 
