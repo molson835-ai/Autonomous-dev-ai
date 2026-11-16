@@ -176,6 +176,29 @@ state and exact commit status before relying on them.
 
 ## Discussion log
 
+### 2026-11-16 — Implementation follow-up: task authorization and neuron settlement — ChatGPT
+
+- **Type:** implementation / security hardening
+- **Area:** task authorization, legacy task revocation, neuron quota accounting
+- **Evidence:** [PR #47](https://github.com/molson835-ai/Autonomous-dev-ai/pull/47), head `46990765343507aef0911ccff3fde55a784446b8`, stacked on PR #45 branch `fix/task-self-authorization-boundary-2026-11-16`.
+- **Changes:** disabled standing mission authorization in `agent/lib/task-lifecycle.mjs`; removed agent-selectable `scope_id` from `agent/tools/task_propose.ts`; Worker now rejects unknown `scope_id` input and creates all agent-submitted tasks as `proposed` with `owner_approved=false`; migration revokes all legacy `mission_authorized` flags and returns unapproved nonterminal tasks to `proposed` while preserving terminal and owner-approved task states. Quota reservation remains 200 neurons while in flight, but settlement accepts actual estimates from zero and charges actual usage rather than the reservation floor.
+- **Tests added/changed:** integration test for forged agent scope and no auto-claim; quota test for a 12-neuron settlement under a 200-neuron reservation; pure lifecycle test proving agent metadata cannot grant standing authorization. Exact-head CI has not yet been observed as completed; do not treat these changes as validated until CI passes.
+- **Security boundary:** this closes the direct `scope_id` self-authorization path by requiring owner approval for every new task. It does not prove that approved task goals are safe, nor does it provide per-task executor tool isolation or a sandbox.
+- **Upcoming hurdles / risks:**
+  1. **Stacked dependency:** PR #47 targets PR #45's branch, not `main`. PR #45 must be reviewed and merged first (with owner approval), or PR #47 must be retargeted/rebased after equivalent changes land. Avoid merging PR #47 directly to `main` before its base changes are incorporated.
+  2. **Legacy task migration is lazy:** revocation runs when the Durable Object initializes. It changes persisted task state but cannot forcibly stop an already-running external executor process. Before enabling task execution, add executor-side authorization checks and cancellation/revocation polling; verify running tasks are stopped at the executor boundary.
+  3. **No executor isolation yet:** approved tasks may still reach a broad shared tool set. Implement per-task capability allowlists, deny owner-only routes and secrets to the agent, validate tool calls at execution time, and add tests proving a task cannot escalate from read-only research into contact, publishing, purchases, payments, deployment, or account access.
+  4. **Quota is estimated, not provider-billed:** actual usage is derived from model token metadata and published rates plus margin, not a per-request Cloudflare invoice/receipt. Provider usage semantics and model rate changes can cause drift. Keep fail-closed behavior when usage is missing; unknown usage currently conservatively settles the full 200-neuron reservation.
+  5. **Cancelled/abandoned calls:** stream cancellation and process crashes can leave reservations outstanding. These holds can suppress future calls until cleanup or UTC-day rollover. Add an idempotent expiry/reconciliation path and settle cancelled streams using trustworthy observed usage where possible.
+  6. **Concurrent accounting:** preserve the invariant that active reservations are included while calls are in flight and that settlement atomically removes the reservation while adding actual usage. Add concurrency and crash-recovery tests before relying on the quota ceiling.
+  7. **Other outstanding review items remain:** W1 authoritative telemetry is still agent-fetched in the current quota guard and caller-supplied to the Worker; W3 projection math, W4 clock skew, T3 lease heartbeat, W5 memory poisoning, M1 secret scanning, A1 placeholder credentials, G3 cancellation, and A2 shared constants still require separate verification/fixes.
+- **Validation status:** code changes committed on the PR branch; CI pending/not yet confirmed for exact head SHA. No merge, deployment, purchase, customer contact, external publication, or permission expansion performed.
+- **Owner decision:** pending
+- **Status:** draft implementation; not merge-ready until exact-head CI, code review, stacked-PR sequencing, and outstanding executor/quota safeguards are addressed.
+
+---
+## Discussion log
+
 ### 2026-11-16 — Verification of Claude's PR #45 and quota findings — ChatGPT
 
 - **Type:** code review / verified findings
