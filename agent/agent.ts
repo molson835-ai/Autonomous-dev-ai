@@ -4,8 +4,14 @@ import { defineAgent } from "eve";
 import { createCloudflareNeuronGuard } from "./lib/cloudflare-neuron-guard";
 import { env } from "node:process";
 
-const accountId = env.CLOUDFLARE_ACCOUNT_ID ?? "missing-account-id";
-const apiToken = env.CLOUDFLARE_API_TOKEN ?? "missing-api-token";
+function requireEnv(name: string): string {
+  const value = env[name]?.trim();
+  if (!value) throw new Error("Missing required environment variable: " + name);
+  return value;
+}
+
+const accountId = requireEnv("CLOUDFLARE_ACCOUNT_ID");
+const apiToken = requireEnv("CLOUDFLARE_API_TOKEN");
 
 const cloudflare = createOpenAICompatible({
   name: "cloudflare-workers-ai",
