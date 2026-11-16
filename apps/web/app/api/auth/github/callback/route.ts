@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isConfiguredOwnerId, OWNER_GITHUB_LOGIN, OWNER_OAUTH_STATE_COOKIE, OWNER_SESSION_COOKIE } from "@/lib/owner-github";
+import { isConfiguredOwnerId, OWNER_OAUTH_STATE_COOKIE, OWNER_SESSION_COOKIE } from "@/lib/owner-github";
 
 export const runtime = "nodejs";
 
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     });
     if (!userResponse.ok) throw new Error("Could not verify the GitHub account.");
     const user: unknown = await userResponse.json();
-    if (!user || typeof user !== "object" || !("login" in user) || typeof user.login !== "string" || user.login.toLowerCase() !== OWNER_GITHUB_LOGIN || !("id" in user) || !isConfiguredOwnerId(user.id)) {
+    if (!user || typeof user !== "object" || !("login" in user) || typeof user.login !== "string" || !("id" in user) || !isConfiguredOwnerId(user.id)) {
       const response = redirectToOwner();
       response.cookies.set(OWNER_OAUTH_STATE_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
       return response;
