@@ -12,7 +12,6 @@ export default defineTool({
     title: z.string().trim().min(3).max(200),
     goal: z.string().trim().min(3).max(1000),
     approved_scope: z.string().trim().min(3).max(2000),
-    scope_id: z.enum(["owner_review_required", "public_web_research_no_contact", "local_prototype_no_external_effects", "automated_tests_no_external_effects", "documentation_only"]).default("owner_review_required"),
   }),
   async execute(input) {
     assertProductionTaskRuntime();
