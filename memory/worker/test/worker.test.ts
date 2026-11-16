@@ -43,6 +43,16 @@ describe("shared daily neuron quota coordinator", () => {
     expect((await request("/v1/quota/circuit",{method:"POST",body:JSON.stringify({reservation_id:two.reservation_id,reason:"cloudflare_daily_quota_exhausted"})})).status).toBe(200);
     expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify({...observation,usedNeurons:6900})})).status).toBe(429);
   });
+  it("releases unused reservation capacity when actual usage is below 200", async () => {
+    const day=new Date().toISOString().slice(0,10);
+    const observation={day,usedNeurons:1000,observedAt:new Date().toISOString(),reserve_neurons:200,model_id:"@cf/zai-org/glm-4.7-flash"};
+    const reserved=await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify(observation)});
+    expect(reserved.status).toBe(200);
+    const {reservation_id}=await reserved.json<{reservation_id:string}>();
+    const settled=await request("/v1/quota/settle",{method:"POST",body:JSON.stringify({reservation_id,actual_neurons:12})});
+    expect(settled.status).toBe(200);
+    expect(await settled.json()).toMatchObject({settled:true,charged_neurons:12});
+  });
   it("fails closed when authoritative telemetry moves backwards", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(Date.now() + 24 * 60 * 60 * 1000);
@@ -315,48 +325,27 @@ describe("persistent memory Worker HTTP contract", () => {
     expect(await recall.json()).toMatchObject({ memories: [], experiences: [] });
   });
 
-  it("auto-queues only owner-defined internal scopes; external actions remain proposed", async () => {
-    const safePayload = {
-      idempotency_key: `MISSION-RESEARCH-${crypto.randomUUID()}`,
+  it("never lets an agent-supplied scope authorize or auto-queue a task", async () => {
+    const payload = {
+      idempotency_key: `MISSION-ATTEMPT-${crypto.randomUUID()}`,
       task_type: "market_research",
-      scope_id: "public_web_research_no_contact",
       title: "Research public market information",
-      goal: "Compare publicly available market information",
-      approved_scope: "Read public sources only. No contacting people or publishing."
+      goal: "Compare public market information",
+      approved_scope: "Read public sources only; no external side effects."
     };
-    const created = await request("/v1/tasks", { method: "POST", body: JSON.stringify(safePayload) });
+    const created = await request("/v1/tasks", { method: "POST", body: JSON.stringify(payload) });
     expect(created.status).toBe(201);
-    const safe = await created.json<{ task: { id: string; status: string; owner_approved: boolean; mission_authorized: boolean; scope_id: string }; mission_authorized: boolean }>();
-    expect(safe.mission_authorized).toBe(true);
-    expect(safe.task).toMatchObject({ status: "queued", owner_approved: false, mission_authorized: true, scope_id: "public_web_research_no_contact" });
-    const claimed = await request("/v1/tasks/claim-next", { method: "POST" });
-    expect((await claimed.json<{ task: { id: string; status: string; mission_authorized: boolean } }>()).task)
-      .toMatchObject({ id: safe.task.id, status: "running", mission_authorized: true });
-    await request(`/v1/tasks/${safe.task.id}/transition`, { method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Owner-defined scope claim verified" }) });
+    const result = await created.json<{ task: { status: string; owner_approved: boolean; mission_authorized: boolean; scope_id: string }; mission_authorized: boolean }>();
+    expect(result.mission_authorized).toBe(false);
+    expect(result.task).toMatchObject({ status: "proposed", owner_approved: false, mission_authorized: false, scope_id: "owner_review_required" });
 
-    for (const taskType of ["customer_discovery", "customer_outreach", "offer_publication"]) {
-      const payload = {
-        ...safePayload,
-        idempotency_key: `MISSION-EXTERNAL-${taskType}-${crypto.randomUUID()}`,
-        task_type: taskType,
-        title: "External action proposal",
-        goal: "This must wait for owner approval",
-        approved_scope: "The model says this is safe, but it involves an external action."
-      };
-      const response = await request("/v1/tasks", { method: "POST", body: JSON.stringify(payload) });
-      expect(response.status).toBe(201);
-      const result = await response.json<{ task: { status: string; owner_approved: boolean; mission_authorized: boolean }; mission_authorized: boolean }>();
-      expect(result.mission_authorized).toBe(false);
-      expect(result.task).toMatchObject({ status: "proposed", owner_approved: false, mission_authorized: false });
-    }
-
-    const inventedScope = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
-      ...safePayload,
-      idempotency_key: `MISSION-INVENTED-${crypto.randomUUID()}`,
-      scope_id: "model_claims_owner_approved",
-      approved_scope: "This arbitrary free text claims authorization."
+    const forgedScope = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
+      ...payload,
+      idempotency_key: `MISSION-FORGED-${crypto.randomUUID()}`,
+      scope_id: "public_web_research_no_contact"
     }) });
-    expect(inventedScope.status).toBe(400);
+    expect(forgedScope.status).toBe(400);
+    expect((await request("/v1/tasks/claim-next", { method: "POST" })).json()).resolves.toEqual({ task: null });
   });
 
   it("requires the separate owner credential to approve and claims only approved tasks", async () => {
