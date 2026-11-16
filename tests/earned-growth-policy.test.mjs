@@ -4,6 +4,7 @@ import {
   EARNED_GROWTH_CAPABILITIES,
   evaluateExpenseApproval,
   evaluateHardwarePurchaseApproval,
+  evaluateSkillResourceAction,
   validateRevenueRecord,
   validateServiceExperiment,
   validateSkillEvidence,
@@ -95,11 +96,57 @@ test("hardware expenses require exact owner approval, net cleared business funds
   assert.equal(evaluateHardwarePurchaseApproval(base).allowed, true);
 });
 
-test("customer discovery and truthful offer publication are delegated; financial authority is not", () => {
-  assert.equal(EARNED_GROWTH_CAPABILITIES.mayContactCustomers, true);
-  assert.equal(EARNED_GROWTH_CAPABILITIES.mayPublishOffers, true);
+test("skill growth is autonomous while customer contact and publishing remain owner-approved", () => {
+  assert.equal(EARNED_GROWTH_CAPABILITIES.mayDiscoverSkills, true);
+  assert.equal(EARNED_GROWTH_CAPABILITIES.mayAcquireNoCostSkillResources, true);
+  assert.equal(EARNED_GROWTH_CAPABILITIES.mayInspectAndPracticeSkills, true);
+  assert.equal(EARNED_GROWTH_CAPABILITIES.mayIntegrateReviewedSkillsWithinExistingPermissions, true);
+  assert.equal(EARNED_GROWTH_CAPABILITIES.mayPrepareOutreachDrafts, true);
+  assert.equal(EARNED_GROWTH_CAPABILITIES.mayContactCustomers, false);
+  assert.equal(EARNED_GROWTH_CAPABILITIES.mayPublishOffers, false);
   assert.equal(EARNED_GROWTH_CAPABILITIES.mayAcceptPayments, false);
   assert.equal(EARNED_GROWTH_CAPABILITIES.mayAccessFinancialAccounts, false);
   assert.equal(EARNED_GROWTH_CAPABILITIES.mayPurchase, false);
   assert.equal(EARNED_GROWTH_CAPABILITIES.mayDeployProduction, false);
+});
+
+test("Eve may autonomously discover, retrieve, and inspect no-cost skill resources", () => {
+  for (const action of ["discover", "retrieve", "inspect"]) {
+    assert.deepEqual(evaluateSkillResourceAction({ action, noCost: true }), {
+      allowed: true,
+      requiresOwnerApproval: false,
+      reason: "Within the existing skill-growth delegation and permission scope.",
+    });
+  }
+});
+
+test("practice and sandbox tests require isolation", () => {
+  assert.equal(evaluateSkillResourceAction({ action: "practice", noCost: true }).requiresOwnerApproval, true);
+  assert.equal(evaluateSkillResourceAction({ action: "practice", noCost: true, isolated: true }).allowed, true);
+  assert.equal(evaluateSkillResourceAction({ action: "sandbox_test", noCost: true, isolated: true }).allowed, true);
+});
+
+test("reviewed skill integration is allowed only within existing permissions", () => {
+  assert.equal(evaluateSkillResourceAction({
+    action: "integrate", noCost: true, reviewed: true, existingPermissionsOnly: true,
+  }).allowed, true);
+  assert.equal(evaluateSkillResourceAction({
+    action: "integrate", noCost: true, reviewed: true, existingPermissionsOnly: false,
+  }).requiresOwnerApproval, true);
+});
+
+test("possible conflicts, behavior changes, sensitive access, external effects, and costs require owner approval", () => {
+  for (const flag of [
+    "conflictsWithExistingRules", "changesEstablishedBehavior", "expandsPermissions",
+    "accessesSensitiveData", "externalSideEffects", "incursCost", "accessesSecrets",
+    "productionChanges", "executesUntrustedCodeOutsideSandbox", "unknownRisk",
+  ]) {
+    const result = evaluateSkillResourceAction({ action: "inspect", noCost: true, [flag]: true });
+    assert.equal(result.allowed, false, flag);
+    assert.equal(result.requiresOwnerApproval, true, flag);
+  }
+  assert.equal(evaluateSkillResourceAction({ action: "retrieve", noCost: false }).requiresOwnerApproval, true);
+  assert.equal(evaluateSkillResourceAction({ action: "enable_tool", noCost: true }).requiresOwnerApproval, true);
+  assert.equal(evaluateSkillResourceAction({ action: "grant_permission", noCost: true }).requiresOwnerApproval, true);
+  assert.equal(evaluateSkillResourceAction({ action: "unknown", noCost: true }).requiresOwnerApproval, true);
 });
