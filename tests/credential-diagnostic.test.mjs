@@ -22,7 +22,11 @@ test("diagnostic verifies account-owned token status before querying Analytics",
 });
 
 test("diagnostic preserves Cloudflare query errors instead of masking them as invalid data", () => {
-  const usageHandling = route.slice(route.indexOf("const usageResult"), route.indexOf("return Response.json"));
+  const usageStart = route.indexOf("const usageResult = await graphql");
+  const responseStart = route.indexOf("\n    return Response.json(", usageStart);
+  assert.ok(usageStart >= 0, "quota query must exist");
+  assert.ok(responseStart > usageStart, "diagnostic response must follow quota query");
+  const usageHandling = route.slice(usageStart, responseStart);
   assert.match(usageHandling, /usageResult\.httpStatus < 200/);
   assert.match(usageHandling, /usageResult\.errors\.length > 0/);
   assert.match(usageHandling, /stageFailure\("quota_guard_query", usageResult\)/);
