@@ -36,14 +36,30 @@ jobs:
       - name: Verify Worker bundle before publishing
         run: npx --yes wrangler@4 deploy --dry-run --config memory/worker/wrangler.jsonc
 
-      - name: Deploy Worker with repository bindings
+      - name: Deploy Worker with synchronized memory API credential
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID }}
+          MEMORY_API_TOKEN: ${{ secrets.MEMORY_API_TOKEN }}
         run: |
+          set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN" || { echo "Missing CLOUDFLARE_API_TOKEN GitHub Actions secret."; exit 1; }
           test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "Missing CLOUDFLARE_ACCOUNT_ID secret or repository variable."; exit 1; }
+          test -n "$MEMORY_API_TOKEN" || { echo "Missing MEMORY_API_TOKEN in the cloudflare-production GitHub environment. Set it to the same value as Vercel Production MEMORY_API_TOKEN."; exit 1; }
+          printf '%s' "$MEMORY_API_TOKEN" | npx --yes wrangler@4 secret put MEMORY_API_TOKEN --config memory/worker/wrangler.jsonc
           npx --yes wrangler@4 deploy --config memory/worker/wrangler.jsonc
+
+      - name: Verify authenticated persistent-memory access
+        env:
+          MEMORY_API_TOKEN: ${{ secrets.MEMORY_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --output /tmp/memory-auth.json --write-out '%{http_code}' \
+            "https://autonomous-dev-memory.molson835.workers.dev/v1/recall?q=deployment-smoke-test" \
+            --header "Authorization: Bearer $MEMORY_API_TOKEN")"
+          test "$status" = "200" || { cat /tmp/memory-auth.json; echo "Authenticated memory read failed with HTTP $status."; exit 1; }
+          echo "Authenticated persistent-memory read passed."
 
       - name: Verify public owner-console CORS preflight and fail-closed auth
         shell: bash
