@@ -1,8 +1,12 @@
 const SECRET_PATTERNS = [
-  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/i,
-  /\bBearer\s+[A-Za-z0-9._~+\/-]{16,}/i,
-  /\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|client[_-]?secret)\s*[:=]\s*[^\s,;]{8,}/i,
+  /-----BEGIN [A-Z ]*PRIVATE KEY(?: BLOCK)?-----/i,
+  /\bBearer\s+[A-Za-z0-9._~+\/=-]{16,}/i,
+  /(?:api[_-]?key|api[_-]?token|access[_-]?token|refresh[_-]?token|auth[_-]?token|secret(?:[_-]?key)?|client[_-]?secret|password|passwd|private[_-]?key)["']?\s*[:=]\s*["']?[^\s"',;]{8,}/i,
   /\bsk-[A-Za-z0-9_-]{16,}/i,
+  /\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{20,})/,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /\bxox[abprs]-[A-Za-z0-9-]{10,}/,
+  /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/,
 ];
 
 export function isSafeMemoryText(value, maxLength = 6000) {
