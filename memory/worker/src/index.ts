@@ -147,14 +147,16 @@ export class MemoryStore extends DurableObject<Env> {
     if (request.method === "POST" && url.pathname === "/v1/tasks") {
       const body = await readBody(request);
       const allowed = new Set(["idempotency_key", "task_type", "title", "goal", "approved_scope", "scope_id"]);
-      if (!body || Object.keys(body).some(key => !allowed.has(key)) ||
+      const allowedScopeIds = new Set(["owner_review_required", "public_web_research_no_contact", "local_prototype_no_external_effects", "automated_tests_no_external_effects", "documentation_only"]);
+      const requestedScopeId = typeof body?.scope_id === "string" ? body.scope_id.trim() : "owner_review_required";
+      if (!body || Object.keys(body).some(key => !allowed.has(key)) || !allowedScopeIds.has(requestedScopeId) ||
           !isSafeMemoryText(body.idempotency_key, 200) || !isSafeMemoryText(body.task_type, 80) ||
           !isSafeMemoryText(body.title, 200) || !isSafeMemoryText(body.goal, 1000) ||
           !isSafeMemoryText(body.approved_scope, 2000)) return json({ error: "Invalid task proposal." }, 400);
       const key = String(body.idempotency_key).trim();
       const existing = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE idempotency_key = ? LIMIT 1", key).toArray()[0];
       if (existing) return json({ task: taskFromRow(existing), created: false });
-      const taskInput = { idempotency_key: key, task_type: String(body.task_type).trim(), title: String(body.title).trim(), goal: String(body.goal).trim(), approved_scope: String(body.approved_scope).trim(), scope_id: typeof body.scope_id === "string" ? body.scope_id.trim() : "owner_review_required" };
+      const taskInput = { idempotency_key: key, task_type: String(body.task_type).trim(), title: String(body.title).trim(), goal: String(body.goal).trim(), approved_scope: String(body.approved_scope).trim(), scope_id: requestedScopeId };
       const missionAuthorized = isMissionAuthorizedTask(taskInput);
       const task = createTaskRecord({ id: crypto.randomUUID(), ...taskInput }, { now, missionAuthorized });
       this.ctx.storage.sql.exec("INSERT INTO tasks (id,idempotency_key,task_type,title,goal,approved_scope,scope_id,status,owner_approved,mission_authorized,created_at,updated_at,attempt_count,max_attempts,next_run_at,checkpoint_summary,result_summary,evidence_refs,started_at,finished_at) VALUES (?,?,?,?,?,?,?,?,0,?,?,?,0,?,NULL,NULL,NULL,'[]',NULL,NULL)", task.id, task.idempotency_key, task.task_type, task.title, task.goal, task.approved_scope, task.scope_id, task.status, missionAuthorized ? 1 : 0, task.created_at, task.updated_at, task.max_attempts);
