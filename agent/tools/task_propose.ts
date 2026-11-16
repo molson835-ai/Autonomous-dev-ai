@@ -5,13 +5,14 @@ import { assertProductionTaskRuntime } from "../lib/task-runtime.mjs";
 
 export default defineTool({
   description:
-    "Create a bounded task under EVE’s standing revenue mission. Safe allowlisted task types (market_research, product_development, testing, documentation, customer_discovery, customer_outreach, offer_publication) are automatically queued under the owner-delegated mandate when the scope contains no financial commitment or prohibited action. Other task types remain proposed for owner review. This does not authorize purchases, payments, paid services, account access, Production deployment, or any expense. Outreach/publication may use only tools actually available in this runtime and must be truthful, relevant, lawful, privacy-respecting, and platform-compliant; if no action tool exists, prepare drafts and record the blocker.",
+    "Create a bounded task. Eve cannot authorize its own tasks through free-text scope. Only owner-defined scope IDs are eligible for automatic queueing: market_research + public_web_research_no_contact; product_development + local_prototype_no_external_effects; testing + automated_tests_no_external_effects; documentation + documentation_only. All other tasks, including customer discovery, outreach, and offer publication, remain proposed until the owner explicitly approves them. The scope_id is a fixed policy reference, not a permission grant. This does not authorize purchases, payments, paid services, account access, external contact/publication, Production deployment, or expenses.",
   inputSchema: z.object({
     idempotency_key: z.string().trim().min(8).max(200),
     task_type: z.string().trim().min(3).max(80),
     title: z.string().trim().min(3).max(200),
     goal: z.string().trim().min(3).max(1000),
     approved_scope: z.string().trim().min(3).max(2000),
+    scope_id: z.enum(["owner_review_required", "public_web_research_no_contact", "local_prototype_no_external_effects", "automated_tests_no_external_effects", "documentation_only"]).default("owner_review_required"),
   }),
   async execute(input) {
     assertProductionTaskRuntime();
