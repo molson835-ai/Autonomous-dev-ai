@@ -22,7 +22,7 @@ test("diagnostic verifies account-owned token status before querying Analytics",
 
 test("diagnostic returns safe Cloudflare errors with sensitive values redacted", () => {
   assert.match(route, /safeErrors/);
-  assert.match(route, /replaceAll\(accountId, "\\[account\\]"\)/);
+  assert.match(route, /replaceAll\(accountId, "\[account\]"\)/);
   assert.match(route, /redacted-token/);
   assert.match(route, /cloudflareErrors: safeErrors\(/);
   assert.match(route, /errors: result\.errors/);
