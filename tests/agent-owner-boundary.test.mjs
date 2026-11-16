@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const FORBIDDEN = /TASK_OWNER_APPROVAL_TOKEN|\/decision|\/approve|\/owner-control|\/v1\/owner\//;
+const FORBIDDEN = /TASK_OWNER_APPROVAL_TOKEN|OWNER_SESSION_SIGNING_SECRET|\/decision|\/approve|\/owner-control|\/v1\/owner\//;
 
 function files(dir) {
   return readdirSync(dir).flatMap(name => {
