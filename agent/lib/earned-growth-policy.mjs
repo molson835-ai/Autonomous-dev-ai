@@ -98,14 +98,74 @@ export function evaluateHardwarePurchaseApproval(request) {
   return { ...result, action: "authorized_exact_hardware_expense", shippingDestination: request.shippingDestination };
 }
 
+const AUTONOMOUS_SKILL_ACTIONS = new Set(["discover", "retrieve", "inspect", "practice", "sandbox_test"]);
+const REVIEWED_SKILL_ACTIONS = new Set(["integrate", "activate", "install_dependency"]);
+const SKILL_ACTIONS = new Set([...AUTONOMOUS_SKILL_ACTIONS, ...REVIEWED_SKILL_ACTIONS, "enable_tool", "grant_permission"]);
+
+const SKILL_CONFLICT_FLAGS = [
+  "conflictsWithExistingRules",
+  "changesEstablishedBehavior",
+  "expandsPermissions",
+  "accessesSensitiveData",
+  "externalSideEffects",
+  "incursCost",
+  "accessesSecrets",
+  "productionChanges",
+  "executesUntrustedCodeOutsideSandbox",
+  "unknownRisk",
+];
+
+/**
+ * Evaluates whether a skill-resource step fits Eve's standing skill-growth
+ * delegation. This is a policy decision helper, not an installer or executor.
+ */
+export function evaluateSkillResourceAction(request) {
+  const action = request?.action;
+  if (!SKILL_ACTIONS.has(action)) {
+    return { allowed: false, requiresOwnerApproval: true, reason: "Unknown skill action; owner review is required." };
+  }
+
+  const conflicts = SKILL_CONFLICT_FLAGS.filter((flag) => request?.[flag] === true);
+  if (conflicts.length > 0) {
+    return {
+      allowed: false,
+      requiresOwnerApproval: true,
+      reason: `Potential conflict or authority expansion: ${conflicts.join(", ")}.`,
+    };
+  }
+  if (request?.noCost !== true) {
+    return { allowed: false, requiresOwnerApproval: true, reason: "No-cost status is not verified." };
+  }
+  if (action === "enable_tool" || action === "grant_permission") {
+    return { allowed: false, requiresOwnerApproval: true, reason: "Enabling tools or granting permissions requires owner approval." };
+  }
+  if (action === "practice" || action === "sandbox_test" || action === "install_dependency") {
+    if (request?.isolated !== true) {
+      return { allowed: false, requiresOwnerApproval: true, reason: "An isolated environment is required before practice, testing, or dependency installation." };
+    }
+  }
+  if (REVIEWED_SKILL_ACTIONS.has(action)) {
+    if (request?.reviewed !== true || request?.existingPermissionsOnly !== true) {
+      return { allowed: false, requiresOwnerApproval: true, reason: "Integration requires a reviewed resource and confirmation that it uses only existing permissions." };
+    }
+  }
+  return { allowed: true, requiresOwnerApproval: false, reason: "Within the existing skill-growth delegation and permission scope." };
+}
+
 export const EARNED_GROWTH_CAPABILITIES = Object.freeze({
   mayResearch: true,
   mayPrepareDrafts: true,
   mayRecordExperiments: true,
   mayRecordVerifiedRevenueEvidence: true,
-  // Delegated business activity: only truthful, relevant, lawful and compliant.
-  mayContactCustomers: true,
-  mayPublishOffers: true,
+  // Skill growth is delegated when no-cost, isolated where needed, and within existing permissions.
+  mayDiscoverSkills: true,
+  mayAcquireNoCostSkillResources: true,
+  mayInspectAndPracticeSkills: true,
+  mayIntegrateReviewedSkillsWithinExistingPermissions: true,
+  // External customer activity remains owner-approved.
+  mayPrepareOutreachDrafts: true,
+  mayContactCustomers: false,
+  mayPublishOffers: false,
   // Payment acceptance remains disabled until a no-user-liability payment path
   // and its fees, account ownership, and refund handling are independently verified.
   mayAcceptPayments: false,
