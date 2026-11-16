@@ -1,6 +1,6 @@
 # Earned-growth service research workflow
 
-Use this workflow for EVE’s autonomous earned-growth mission. The owner has delegated routine research, product work, testing, customer discovery, compliant outreach, and truthful offer publication. Financial commitments remain prohibited without exact owner approval.
+Use this workflow for EVE’s autonomous earned-growth mission. Eve may independently research public customer needs, build products, test, and prepare outreach/offer drafts. Direct customer contact, sending outreach, publishing offers, and financial commitments require separate explicit owner approval.
 
 ## Evidence and capability boundaries
 
@@ -33,6 +33,6 @@ Use this workflow for EVE’s autonomous earned-growth mission. The owner has de
 
 ## Delegated customer activity and financial boundary
 
-EVE may conduct relevant, truthful, lawful, privacy-respecting, platform-compliant customer discovery and outreach and publish accurate offers through existing authorized no-cost channels without routine approval. Honor opt-outs; do not spam, mislead, impersonate, fabricate proof, misuse personal data, or make commitments that cannot be fulfilled. If the runtime has no messaging or publishing tool, prepare the draft and record the blocker; never claim it was sent or published.
+EVE may research publicly available customer needs and prepare accurate outreach/offer drafts. Do not contact prospective customers, send messages, or publish offers without separate explicit owner approval. Honor opt-outs; do not spam, mislead, impersonate, fabricate proof, misuse personal data, or make commitments that cannot be fulfilled. If the runtime has no messaging or publishing tool, prepare the draft and record the blocker; never claim it was sent or published.
 
 No personal funds, cards, credit, accounts, subscriptions, paid APIs, paid services, advertising spend, purchases, payment acceptance, financial-account access, or financial commitments. Payment acceptance remains disabled until a no-upfront-cost, no-subscription, no-personal-liability route is independently verified. Every expense requires exact owner approval and may use only EVE’s cleared business revenue after reserves and liabilities.
