@@ -54,6 +54,51 @@ describe("shared daily neuron quota coordinator", () => {
   });
 });
 
+describe("owner OAuth app and immutable identity verification", () => {
+  it("accepts only a token issued to the configured OAuth app and immutable owner ID", async () => {
+    const fakeFetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/applications/local-owner-oauth-app/token")) {
+        return new Response(JSON.stringify({ app: { client_id: "local-owner-oauth-app" } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ id: 12345678, login: "renamed-owner-login" }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fakeFetch);
+    try {
+      const response = await request("/v1/owner/status", {}, "oauth-token-issued-to-configured-app");
+      expect(response.status).toBe(200);
+      expect(fakeFetch).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("rejects tokens from another OAuth app and accounts with a different immutable ID", async () => {
+    const wrongAppFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ app: { client_id: "another-oauth-app" } }), { status: 200 })
+    );
+    vi.stubGlobal("fetch", wrongAppFetch);
+    try {
+      expect((await request("/v1/owner/status", {}, "oauth-token-from-another-app")).status).toBe(401);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    const wrongOwnerFetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/applications/local-owner-oauth-app/token")) {
+        return new Response(JSON.stringify({ app: { client_id: "local-owner-oauth-app" } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ id: 87654321, login: "same-login-is-not-trusted" }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", wrongOwnerFetch);
+    try {
+      expect((await request("/v1/owner/status", {}, "oauth-token-for-wrong-account")).status).toBe(401);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe("persistent memory Worker HTTP contract", () => {
   it("rejects requests without the test credential", async () => {
     const response = await exports.default.fetch(
