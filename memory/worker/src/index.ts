@@ -80,6 +80,12 @@ export class MemoryStore extends DurableObject<Env> {
       if (!taskColumns.some(column => column.name === "scope_id")) {
         ctx.storage.sql.exec("ALTER TABLE tasks ADD COLUMN scope_id TEXT");
       }
+      // Revoke legacy standing-mission authorization: older rows have no
+      // owner-defined scope ID, so none may remain runnable under the new policy.
+      ctx.storage.sql.exec(
+        "UPDATE tasks SET status=CASE WHEN owner_approved=0 AND status IN ('queued','running','waiting','paused') THEN 'proposed' ELSE status END, mission_authorized=0, updated_at=? WHERE mission_authorized=1 AND scope_id IS NULL",
+        new Date().toISOString()
+      );
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS task_control (id INTEGER PRIMARY KEY CHECK (id=1), queue_paused INTEGER NOT NULL CHECK (queue_paused IN (0,1)), reason TEXT, updated_at TEXT NOT NULL)");
       ctx.storage.sql.exec("INSERT OR IGNORE INTO task_control (id,queue_paused,reason,updated_at) VALUES (1,0,NULL,?)", new Date().toISOString());
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS quota_daily (day TEXT PRIMARY KEY, baseline_neurons REAL NOT NULL, observed_neurons REAL NOT NULL, observed_at TEXT NOT NULL, local_estimated_neurons REAL NOT NULL DEFAULT 0, circuit_open INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)");
@@ -473,7 +479,7 @@ function decodeBase64Url(value: string): Uint8Array {
 async function isAuthorizedOwnerSession(token: string, env: Env): Promise<boolean> {
   const secret = env.OWNER_SESSION_SIGNING_SECRET ?? "";
   const ownerId = env.OWNER_GITHUB_ID ?? "";
-  if (!token || token.length > 2048 || secret.length < 32 || !/^\\d+$/.test(ownerId)) return false;
+  if (!token || token.length > 2048 || secret.length < 32 || !/^\d+$/.test(ownerId)) return false;
   const parts = token.split(".");
   if (parts.length !== 2 || !parts[0] || !parts[1]) return false;
   try {
