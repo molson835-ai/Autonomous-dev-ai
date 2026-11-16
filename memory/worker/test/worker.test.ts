@@ -345,7 +345,8 @@ describe("persistent memory Worker HTTP contract", () => {
       scope_id: "public_web_research_no_contact"
     }) });
     expect(forgedScope.status).toBe(400);
-    expect((await request("/v1/tasks/claim-next", { method: "POST" })).json()).resolves.toEqual({ task: null });
+    const claim = await request("/v1/tasks/claim-next", { method: "POST" });
+    expect(await claim.json()).toEqual({ task: null });
   });
 
   it("requires the separate owner credential to approve and claims only approved tasks", async () => {
