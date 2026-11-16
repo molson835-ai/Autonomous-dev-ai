@@ -7,9 +7,10 @@ This milestone defines pure, testable task metadata and state-transition rules. 
 ## Safety properties
 
 - New tasks start as `proposed` and unapproved.
-- The only exception to individual task approval is the narrow standing mission allowlist: a task type must match an owner-defined `scope_id` in `agent/lib/task-lifecycle.mjs`. Free-text scope written by Eve never grants authority.
-- Customer discovery involving contact, customer outreach, and offer publication always require explicit owner approval.
-- Existing tasks created under the old free-text mission authorization are demoted to `proposed` during the Worker schema migration unless they match a fixed owner-defined scope ID.
+- Every task requires explicit owner approval. Standing mission authorization is disabled until a trusted owner-controlled delegation mechanism is designed, authenticated, and tested.
+- The agent-facing task proposal API does not accept `scope_id`; any attempt to submit one is rejected.
+- Customer discovery involving contact, customer outreach, offer publication, purchases, payments, and external side effects always require explicit owner approval.
+- Existing mission-authorized tasks are revoked during Worker initialization. Unapproved nonterminal tasks are returned to `proposed`; owner-approved tasks retain their state. Historical task metadata is preserved.
 - Only approved queued tasks are eligible for selection.
 - The selector returns at most one task and refuses to select another while any task is running.
 - Idempotency keys allow a future persistent store to return an existing task instead of inserting a duplicate.
@@ -28,7 +29,7 @@ A running task may instead become `paused`, `succeeded`, `failed`, or `cancelled
 
 - Three attempts maximum.
 - One active task at a time.
-- No agent self-approval or free-text self-authorization. Automatic queueing is limited to the four fixed internal-only scope IDs. Task creation remains bounded and idempotent.
+- No agent self-approval or self-authorization. Automatic queueing from agent-created task proposals is disabled; owner approval is mandatory. Task creation remains bounded and idempotent.
 - No secrets should be placed in task metadata, checkpoints, or summaries.
 - The helper functions do not persist state or make transitions atomic; these are mandatory responsibilities of the next storage/API layer.
 
