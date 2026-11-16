@@ -32,7 +32,7 @@ test("diagnostic preserves Cloudflare query errors instead of masking them as in
 
 test("diagnostic returns safe Cloudflare errors with sensitive values redacted", () => {
   assert.match(route, /safeErrors/);
-  assert.match(route, /replaceAll\(accountId, "\\[account\\]"\)/);
+  assert.match(route, /replaceAll\(accountId, "\[account\]"\)/);
   assert.match(route, /redacted-token/);
   assert.match(route, /cloudflareErrors: safeErrors\(/);
   assert.match(route, /errors: result\.errors/);
