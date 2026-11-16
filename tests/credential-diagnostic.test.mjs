@@ -9,15 +9,25 @@ test("Cloudflare credential diagnostic is operator-authenticated and read-only",
   assert.match(route, /EVE_DIAGNOSTIC_TOKEN/);
   assert.match(route, /timingSafeEqual/);
   assert.ok(route.includes('authorization: "Bearer " + apiToken'));
-  assert.ok(route.includes("https://api.cloudflare.com/client/v4/graphql"));
-  assert.doesNotMatch(route, /\/ai\/v1|Workers AI|generateText|streamText/);
+  assert.ok(route.includes("/graphql"));
+  assert.doesNotMatch(route, /\/ai\/v1|generateText|streamText/);
 });
 
-test("diagnostic response exposes only credential permission status, never token or usage", () => {
-  assert.ok(route.includes('credential: "valid"'));
-  assert.ok(route.includes('permission: "analytics_read"'));
-  assert.ok(!route.includes("totalNeurons:"));
-  assert.ok(!route.includes("apiToken:"));
-  assert.ok(!route.includes("accountId:"));
+test("diagnostic verifies account-owned token status before querying Analytics", () => {
+  assert.match(route, /\/accounts\/\$\{accountId\}\/tokens\/verify/);
+  assert.match(route, /tokenStatus !== "active"/);
+  assert.match(route, /aiInferenceAdaptiveGroups/);
+  assert.match(route, /totalNeurons/);
+});
+
+test("diagnostic returns safe Cloudflare errors with sensitive values redacted", () => {
+  assert.match(route, /safeCloudflareErrors/);
+  assert.match(route, /replaceAll\(accountId, "\[account\]"\)/);
+  assert.match(route, /redacted-token/);
+  assert.match(route, /cloudflareErrors: errors/);
   assert.match(route, /Cache-Control.*no-store/);
+  // Local variable/type names are fine; credential/account values must not be
+  // emitted as named response fields.
+  assert.doesNotMatch(route, /\bapiToken\s*:/);
+  assert.doesNotMatch(route, /\baccountId\s*:\s*accountId\b/);
 });
