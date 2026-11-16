@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { fetchDailyCloudflareNeuronUsage } from "../../../agent/lib/cloudflare-analytics.mjs";
 import { isSafeMemoryText, normalizeMemoryQuery } from "../../../agent/lib/memory-policy.mjs";
 import { ensureExperienceExternalIdColumn, findExperienceByExternalId } from "../../../agent/lib/memory-schema.mjs";
 import { createTaskRecord, isMissionAuthorizedTask, isTaskLeaseExpired, selectNextTask, TASK_STATUS_VALUES, transitionTask } from "../../../agent/lib/task-lifecycle.mjs";
@@ -6,14 +7,17 @@ import { createTaskRecord, isMissionAuthorizedTask, isTaskLeaseExpired, selectNe
 interface Env {
   MEMORY: DurableObjectNamespace<MemoryStore>;
   MEMORY_API_TOKEN: string;
-  TASK_OWNER_APPROVAL_TOKEN?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_ANALYTICS_API_TOKEN?: string;
+  OWNER_GITHUB_ID?: string;
+  OWNER_SESSION_SIGNING_SECRET?: string;
 }
 
 type MemoryRow = {
   id: string; kind: string; content: string; source: string;
   confidence: number; status: string; created_at: string; updated_at: string;
 };
-type TaskRow = { id: string; idempotency_key: string; task_type: string; title: string; goal: string; approved_scope: string; status: string; owner_approved: number; mission_authorized: number; created_at: string; updated_at: string; attempt_count: number; max_attempts: number; next_run_at: string | null; checkpoint_summary: string | null; result_summary: string | null; evidence_refs: string; started_at: string | null; finished_at: string | null; };
+type TaskRow = { id: string; idempotency_key: string; task_type: string; title: string; goal: string; approved_scope: string; scope_id: string | null; status: string; owner_approved: number; mission_authorized: number; created_at: string; updated_at: string; attempt_count: number; max_attempts: number; next_run_at: string | null; checkpoint_summary: string | null; result_summary: string | null; evidence_refs: string; started_at: string | null; finished_at: string | null; };
 type ExperienceRow = {
   id: string; external_id: string | null; task: string; outcome: string; result: string;
   evidence: string; created_at: string;
@@ -54,8 +58,10 @@ function boundedLimit(value: string | null, fallback = 8): number {
 }
 
 export class MemoryStore extends DurableObject<Env> {
+  private readonly env: Env;
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.env = env;
     ctx.blockConcurrencyWhile(async () => {
       ctx.storage.sql.exec(
         "CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, kind TEXT NOT NULL, content TEXT NOT NULL, source TEXT NOT NULL, confidence REAL NOT NULL, status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
@@ -66,14 +72,18 @@ export class MemoryStore extends DurableObject<Env> {
       );
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS experiences_created ON experiences(created_at DESC)");
       ensureExperienceExternalIdColumn(ctx.storage.sql);
-      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE, task_type TEXT NOT NULL, title TEXT NOT NULL, goal TEXT NOT NULL, approved_scope TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('proposed','queued','running','waiting','paused','succeeded','failed','cancelled')), owner_approved INTEGER NOT NULL CHECK (owner_approved IN (0,1)), mission_authorized INTEGER NOT NULL DEFAULT 0 CHECK (mission_authorized IN (0,1)), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, attempt_count INTEGER NOT NULL, max_attempts INTEGER NOT NULL CHECK (max_attempts BETWEEN 1 AND 3), next_run_at TEXT, checkpoint_summary TEXT, result_summary TEXT, evidence_refs TEXT NOT NULL DEFAULT '[]', started_at TEXT, finished_at TEXT)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE, task_type TEXT NOT NULL, title TEXT NOT NULL, goal TEXT NOT NULL, approved_scope TEXT NOT NULL, scope_id TEXT, status TEXT NOT NULL CHECK (status IN ('proposed','queued','running','waiting','paused','succeeded','failed','cancelled')), owner_approved INTEGER NOT NULL CHECK (owner_approved IN (0,1)), mission_authorized INTEGER NOT NULL DEFAULT 0 CHECK (mission_authorized IN (0,1)), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, attempt_count INTEGER NOT NULL, max_attempts INTEGER NOT NULL CHECK (max_attempts BETWEEN 1 AND 3), next_run_at TEXT, checkpoint_summary TEXT, result_summary TEXT, evidence_refs TEXT NOT NULL DEFAULT '[]', started_at TEXT, finished_at TEXT)");
       const taskColumns = ctx.storage.sql.exec<{ name: string }>("PRAGMA table_info(tasks)").toArray();
       if (!taskColumns.some(column => column.name === "mission_authorized")) {
         ctx.storage.sql.exec("ALTER TABLE tasks ADD COLUMN mission_authorized INTEGER NOT NULL DEFAULT 0 CHECK (mission_authorized IN (0,1))");
       }
+      if (!taskColumns.some(column => column.name === "scope_id")) {
+        ctx.storage.sql.exec("ALTER TABLE tasks ADD COLUMN scope_id TEXT");
+      }
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS task_control (id INTEGER PRIMARY KEY CHECK (id=1), queue_paused INTEGER NOT NULL CHECK (queue_paused IN (0,1)), reason TEXT, updated_at TEXT NOT NULL)");
       ctx.storage.sql.exec("INSERT OR IGNORE INTO task_control (id,queue_paused,reason,updated_at) VALUES (1,0,NULL,?)", new Date().toISOString());
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS quota_daily (day TEXT PRIMARY KEY, baseline_neurons REAL NOT NULL, observed_neurons REAL NOT NULL, observed_at TEXT NOT NULL, local_estimated_neurons REAL NOT NULL DEFAULT 0, circuit_open INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS quota_analytics_cache (day TEXT PRIMARY KEY, used_neurons REAL NOT NULL, observed_at TEXT NOT NULL)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS quota_reservations (id TEXT PRIMARY KEY, day TEXT NOT NULL, reserved_neurons REAL NOT NULL, created_at TEXT NOT NULL)");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS quota_reservations_day ON quota_reservations(day)");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS tasks_status_created ON tasks(status, created_at)");
@@ -87,29 +97,81 @@ export class MemoryStore extends DurableObject<Env> {
 
 
     if (request.method === "POST" && url.pathname === "/v1/quota/reserve") {
-      const body = await readBody(request), day = now.slice(0,10);
-      const observedMs = Date.parse(typeof body?.observedAt === "string" ? body.observedAt : "");
-      if (!body || Object.keys(body).some(k => !["day","usedNeurons","observedAt","reserve_neurons","model_id"].includes(k)) ||
-          body.day !== day || typeof body.usedNeurons !== "number" || !Number.isFinite(body.usedNeurons) || body.usedNeurons < 0 ||
-          body.reserve_neurons !== 200 || body.model_id !== "@cf/zai-org/glm-4.7-flash" ||
-          !Number.isFinite(observedMs) || Date.parse(now)-observedMs < 0 || Date.parse(now)-observedMs > 900000)
-        return json({ error: "Authoritative daily neuron telemetry missing, stale, or invalid; paused." },503);
-      let daily = this.ctx.storage.sql.exec<{day:string;baseline_neurons:number;observed_neurons:number;local_estimated_neurons:number;circuit_open:number}>("SELECT * FROM quota_daily WHERE day=? LIMIT 1",day).toArray()[0];
-      if (daily && body.usedNeurons < daily.observed_neurons) return json({error:"Neuron telemetry regressed; paused."},503);
-      if (!daily) {
-        this.ctx.storage.sql.exec("INSERT INTO quota_daily (day,baseline_neurons,observed_neurons,observed_at,local_estimated_neurons,circuit_open,updated_at) VALUES (?,?,?,?,0,0,?)",day,body.usedNeurons,body.usedNeurons,body.observedAt,now);
-        daily={day,baseline_neurons:body.usedNeurons,observed_neurons:body.usedNeurons,local_estimated_neurons:0,circuit_open:0};
-      } else {
-        this.ctx.storage.sql.exec("UPDATE quota_daily SET observed_neurons=?,observed_at=?,updated_at=? WHERE day=?",body.usedNeurons,body.observedAt,now,day);
-        daily.observed_neurons=body.usedNeurons;
+      const body = await readBody(request);
+      const day = now.slice(0, 10);
+      if (!body || Object.keys(body).some(key => !["reserve_neurons", "model_id"].includes(key)) ||
+          body.reserve_neurons !== 200 || body.model_id !== "@cf/zai-org/glm-4.7-flash") {
+        return json({ error: "Invalid quota reservation request." }, 400);
       }
-      if (daily.circuit_open===1) return json({error:"Daily Workers AI circuit is open."},429);
-      const active=this.ctx.storage.sql.exec<{total:number}>("SELECT COALESCE(SUM(reserved_neurons),0) AS total FROM quota_reservations WHERE day=?",day).one().total;
-      const projected=Math.max(daily.observed_neurons,daily.baseline_neurons+daily.local_estimated_neurons+active);
-      if (projected+200>7000) return json({error:"Daily neuron target reached; 3,000-neuron reserve preserved."},429);
-      const id=crypto.randomUUID();
-      this.ctx.storage.sql.exec("INSERT INTO quota_reservations (id,day,reserved_neurons,created_at) VALUES (?,?,200,?)",id,day,now);
-      return json({reservation_id:id,projected_neurons:projected,reserved_neurons:200,target_neurons:7000});
+
+      let daily = this.ctx.storage.sql.exec<{
+        day: string; baseline_neurons: number; observed_neurons: number;
+        local_estimated_neurons: number; circuit_open: number;
+      }>("SELECT * FROM quota_daily WHERE day=? LIMIT 1", day).toArray()[0];
+      if (daily?.circuit_open === 1) return json({ error: "Daily Workers AI circuit is open." }, 429);
+
+      const cache = this.ctx.storage.sql.exec<{ used_neurons: number; observed_at: string }>(
+        "SELECT used_neurons,observed_at FROM quota_analytics_cache WHERE day=? LIMIT 1", day
+      ).toArray()[0];
+      const cacheAgeMs = cache ? Date.parse(now) - Date.parse(cache.observed_at) : Number.POSITIVE_INFINITY;
+      let usedNeurons = cache && cacheAgeMs >= -60_000 && cacheAgeMs <= 30_000
+        ? cache.used_neurons
+        : null;
+
+      if (usedNeurons === null) {
+        if (!this.env.CLOUDFLARE_ACCOUNT_ID || !this.env.CLOUDFLARE_ANALYTICS_API_TOKEN) {
+          return json({ error: "Authoritative Cloudflare Analytics credentials are not configured; paused." }, 503);
+        }
+        try {
+          usedNeurons = await fetchDailyCloudflareNeuronUsage({
+            accountId: this.env.CLOUDFLARE_ACCOUNT_ID,
+            apiToken: this.env.CLOUDFLARE_ANALYTICS_API_TOKEN,
+            day,
+          });
+        } catch {
+          return json({ error: "Authoritative Cloudflare Analytics query failed; paused." }, 503);
+        }
+        if (daily && usedNeurons < daily.observed_neurons) {
+          return json({ error: "Authoritative neuron telemetry regressed; paused." }, 503);
+        }
+        this.ctx.storage.sql.exec(
+          "INSERT INTO quota_analytics_cache (day,used_neurons,observed_at) VALUES (?,?,?) ON CONFLICT(day) DO UPDATE SET used_neurons=excluded.used_neurons,observed_at=excluded.observed_at",
+          day, usedNeurons, now
+        );
+      } else if (daily && usedNeurons < daily.observed_neurons) {
+        return json({ error: "Cached authoritative neuron telemetry regressed; paused." }, 503);
+      }
+
+      if (!daily) {
+        this.ctx.storage.sql.exec(
+          "INSERT INTO quota_daily (day,baseline_neurons,observed_neurons,observed_at,local_estimated_neurons,circuit_open,updated_at) VALUES (?,?,?,?,0,0,?)",
+          day, usedNeurons, usedNeurons, now, now
+        );
+        daily = { day, baseline_neurons: usedNeurons, observed_neurons: usedNeurons, local_estimated_neurons: 0, circuit_open: 0 };
+      } else {
+        this.ctx.storage.sql.exec(
+          "UPDATE quota_daily SET observed_neurons=?,observed_at=?,updated_at=? WHERE day=?",
+          usedNeurons, now, now, day
+        );
+        daily.observed_neurons = usedNeurons;
+      }
+
+      const active = this.ctx.storage.sql.exec<{ total: number }>(
+        "SELECT COALESCE(SUM(reserved_neurons),0) AS total FROM quota_reservations WHERE day=?", day
+      ).one().total;
+      const projected = Math.max(
+        daily.observed_neurons,
+        daily.baseline_neurons + daily.local_estimated_neurons
+      ) + active;
+      if (projected + 200 > 7000) {
+        return json({ error: "Daily neuron target reached; 3,000-neuron reserve preserved." }, 429);
+      }
+      const id = crypto.randomUUID();
+      this.ctx.storage.sql.exec(
+        "INSERT INTO quota_reservations (id,day,reserved_neurons,created_at) VALUES (?,?,200,?)",
+        id, day, now
+      );
+      return json({ reservation_id: id, projected_neurons: projected, reserved_neurons: 200, target_neurons: 7000 });
     }
     if (request.method === "POST" && url.pathname === "/v1/quota/settle") {
       const body=await readBody(request);
@@ -137,18 +199,26 @@ export class MemoryStore extends DurableObject<Env> {
     }
     if (request.method === "POST" && url.pathname === "/v1/tasks") {
       const body = await readBody(request);
-      const allowed = new Set(["idempotency_key", "task_type", "title", "goal", "approved_scope"]);
+      const allowed = new Set(["idempotency_key", "task_type", "title", "goal", "approved_scope", "scope_id"]);
       if (!body || Object.keys(body).some(key => !allowed.has(key)) ||
           !isSafeMemoryText(body.idempotency_key, 200) || !isSafeMemoryText(body.task_type, 80) ||
           !isSafeMemoryText(body.title, 200) || !isSafeMemoryText(body.goal, 1000) ||
-          !isSafeMemoryText(body.approved_scope, 2000)) return json({ error: "Invalid task proposal." }, 400);
+          !isSafeMemoryText(body.approved_scope, 2000) ||
+          (body.scope_id !== undefined && !isSafeMemoryText(body.scope_id, 80))) return json({ error: "Invalid task proposal." }, 400);
       const key = String(body.idempotency_key).trim();
       const existing = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE idempotency_key = ? LIMIT 1", key).toArray()[0];
       if (existing) return json({ task: taskFromRow(existing), created: false });
-      const taskInput = { idempotency_key: key, task_type: String(body.task_type).trim(), title: String(body.title).trim(), goal: String(body.goal).trim(), approved_scope: String(body.approved_scope).trim() };
+      const taskInput = {
+        idempotency_key: key,
+        task_type: String(body.task_type).trim(),
+        title: String(body.title).trim(),
+        goal: String(body.goal).trim(),
+        approved_scope: String(body.approved_scope).trim(),
+        scope_id: typeof body.scope_id === "string" ? body.scope_id.trim() : null,
+      };
       const missionAuthorized = isMissionAuthorizedTask(taskInput);
       const task = createTaskRecord({ id: crypto.randomUUID(), ...taskInput }, { now, missionAuthorized });
-      this.ctx.storage.sql.exec("INSERT INTO tasks (id,idempotency_key,task_type,title,goal,approved_scope,status,owner_approved,mission_authorized,created_at,updated_at,attempt_count,max_attempts,next_run_at,checkpoint_summary,result_summary,evidence_refs,started_at,finished_at) VALUES (?,?,?,?,?,?,?,0,?,?,?,0,?,NULL,NULL,NULL,'[]',NULL,NULL)", task.id, task.idempotency_key, task.task_type, task.title, task.goal, task.approved_scope, task.status, missionAuthorized ? 1 : 0, task.created_at, task.updated_at, task.max_attempts);
+      this.ctx.storage.sql.exec("INSERT INTO tasks (id,idempotency_key,task_type,title,goal,approved_scope,scope_id,status,owner_approved,mission_authorized,created_at,updated_at,attempt_count,max_attempts,next_run_at,checkpoint_summary,result_summary,evidence_refs,started_at,finished_at) VALUES (?,?,?,?,?,?,?, ?,0,?,?,?,0,?,NULL,NULL,NULL,'[]',NULL,NULL)", task.id, task.idempotency_key, task.task_type, task.title, task.goal, task.approved_scope, task.scope_id, task.status, missionAuthorized ? 1 : 0, task.created_at, task.updated_at, task.max_attempts);
       return json({ task, created: true, mission_authorized: missionAuthorized }, 201);
     }
 
@@ -393,22 +463,45 @@ export class MemoryStore extends DurableObject<Env> {
   }
 }
 
-async function isAuthorizedGithubOwner(accessToken: string): Promise<boolean> {
-  if (!accessToken || accessToken.length > 4096) return false;
+function decodeBase64Url(value: string): Uint8Array {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+  const binary = atob(padded);
+  return Uint8Array.from(binary, character => character.charCodeAt(0));
+}
+
+async function isAuthorizedOwnerSession(token: string, env: Env): Promise<boolean> {
+  const secret = env.OWNER_SESSION_SIGNING_SECRET ?? "";
+  const ownerId = env.OWNER_GITHUB_ID ?? "";
+  if (!token || token.length > 2048 || secret.length < 32 || !/^\\d+$/.test(ownerId)) return false;
+  const parts = token.split(".");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return false;
   try {
-    const response = await fetch("https://api.github.com/user", {
-      headers: {
-        authorization: "Bearer " + accessToken,
-        accept: "application/vnd.github+json",
-        "x-github-api-version": "2022-11-28",
-        "user-agent": "EVE-owner-console",
-      },
-    });
-    if (!response.ok) return false;
-    const user: unknown = await response.json();
-    return !!user && typeof user === "object" && "login" in user &&
-      typeof (user as { login: unknown }).login === "string" &&
-      (user as { login: string }).login.toLowerCase() === "molson835-ai";
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["verify"],
+    );
+    const valid = await crypto.subtle.verify(
+      "HMAC",
+      key,
+      decodeBase64Url(parts[1]),
+      new TextEncoder().encode(parts[0]),
+    );
+    if (!valid) return false;
+    const payload = JSON.parse(new TextDecoder().decode(decodeBase64Url(parts[0])));
+    const now = Math.floor(Date.now() / 1000);
+    return payload?.iss === "eve-owner-console" &&
+      payload?.aud === "eve-memory-worker" &&
+      payload?.sub === ownerId &&
+      Number.isSafeInteger(payload?.iat) &&
+      Number.isSafeInteger(payload?.exp) &&
+      payload.iat <= now + 30 &&
+      payload.exp > now &&
+      payload.exp - payload.iat <= 300 &&
+      now - payload.iat <= 330;
   } catch {
     return false;
   }
@@ -443,12 +536,9 @@ export default {
       return withOwnerCors(new Response(null, { status: 204 }));
     }
     if (ownerOnlyRoute) {
-      let authorizedOwner = supplied ? await isAuthorizedGithubOwner(supplied) : false;
-      const legacyOwnerToken = env.TASK_OWNER_APPROVAL_TOKEN ?? "";
-      if (!authorizedOwner && legacyOwnerToken && legacyOwnerToken !== env.MEMORY_API_TOKEN) {
-        authorizedOwner = constantTimeEqual(supplied, legacyOwnerToken);
+      if (!(await isAuthorizedOwnerSession(supplied, env))) {
+        return withOwnerCors(json({ error: "Unauthorized." }, 401));
       }
-      if (!authorizedOwner) return withOwnerCors(json({ error: "Unauthorized." }, 401));
     } else if (!env.MEMORY_API_TOKEN || !constantTimeEqual(supplied, env.MEMORY_API_TOKEN)) {
       return withOwnerCors(json({ error: "Unauthorized." }, 401));
     }
