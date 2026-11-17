@@ -12,7 +12,7 @@ The agent definition in `agent/agent.ts` registers a Cloudflare Workers AI model
 | `memory_record_experience` | Record a completed experience | Requires memory service; must report actual write result. |
 | `memory_propose` | Submit a pending knowledge proposal | Requires memory service; does not approve itself. |
 | `memory_review` | Review pending proposals | Requires memory service. |
-| `memory_decide` | Disabled inside Eve | Proposal decisions require an owner-side interface and separate owner credential. The credential must never be exposed to Eve's runtime; the owner-side interface is not yet implemented. |
+| `memory_decide` | Disabled inside Eve | Proposal decisions are owner-only and performed through the GitHub-authenticated `/owner` console. Owner credentials are never exposed to Eve's runtime. PR #46 adds Worker-side OAuth App binding and immutable owner-ID verification; deploy the matching Worker code and credentials together. |
 
 The tool inventory is based on files under `agent/tools/`. It is not a claim that every tool is available in every deployment. Eve must inspect its live runtime tool list and verify service configuration before claiming access.
 
