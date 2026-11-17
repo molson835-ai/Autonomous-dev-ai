@@ -6,6 +6,14 @@ const endpoint = "https://memory-test.invalid";
 const ownerToken = "local-vitest-only-owner-token";
 
 function request(path: string, init: RequestInit = {}, credential = token) {
+  if (credential === ownerToken) {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/applications/local-owner-oauth-app/token")) {
+        return Response.json({ app: { client_id: "local-owner-oauth-app" } });
+      }
+      return Response.json({ id: 12345678, login: "renamed-owner-login" });
+    }));
+  }
   return exports.default.fetch(
     new Request(new URL(path, endpoint), {
       ...init,
