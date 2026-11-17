@@ -7,6 +7,8 @@ interface Env {
   MEMORY: DurableObjectNamespace<MemoryStore>;
   MEMORY_API_TOKEN: string;
   TASK_OWNER_APPROVAL_TOKEN?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_ANALYTICS_API_TOKEN?: string;
 }
 
 type MemoryRow = {
@@ -54,8 +56,10 @@ function boundedLimit(value: string | null, fallback = 8): number {
 }
 
 export class MemoryStore extends DurableObject<Env> {
+  private readonly bindings: Env;
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.bindings = env;
     ctx.blockConcurrencyWhile(async () => {
       ctx.storage.sql.exec(
         "CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, kind TEXT NOT NULL, content TEXT NOT NULL, source TEXT NOT NULL, confidence REAL NOT NULL, status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
@@ -97,19 +101,48 @@ export class MemoryStore extends DurableObject<Env> {
 
     if (request.method === "POST" && url.pathname === "/v1/quota/reserve") {
       const body = await readBody(request), day = now.slice(0,10);
-      const observedMs = Date.parse(typeof body?.observedAt === "string" ? body.observedAt : "");
-      if (!body || Object.keys(body).some(k => !["day","usedNeurons","observedAt","reserve_neurons","model_id"].includes(k)) ||
-          body.day !== day || typeof body.usedNeurons !== "number" || !Number.isFinite(body.usedNeurons) || body.usedNeurons < 0 ||
-          body.reserve_neurons !== 200 || body.model_id !== "@cf/zai-org/glm-4.7-flash" ||
-          !Number.isFinite(observedMs) || Date.parse(now)-observedMs < 0 || Date.parse(now)-observedMs > 900000)
-        return json({ error: "Authoritative daily neuron telemetry missing, stale, or invalid; paused." },503);
+      if (!body || Object.keys(body).some(k => !["reserve_neurons","model_id"].includes(k)) ||
+          body.reserve_neurons !== 200 || body.model_id !== "@cf/zai-org/glm-4.7-flash")
+        return json({ error: "Invalid quota reservation request." },400);
+      const accountId = this.bindings.CLOUDFLARE_ACCOUNT_ID;
+      const analyticsToken = this.bindings.CLOUDFLARE_ANALYTICS_API_TOKEN;
+      if (!accountId || !analyticsToken) return json({ error: "Worker-side Cloudflare Analytics credentials unavailable; paused." },503);
+      const query = "query { viewer { accounts(filter: { accountTag: \\"" + accountId + "\\" }) { " +
+        "aiInferenceAdaptiveGroups(limit: 2, filter: { date_geq: \\"" + day + "\\", date_leq: \\"" + day + "\\" }) " +
+        "{ sum { totalNeurons } dimensions { date } } } } }";
+      let analyticsResponse: Response;
+      try {
+        analyticsResponse = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+          method: "POST",
+          headers: { authorization: "Bearer " + analyticsToken, "content-type": "application/json" },
+          body: JSON.stringify({ query }),
+          signal: AbortSignal.timeout(8000),
+          cache: "no-store",
+        });
+      } catch {
+        return json({ error: "Cloudflare Analytics unavailable; quota enforcement paused." },503);
+      }
+      if (!analyticsResponse.ok) return json({ error: "Cloudflare Analytics HTTP " + analyticsResponse.status + "; paused." },503);
+      let analyticsPayload: any;
+      try { analyticsPayload = await analyticsResponse.json(); }
+      catch { return json({ error: "Cloudflare Analytics response invalid; paused." },503); }
+      if (analyticsPayload?.errors?.length) return json({ error: "Cloudflare Analytics query or permissions failed; paused." },503);
+      const accounts = analyticsPayload?.data?.viewer?.accounts;
+      const groups = accounts?.length === 1 ? accounts[0]?.aiInferenceAdaptiveGroups : null;
+      if (!Array.isArray(groups) || groups.length > 1 ||
+          (groups.length === 1 && groups[0]?.dimensions?.date !== day))
+        return json({ error: "Cloudflare daily neuron aggregate missing or ambiguous; paused." },503);
+      const usedNeurons = groups.length === 0 ? 0 : groups[0]?.sum?.totalNeurons;
+      if (typeof usedNeurons !== "number" || !Number.isFinite(usedNeurons) || usedNeurons < 0)
+        return json({ error: "Authoritative neuron total invalid; paused." },503);
+      const observedAt = now;
       let daily = this.ctx.storage.sql.exec<{day:string;baseline_neurons:number;observed_neurons:number;local_estimated_neurons:number;circuit_open:number}>("SELECT * FROM quota_daily WHERE day=? LIMIT 1",day).toArray()[0];
-      if (daily && body.usedNeurons < daily.observed_neurons) return json({error:"Neuron telemetry regressed; paused."},503);
+      if (daily && usedNeurons < daily.observed_neurons) return json({error:"Neuron telemetry regressed; paused."},503);
       if (!daily) {
-        this.ctx.storage.sql.exec("INSERT INTO quota_daily (day,baseline_neurons,observed_neurons,observed_at,local_estimated_neurons,circuit_open,updated_at) VALUES (?,?,?,?,0,0,?)",day,body.usedNeurons,body.usedNeurons,body.observedAt,now);
-        daily={day,baseline_neurons:body.usedNeurons,observed_neurons:body.usedNeurons,local_estimated_neurons:0,circuit_open:0};
+        this.ctx.storage.sql.exec("INSERT INTO quota_daily (day,baseline_neurons,observed_neurons,observed_at,local_estimated_neurons,circuit_open,updated_at) VALUES (?,?,?,?,0,0,?)",day,usedNeurons,usedNeurons,observedAt,now);
+        daily={day,baseline_neurons:usedNeurons,observed_neurons:usedNeurons,local_estimated_neurons:0,circuit_open:0};
       } else {
-        this.ctx.storage.sql.exec("UPDATE quota_daily SET observed_neurons=?,observed_at=?,updated_at=? WHERE day=?",body.usedNeurons,body.observedAt,now,day);
+        this.ctx.storage.sql.exec("UPDATE quota_daily SET observed_neurons=?,observed_at=?,updated_at=? WHERE day=?",usedNeurons,observedAt,now,day);
         daily.observed_neurons=body.usedNeurons;
       }
       if (daily.circuit_open===1) return json({error:"Daily Workers AI circuit is open."},429);
