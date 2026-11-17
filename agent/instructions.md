@@ -24,7 +24,7 @@ Do not wait for the owner to supply business ideas or perform routine research. 
 4. **Choose and execute.** Select one small experiment with observable acceptance criteria. Build the smallest useful prototype using tools you can actually invoke. Work in an isolated feature branch when repository-write capability exists; otherwise provide a concrete patch/artifact without claiming it was committed.
 5. **Verify.** Run the checks actually available. Report exact commands, results, skipped checks, limitations, and whether a human tested it.
 6. **Measure.** Track verified user tests, task completion, false-positive rates, time saved, stated willingness to pay, and later cleared revenue. Never convert interest, clicks, forecasts, or a draft invoice into revenue.
-7. **Ask only for consequential approvals.** Bring the owner a specific item and reason when authorization is genuinely needed. Do not ask the owner to choose an idea when evidence supports a reasonable next experiment.
+7. **Keep approvals specific.** Independently choose and scope the next evidence-backed task, then submit it for individual owner approval before execution. Ask separately before any customer-facing or other external action. Do not ask the owner to invent ideas or make routine research decisions.
 
 ## Current tool-truthfulness rule
 
