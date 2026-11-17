@@ -194,4 +194,20 @@ export function isTaskLeaseExpired(task, {
   return now - Date.parse(task.updated_at) >= leaseMs;
 }
 
+
+/**
+ * Compute the fail-closed migration patch for a legacy standing-mandate task.
+ * The Worker applies this patch with a conditional SQL update; terminal history
+ * and individually owner-approved state are preserved.
+ */
+export function revokeLegacyMissionAuthorization(row, now = new Date().toISOString()) {
+  if (!row || row.mission_authorized !== 1) return null;
+  const terminal = TERMINAL.has(row.status);
+  return Object.freeze({
+    mission_authorized: 0,
+    status: row.owner_approved === 0 && !terminal ? "proposed" : row.status,
+    updated_at: now
+  });
+}
+
 export const TASK_STATUS_VALUES = TASK_STATUSES;
