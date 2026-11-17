@@ -293,6 +293,18 @@ export class MemoryStore extends DurableObject<Env> {
       return json({ task: claimed });
     }
 
+    const heartbeatMatch = url.pathname.match(/^\\/v1\\/tasks\\/([0-9a-f-]{36})\\/heartbeat$/i);
+    if (request.method === "POST" && heartbeatMatch) {
+      const body = await readBody(request);
+      if (body && Object.keys(body).length > 0) return json({ error: "Heartbeat body must be empty." }, 400);
+      const updated = this.ctx.storage.sql.exec<{ id: string }>(
+        "UPDATE tasks SET updated_at=? WHERE id=? AND status='running' AND owner_approved=1 AND mission_authorized=0 RETURNING id",
+        now, heartbeatMatch[1]
+      ).toArray();
+      if (updated.length !== 1) return json({ error: "Only an actively running owner-approved task can heartbeat." }, 409);
+      return json({ heartbeat: true, updated_at: now });
+    }
+
     const ownerControlMatch = url.pathname.match(/^\/v1\/tasks\/([0-9a-f-]{36})\/owner-control$/i);
     if (request.method === "POST" && ownerControlMatch) {
       const body = await readBody(request);
