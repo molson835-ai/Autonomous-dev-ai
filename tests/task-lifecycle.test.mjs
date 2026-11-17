@@ -154,6 +154,10 @@ test("legacy mission authorization migration revokes unapproved work but preserv
     assert.equal(terminal.status, status);
     assert.equal(terminal.mission_authorized, 0);
   }
+  const unknownApproval = revokeLegacyMissionAuthorization({
+    id: "legacy-unknown-approval", mission_authorized: 1, status: "running"
+  }, stamp);
+  assert.equal(unknownApproval.status, "proposed");
   assert.equal(revokeLegacyMissionAuthorization({
     id: "not-legacy", owner_approved: 0, mission_authorized: 0, status: "proposed"
   }, stamp), null);
