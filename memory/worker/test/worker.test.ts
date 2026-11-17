@@ -8,16 +8,17 @@ const ownerToken = "local-vitest-only-owner-token";
 const ownerGithubId = 341732270;
 const ownerGithubClientId = "local-vitest-only-client-id";
 
-function mockOwnerGithub(options: { userId?: number; appClientId?: string } = {}) {
+function mockOwnerGithub(options: { accessToken?: string; userId?: number; appClientId?: string } = {}) {
+  const accessToken = options.accessToken ?? ownerToken;
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.includes("/applications/")) {
       const body = JSON.parse(String(init?.body ?? "{}")) as { access_token?: string };
-      if (body.access_token !== ownerToken) return new Response("invalid token", { status: 404 });
+      if (body.access_token !== accessToken) return new Response("invalid token", { status: 404 });
       return Response.json({ app: { client_id: options.appClientId ?? ownerGithubClientId } });
     }
     if (url === "https://api.github.com/user") {
-      if (new Headers(init?.headers).get("authorization") !== "Bearer " + ownerToken) {
+      if (new Headers(init?.headers).get("authorization") !== "Bearer " + accessToken) {
         return new Response("invalid user token", { status: 401 });
       }
       return Response.json({ id: options.userId ?? ownerGithubId, login: "molson835-ai" });
@@ -29,7 +30,7 @@ function mockOwnerGithub(options: { userId?: number; appClientId?: string } = {}
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 function request(path: string, init: RequestInit = {}, credential = token) {
-  if (credential === ownerToken) mockOwnerGithub();
+  if (credential !== token) mockOwnerGithub({ accessToken: credential });
   return exports.default.fetch(
     new Request(new URL(path, endpoint), {
       ...init,
@@ -217,10 +218,12 @@ describe("persistent memory Worker HTTP contract", () => {
   });
 
   it("rejects a valid GitHub user token issued to a different OAuth app or belonging to a different owner", async () => {
-    mockOwnerGithub({ appClientId: "different-oauth-app" });
-    expect((await request("/v1/owner/tasks", {}, ownerToken)).status).toBe(401);
-    mockOwnerGithub({ userId: 999999 });
-    expect((await request("/v1/owner/tasks", {}, ownerToken)).status).toBe(401);
+    const wrongAppToken = "local-vitest-wrong-app-token";
+    mockOwnerGithub({ accessToken: wrongAppToken, appClientId: "different-oauth-app" });
+    expect((await request("/v1/owner/tasks", {}, wrongAppToken)).status).toBe(401);
+    const wrongOwnerToken = "local-vitest-wrong-owner-token";
+    mockOwnerGithub({ accessToken: wrongOwnerToken, userId: 999999 });
+    expect((await request("/v1/owner/tasks", {}, wrongOwnerToken)).status).toBe(401);
   });
 
   it("restricts owner review lists and browser access to the owner OAuth app and immutable owner ID", async () => {
