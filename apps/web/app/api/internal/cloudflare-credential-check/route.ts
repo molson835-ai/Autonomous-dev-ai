@@ -29,7 +29,9 @@ function safeErrors(errors: unknown[], accountId: string) {
   });
 }
 function classify(errors: unknown[]): string {
-  const s = errors.map((e) => e && typeof e === "object" ? String((e as any).message ?? "") + " " + String((e as any).extensions?.code ?? "") : "").join(" ").toLowerCase();
+  const s = errors.map((e) => e && typeof e === "object"
+    ? String((e as any).message ?? "") + " " + String((e as any).code ?? "") + " " + String((e as any).extensionCode ?? (e as any).extensions?.code ?? "")
+    : "").join(" ").toLowerCase();
   if (/permission|forbidden|unauthorized|authentication|not authorized|access denied/.test(s)) return "permission_denied";
   if (/unknown field|cannot query field|syntax error|validation error|unknown argument/.test(s)) return "schema_or_query_rejected";
   if (/account.*(not found|does not exist|invalid)|invalid account/.test(s)) return "account_not_available";
@@ -112,9 +114,14 @@ export async function POST(request: Request): Promise<Response> {
     const usageResult = await graphql(apiToken, usageQuery, accountId);
     const groups = usageResult.payload?.data?.viewer?.accounts?.[0]?.aiInferenceAdaptiveGroups;
     const validGroups = Array.isArray(groups) && groups.length <= 1 && (groups.length === 0 || (groups[0]?.dimensions?.date === day && typeof groups[0]?.sum?.totalNeurons === "number" && Number.isFinite(groups[0].sum.totalNeurons) && groups[0].sum.totalNeurons >= 0));
-    if (usageResult.httpStatus >= 200 && usageResult.httpStatus < 300 && !usageResult.errors.length && validGroups) {
+    if (usageResult.httpStatus < 200 || usageResult.httpStatus >= 300 || usageResult.errors.length > 0) {
+      // Preserve Cloudflare's classified error instead of masking it as a bad result shape.
+      stages.push(stageFailure("quota_guard_query", usageResult));
+    } else if (validGroups) {
       stages.push({ name: "quota_guard_query", status: "pass", httpStatus: usageResult.httpStatus, details: { utcDate: day, rowReturned: groups.length === 1, neuronTotalReturned: groups.length === 1 } });
-    } else stages.push(stageFailure("quota_guard_query", usageResult, validGroups ? undefined : "analytics_result_invalid"));
+    } else {
+      stages.push(stageFailure("quota_guard_query", usageResult, "analytics_result_invalid"));
+    }
 
     return Response.json({
       ok: stages.every((s) => s.status === "pass"),
