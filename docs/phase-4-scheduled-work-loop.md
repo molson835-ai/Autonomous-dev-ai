@@ -6,7 +6,7 @@ This adds one Eve-native schedule at `agent/schedules/owner-approved-work-loop.t
 
 - Cron: `0 14 * * *` (daily at 14:00 UTC). The actual Vercel Preview build returned `cron_jobs_limits_reached` with the explicit message that this Hobby account is limited to daily Cron Jobs; an hourly expression is rejected.
 - Each invocation starts a fresh Eve session; it does not resume the prior chat.
-- The session claims at most one due task through `task_claim_next`: either individually owner-approved or mission-authorized under a restricted allowlist of research, product development, testing, documentation, customer discovery, compliant outreach, and truthful offer publication. Queue read/write tools are disabled outside Vercel Production; Preview schedule invocations return a no-op without contacting the Production task store.
+- The session claims at most one due task through `task_claim_next`, and only when it is individually owner-approved with `mission_authorized=0`. Standing mission authorization is disabled. Queue read/write tools are disabled outside Vercel Production; Preview schedule invocations return a no-op without contacting the Production task store.
 - It performs one bounded step, then records success, failure, or a checkpoint through `task_transition`.
 - A safe continuation is scheduled by setting `waiting` with `resume_after_minutes: 1320` (22 hours), leaving a two-hour margin before the next daily run; the tool computes `next_run_at`.
 - A waiting task without a continuation time remains blocked for owner input or a capability change.
@@ -18,7 +18,7 @@ This Eve integration emits Vercel Cron Jobs, not the separate Vercel Schedules b
 
 
 
-Eve's schedule documentation confirms UTC execution, independent invocations, and no automatic retry after failed invocations. This project-specific Vercel deployment explicitly enforces the stricter Hobby daily limit. A continuation uses `resume_after_minutes: 1440`, and the next daily run reads the durable checkpoint. One daily schedule uses about 30 runs/month in each environment that carries it.
+Eve's schedule documentation confirms UTC execution, independent invocations, and no automatic retry after failed invocations. This project-specific Vercel deployment explicitly enforces the stricter Hobby daily limit. A continuation uses `resume_after_minutes: 1320`, and the next daily run reads the durable checkpoint. One daily schedule uses about 30 runs/month in each environment that carries it.
 
 Sources:
 - https://eve.dev/docs/schedules
@@ -27,14 +27,14 @@ Sources:
 ## Capability limits
 
 The schedule only uses tools available in the deployed Eve runtime. At this stage:
-- The task queue supports individually owner-approved tasks and standing-mission-authorized tasks from a strict allowlist. The owner can pause the entire queue or an individual task.
+- Every task requires individual owner approval before it can be claimed. Legacy mission-authorized records are revoked during Worker initialization. The owner can pause the entire queue or an individual task through the separate owner console.
 - General web search remains unavailable until the separate web-search PR is merged and a free provider key is authorized and configured.
 - Local file editing, shell execution, and direct GitHub repository operations are not yet established as Eve runtime tools. Tasks requiring those capabilities must wait rather than be falsely marked complete.
 - No owner-approval tool is exposed to Eve; owner credentials are never placed in its runtime.
 
 ## Safety
 
-No task can self-approve. The standing mission mandate auto-queues only restricted allowlisted task types with safe scopes; all other tasks remain proposed for owner review. The schedule cannot approve, resume paused tasks, cancel, or expand task scope. It may conduct truthful, relevant, lawful, privacy-respecting, platform-compliant customer discovery/outreach and publish accurate offers through existing authorized no-cost tools. If those tools are unavailable, it prepares drafts and records the blocker. It cannot create accounts, accept payments, purchase hardware, change billing, access personal financial accounts, merge code, or deploy Production. It pauses on explicit provider quota/rate-limit errors or unavailable capabilities. Runtime-wide model/tool usage metering is not yet wired into this schedule; the existing resource-budget module is policy-only. Therefore this PR does not claim hard per-turn token/tool-call enforcement or live Vercel/Cloudflare quota monitoring.
+No task can self-approve. Every task remains proposed until the owner individually approves its complete scope through the owner-only control path. The schedule cannot approve, resume paused tasks, cancel, or expand task scope. Customer contact, direct outreach, sending messages, public offers, publication, form submission, account creation, contracts, payment acceptance, purchases, fulfillment, and shipping orders are prohibited without separate explicit owner approval for the exact external action. Until then, Eve may prepare drafts and evidence only. It cannot change billing, access personal financial accounts, merge protected branches, or deploy Production. It pauses on explicit provider quota/rate-limit errors or unavailable capabilities. Runtime-wide model/tool usage metering is not yet wired into this schedule; the existing resource-budget module is policy-only. Therefore this PR does not claim hard per-turn token/tool-call enforcement or live Vercel/Cloudflare quota monitoring.
 
 ## Activation
 

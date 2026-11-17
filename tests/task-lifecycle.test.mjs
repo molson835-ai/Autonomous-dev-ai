@@ -125,37 +125,16 @@ test("duplicate enqueue keys and malformed task records are handled explicitly",
   assert.equal(validateTaskRecord({ ...proposed(), status: "running" }).valid, false);
 });
 
-test("only owner-defined internal scope IDs can receive standing mission authorization", () => {
-  const safe = {
+test("agent-supplied metadata can never grant standing mission authorization", () => {
+  assert.equal(isMissionAuthorizedTask({
     task_type: "market_research",
     scope_id: "public_web_research_no_contact",
-    approved_scope: "Research public information only; no contacting people or publishing.",
-  };
-  assert.equal(isMissionAuthorizedTask(safe), true);
-  const task = createTaskRecord({
-    id: "mission-1", idempotency_key: "mission-task-001", title: "Research a market",
-    goal: "Compare public market information", ...safe
-  }, { now, missionAuthorized: true });
-  assert.equal(task.status, "queued");
-  assert.equal(task.owner_approved, false);
-  assert.equal(task.mission_authorized, true);
-  assert.equal(validateTaskRecord(task).valid, true);
-  assert.equal(selectNextTask([task], { now: Date.parse(now) }).id, task.id);
-
-  for (const taskType of ["customer_discovery", "customer_outreach", "offer_publication", "payments"]) {
-    assert.equal(isMissionAuthorizedTask({
-      task_type: taskType, scope_id: "public_web_research_no_contact",
-      approved_scope: "No external action.",
-    }), false);
-  }
-  assert.equal(isMissionAuthorizedTask({
-    task_type: "market_research", scope_id: "agent_invented_scope",
-    approved_scope: "This text claims the task is safe.",
+    approved_scope: "Research public information only.",
   }), false);
   assert.throws(() => createTaskRecord({
     id: "mission-unsafe", idempotency_key: "mission-unsafe-001",
-    task_type: "customer_outreach", scope_id: "public_web_research_no_contact",
-    title: "Contact a customer", goal: "Send an email",
-    approved_scope: "Contact prospects.",
+    task_type: "market_research", scope_id: "public_web_research_no_contact",
+    title: "Research a market", goal: "Compare public information",
+    approved_scope: "No external actions.",
   }, { now, missionAuthorized: true }), /Invalid mission-authorized task scope/);
 });

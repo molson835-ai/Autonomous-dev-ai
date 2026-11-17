@@ -74,10 +74,10 @@ export class MemoryStore extends DurableObject<Env> {
       if (!taskColumns.some(column => column.name === "scope_id")) {
         ctx.storage.sql.exec("ALTER TABLE tasks ADD COLUMN scope_id TEXT NOT NULL DEFAULT 'owner_review_required'");
       }
-      // Revoke legacy self-authorized tasks created under the old free-text policy.
-      // Preserve metadata, but move unapproved queued tasks back to proposed.
+      // Revoke all legacy mission authorization until trusted owner delegation exists.
+      // Preserve history; stop every nonterminal unapproved task by returning it to proposed.
       ctx.storage.sql.exec(
-        "UPDATE tasks SET mission_authorized=0, status=CASE WHEN status='queued' THEN 'proposed' ELSE status END, updated_at=? WHERE mission_authorized=1 AND owner_approved=0 AND scope_id NOT IN ('public_web_research_no_contact','local_prototype_no_external_effects','automated_tests_no_external_effects','documentation_only')",
+        "UPDATE tasks SET mission_authorized=0, status=CASE WHEN owner_approved=0 AND status NOT IN ('succeeded','failed','cancelled') THEN 'proposed' ELSE status END, updated_at=? WHERE mission_authorized=1",
         new Date().toISOString()
       );
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS task_control (id INTEGER PRIMARY KEY CHECK (id=1), queue_paused INTEGER NOT NULL CHECK (queue_paused IN (0,1)), reason TEXT, updated_at TEXT NOT NULL)");
@@ -124,11 +124,13 @@ export class MemoryStore extends DurableObject<Env> {
       const body=await readBody(request);
       if (!body || Object.keys(body).some(k=>!["reservation_id","actual_neurons"].includes(k)) ||
           typeof body.reservation_id!=="string" || !/^[0-9a-f-]{36}$/i.test(body.reservation_id) ||
-          typeof body.actual_neurons!=="number" || !Number.isFinite(body.actual_neurons) || body.actual_neurons<200 || body.actual_neurons>100000)
+          typeof body.actual_neurons!=="number" || !Number.isFinite(body.actual_neurons) || body.actual_neurons<0 || body.actual_neurons>100000)
         return json({error:"Invalid quota settlement."},400);
       const row=this.ctx.storage.sql.exec<{id:string;day:string;reserved_neurons:number}>("SELECT * FROM quota_reservations WHERE id=? LIMIT 1",body.reservation_id).toArray()[0];
       if (!row) return json({error:"Reservation not found or already settled."},404);
-      const charged=Math.max(row.reserved_neurons,body.actual_neurons);
+      // The reservation is a temporary concurrency hold, not a minimum charge.
+      // Actual usage may be below the hold; missing usage is handled conservatively by the caller.
+      const charged=body.actual_neurons;
       const updated=this.ctx.storage.sql.exec<{day:string}>("UPDATE quota_daily SET local_estimated_neurons=local_estimated_neurons+?,updated_at=? WHERE day=? RETURNING day",charged,now,row.day).toArray();
       if (updated.length!==1) return json({error:"Quota ledger unavailable; reservation retained."},503);
       this.ctx.storage.sql.exec("DELETE FROM quota_reservations WHERE id=?",row.id);
@@ -146,19 +148,17 @@ export class MemoryStore extends DurableObject<Env> {
     }
     if (request.method === "POST" && url.pathname === "/v1/tasks") {
       const body = await readBody(request);
-      const allowed = new Set(["idempotency_key", "task_type", "title", "goal", "approved_scope", "scope_id"]);
-      const allowedScopeIds = new Set(["owner_review_required", "public_web_research_no_contact", "local_prototype_no_external_effects", "automated_tests_no_external_effects", "documentation_only"]);
-      const requestedScopeId = typeof body?.scope_id === "string" ? body.scope_id.trim() : "owner_review_required";
-      if (!body || Object.keys(body).some(key => !allowed.has(key)) || !allowedScopeIds.has(requestedScopeId) ||
+      const allowed = new Set(["idempotency_key", "task_type", "title", "goal", "approved_scope"]);
+      if (!body || Object.keys(body).some(key => !allowed.has(key)) ||
           !isSafeMemoryText(body.idempotency_key, 200) || !isSafeMemoryText(body.task_type, 80) ||
           !isSafeMemoryText(body.title, 200) || !isSafeMemoryText(body.goal, 1000) ||
           !isSafeMemoryText(body.approved_scope, 2000)) return json({ error: "Invalid task proposal." }, 400);
       const key = String(body.idempotency_key).trim();
       const existing = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE idempotency_key = ? LIMIT 1", key).toArray()[0];
       if (existing) return json({ task: taskFromRow(existing), created: false });
-      const taskInput = { idempotency_key: key, task_type: String(body.task_type).trim(), title: String(body.title).trim(), goal: String(body.goal).trim(), approved_scope: String(body.approved_scope).trim(), scope_id: requestedScopeId };
-      const missionAuthorized = isMissionAuthorizedTask(taskInput);
-      const task = createTaskRecord({ id: crypto.randomUUID(), ...taskInput }, { now, missionAuthorized });
+      const taskInput = { idempotency_key: key, task_type: String(body.task_type).trim(), title: String(body.title).trim(), goal: String(body.goal).trim(), approved_scope: String(body.approved_scope).trim(), scope_id: "owner_review_required" };
+      const missionAuthorized = false;
+      const task = createTaskRecord({ id: crypto.randomUUID(), ...taskInput }, { now, missionAuthorized: false });
       this.ctx.storage.sql.exec("INSERT INTO tasks (id,idempotency_key,task_type,title,goal,approved_scope,scope_id,status,owner_approved,mission_authorized,created_at,updated_at,attempt_count,max_attempts,next_run_at,checkpoint_summary,result_summary,evidence_refs,started_at,finished_at) VALUES (?,?,?,?,?,?,?,?,0,?,?,?,0,?,NULL,NULL,NULL,'[]',NULL,NULL)", task.id, task.idempotency_key, task.task_type, task.title, task.goal, task.approved_scope, task.scope_id, task.status, missionAuthorized ? 1 : 0, task.created_at, task.updated_at, task.max_attempts);
       return json({ task, created: true, mission_authorized: missionAuthorized }, 201);
     }
@@ -172,7 +172,7 @@ export class MemoryStore extends DurableObject<Env> {
     if (request.method === "GET" && url.pathname === "/v1/owner/status") {
       const control = this.ctx.storage.sql.exec<{ queue_paused: number; reason: string | null; updated_at: string }>("SELECT queue_paused,reason,updated_at FROM task_control WHERE id=1").one();
       const running = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='running'").one().count;
-      const queued = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='queued' AND (owner_approved=1 OR mission_authorized=1)").one().count;
+      const queued = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='queued' AND owner_approved=1 AND mission_authorized=0").one().count;
       return json({ queue_paused: control.queue_paused === 1, reason: control.reason, updated_at: control.updated_at, running_tasks: running, queued_tasks: queued });
     }
 
@@ -249,15 +249,27 @@ export class MemoryStore extends DurableObject<Env> {
       const stillRunning = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='running'").one().count;
       if (stillRunning > 0) return json({ task: null });
       const rows = this.ctx.storage.sql.exec<TaskRow>(
-        "SELECT * FROM tasks WHERE (owner_approved=1 OR mission_authorized=1) AND attempt_count<max_attempts AND ((status='queued' AND (next_run_at IS NULL OR next_run_at<=?)) OR (status='waiting' AND next_run_at IS NOT NULL AND next_run_at<=?)) ORDER BY COALESCE(next_run_at,created_at) ASC LIMIT 500",
+        "SELECT * FROM tasks WHERE owner_approved=1 AND mission_authorized=0 AND attempt_count<max_attempts AND ((status='queued' AND (next_run_at IS NULL OR next_run_at<=?)) OR (status='waiting' AND next_run_at IS NOT NULL AND next_run_at<=?)) ORDER BY COALESCE(next_run_at,created_at) ASC LIMIT 500",
         now, now
       ).toArray();
       const selected = selectNextTask(rows.map(taskFromRow), { now: Date.parse(now) });
       if (!selected) return json({ task: null });
       const claimed = transitionTask(selected, "running", { now });
-      const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status='running', attempt_count=?, updated_at=?, started_at=COALESCE(started_at,?), next_run_at=NULL WHERE id=? AND status=? AND (owner_approved=1 OR mission_authorized=1) AND attempt_count<max_attempts RETURNING id", claimed.attempt_count, now, now, selected.id, selected.status).toArray();
+      const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status='running', attempt_count=?, updated_at=?, started_at=COALESCE(started_at,?), next_run_at=NULL WHERE id=? AND status=? AND owner_approved=1 AND mission_authorized=0 AND attempt_count<max_attempts RETURNING id", claimed.attempt_count, now, now, selected.id, selected.status).toArray();
       if (updated.length !== 1) return json({ error: "Task claim state conflict." }, 409);
       return json({ task: claimed });
+    }
+
+    const heartbeatMatch = url.pathname.match(/^\/v1\/tasks\/([0-9a-f-]{36})\/heartbeat$/i);
+    if (request.method === "POST" && heartbeatMatch) {
+      const body = await readBody(request);
+      if (body && Object.keys(body).length > 0) return json({ error: "Heartbeat body must be empty." }, 400);
+      const updated = this.ctx.storage.sql.exec<{ id: string }>(
+        "UPDATE tasks SET updated_at=? WHERE id=? AND status='running' AND owner_approved=1 AND mission_authorized=0 RETURNING id",
+        now, heartbeatMatch[1]
+      ).toArray();
+      if (updated.length !== 1) return json({ error: "Only an actively running owner-approved task can heartbeat." }, 409);
+      return json({ heartbeat: true, updated_at: now });
     }
 
     const ownerControlMatch = url.pathname.match(/^\/v1\/tasks\/([0-9a-f-]{36})\/owner-control$/i);
