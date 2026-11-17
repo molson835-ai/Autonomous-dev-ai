@@ -29,6 +29,7 @@ function mockOwnerGithub(options: { userId?: number; appClientId?: string } = {}
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 function request(path: string, init: RequestInit = {}, credential = token) {
+  if (credential === ownerToken) mockOwnerGithub();
   return exports.default.fetch(
     new Request(new URL(path, endpoint), {
       ...init,
