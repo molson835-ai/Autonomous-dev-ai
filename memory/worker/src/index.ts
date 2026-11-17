@@ -288,13 +288,13 @@ export class MemoryStore extends DurableObject<Env> {
       const stillRunning = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='running'").one().count;
       if (stillRunning > 0) return json({ task: null });
       const rows = this.ctx.storage.sql.exec<TaskRow>(
-        "SELECT * FROM tasks WHERE owner_approved=1 AND attempt_count<max_attempts AND ((status='queued' AND (next_run_at IS NULL OR next_run_at<=?)) OR (status='waiting' AND next_run_at IS NOT NULL AND next_run_at<=?)) ORDER BY COALESCE(next_run_at,created_at) ASC LIMIT 500",
+        "SELECT * FROM tasks WHERE owner_approved=1 AND mission_authorized=0 AND attempt_count<max_attempts AND ((status='queued' AND (next_run_at IS NULL OR next_run_at<=?)) OR (status='waiting' AND next_run_at IS NOT NULL AND next_run_at<=?)) ORDER BY COALESCE(next_run_at,created_at) ASC LIMIT 500",
         now, now
       ).toArray();
       const selected = selectNextTask(rows.map(taskFromRow), { now: Date.parse(now) });
       if (!selected) return json({ task: null });
       const claimed = transitionTask(selected, "running", { now });
-      const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status='running', attempt_count=?, updated_at=?, started_at=COALESCE(started_at,?), next_run_at=NULL WHERE id=? AND status=? AND owner_approved=1 AND attempt_count<max_attempts RETURNING id", claimed.attempt_count, now, now, selected.id, selected.status).toArray();
+      const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status='running', attempt_count=?, updated_at=?, started_at=COALESCE(started_at,?), next_run_at=NULL WHERE id=? AND status=? AND owner_approved=1 AND mission_authorized=0 AND attempt_count<max_attempts RETURNING id", claimed.attempt_count, now, now, selected.id, selected.status).toArray();
       if (updated.length !== 1) return json({ error: "Task claim state conflict." }, 409);
       return json({ task: claimed });
     }
