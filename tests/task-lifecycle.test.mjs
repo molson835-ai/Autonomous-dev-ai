@@ -5,6 +5,7 @@ import {
   isMissionAuthorizedTask,
   findIdempotentTask,
   isTaskLeaseExpired,
+  revokeLegacyMissionAuthorization,
   selectNextTask,
   transitionTask,
   validateTaskRecord
@@ -19,6 +20,7 @@ function proposed(overrides = {}) {
     title: "Inspect failing tests",
     goal: "Identify and report the failing test",
     approved_scope: "Read repository and run tests only",
+    scope_id: "owner_review_required",
     ...overrides
   }, { now });
 }
@@ -124,16 +126,72 @@ test("duplicate enqueue keys and malformed task records are handled explicitly",
   assert.equal(validateTaskRecord({ ...proposed(), status: "running" }).valid, false);
 });
 
-test("standing mission mandate auto-queues only allowlisted non-financial tasks", () => {
-  const safe = { task_type: "customer_outreach", approved_scope: "Research relevant sellers and draft truthful, respectful messages using authorized no-cost channels." };
-  assert.equal(isMissionAuthorizedTask(safe), true);
-  const task = createTaskRecord({ id: "mission-1", idempotency_key: "mission-task-001", title: "Validate seller workflow", goal: "Conduct bounded customer discovery", ...safe }, { now, missionAuthorized: true });
-  assert.equal(task.status, "queued");
-  assert.equal(task.owner_approved, false);
-  assert.equal(task.mission_authorized, true);
-  assert.equal(validateTaskRecord(task).valid, true);
-  assert.equal(selectNextTask([task], { now: Date.parse(now) }).id, task.id);
-  assert.equal(isMissionAuthorizedTask({ task_type: "customer_outreach", approved_scope: "Purchase email lists and send bulk sales messages." }), false);
-  assert.equal(isMissionAuthorizedTask({ task_type: "payments", approved_scope: "Set up checkout." }), false);
-  assert.throws(() => createTaskRecord({ id: "mission-unsafe", idempotency_key: "mission-unsafe-001", task_type: "payments", title: "Set up checkout", goal: "Accept money", approved_scope: "Set up checkout." }, { now, missionAuthorized: true }), /Invalid mission-authorized task scope/);
+test("legacy mission authorization migration revokes unapproved work but preserves owner-approved and terminal history", () => {
+  const stamp = "2026-11-16T15:00:00.000Z";
+  const queuedLegacy = revokeLegacyMissionAuthorization({
+    id: "legacy-queued", owner_approved: 0, mission_authorized: 1, status: "queued"
+  }, stamp);
+  assert.deepEqual(queuedLegacy, {
+    mission_authorized: 0, status: "proposed", updated_at: stamp
+  });
+
+  const runningLegacy = revokeLegacyMissionAuthorization({
+    id: "legacy-running", owner_approved: 0, mission_authorized: 1, status: "running"
+  }, stamp);
+  assert.equal(runningLegacy.status, "proposed");
+
+  const ownerApproved = revokeLegacyMissionAuthorization({
+    id: "legacy-approved", owner_approved: 1, mission_authorized: 1, status: "queued"
+  }, stamp);
+  assert.deepEqual(ownerApproved, {
+    mission_authorized: 0, status: "queued", updated_at: stamp
+  });
+
+  for (const status of ["succeeded", "failed", "cancelled"]) {
+    const terminal = revokeLegacyMissionAuthorization({
+      id: "legacy-terminal", owner_approved: 0, mission_authorized: 1, status
+    }, stamp);
+    assert.equal(terminal.status, status);
+    assert.equal(terminal.mission_authorized, 0);
+  }
+  const unknownApproval = revokeLegacyMissionAuthorization({
+    id: "legacy-unknown-approval", mission_authorized: 1, status: "running"
+  }, stamp);
+  assert.equal(unknownApproval.status, "proposed");
+  assert.equal(revokeLegacyMissionAuthorization({
+    id: "not-legacy", owner_approved: 0, mission_authorized: 0, status: "proposed"
+  }, stamp), null);
+});
+
+test("selector rejects a legacy mission-authorized task even if it is queued", () => {
+  const legacy = Object.freeze({
+    ...proposed({ task_type: "market_research" }),
+    status: "queued",
+    owner_approved: false,
+    mission_authorized: true,
+    scope_id: "public_web_research_no_contact"
+  });
+  assert.equal(selectNextTask([legacy], { now: Date.parse(now) }), null);
+});
+
+test("selector requires individual owner approval and rejects mission authorization", () => {
+  const invalid = Object.freeze({ ...queued(), mission_authorized: true });
+  assert.equal(selectNextTask([invalid], { now: Date.parse(now) }), null);
+  const waitingLegacy = Object.freeze({ ...invalid, status: "waiting", next_run_at: now });
+  assert.equal(selectNextTask([waitingLegacy], { now: Date.parse(now) }), null);
+  assert.throws(() => transitionTask(waitingLegacy, "queued", { now }), /invalid_mission_authorized_scope/);
+});
+
+test("agent-supplied metadata can never grant standing mission authorization", () => {
+  assert.equal(isMissionAuthorizedTask({
+    task_type: "market_research",
+    scope_id: "public_web_research_no_contact",
+    approved_scope: "Research public information only.",
+  }), false);
+  assert.throws(() => createTaskRecord({
+    id: "mission-unsafe", idempotency_key: "mission-unsafe-001",
+    task_type: "market_research", scope_id: "public_web_research_no_contact",
+    title: "Research a market", goal: "Compare public information",
+    approved_scope: "No external actions.",
+  }, { now, missionAuthorized: true }), /Invalid mission-authorized task scope/);
 });

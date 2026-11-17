@@ -1,56 +1,217 @@
-import { exports } from "cloudflare:workers";
-import { describe, expect, it, vi } from "vitest";
+import { env, exports } from "cloudflare:workers";
+import { evictDurableObject, runInDurableObject } from "cloudflare:test";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const token = "local-vitest-only-token";
 const endpoint = "https://memory-test.invalid";
 const ownerToken = "local-vitest-only-owner-token";
+const ownerGithubId = 341732270;
+const ownerGithubClientId = "local-vitest-only-client-id";
+
+function mockOwnerGithub(options: { accessToken?: string; userId?: number; appClientId?: string } = {}) {
+  const accessToken = options.accessToken ?? ownerToken;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes("/applications/")) {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { access_token?: string };
+      if (body.access_token !== accessToken) return new Response("invalid token", { status: 404 });
+      return Response.json({ app: { client_id: options.appClientId ?? ownerGithubClientId } });
+    }
+    if (url === "https://api.github.com/user") {
+      if (new Headers(init?.headers).get("authorization") !== "Bearer " + accessToken) {
+        return new Response("invalid user token", { status: 401 });
+      }
+      return Response.json({ id: options.userId ?? ownerGithubId, login: "molson835-ai" });
+    }
+    return new Response("unexpected outbound request", { status: 503 });
+  }));
+}
+
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 function request(path: string, init: RequestInit = {}, credential = token) {
+  if (credential === ownerToken) mockOwnerGithub();
+  else if (credential === token && (
+    path.startsWith("/v1/owner/") ||
+    /^\/v1\/tasks\/[0-9a-f-]{36}\/(approve|owner-control)$/i.test(path) ||
+    /^\/v1\/proposals\/[0-9a-f-]{36}\/decision$/i.test(path)
+  )) vi.stubGlobal("fetch", vi.fn(async () => new Response("unauthorized", { status: 401 })));
   return exports.default.fetch(
     new Request(new URL(path, endpoint), {
       ...init,
       headers: {
         authorization: `Bearer ${credential}`,
         ...(init.body ? { "content-type": "application/json" } : {}),
+        "cf-connecting-ip": credential === token ? "203.0.113.2" : "203.0.113.1",
         ...init.headers,
       },
     }),
   );
 }
 
+function mockAnalytics(initialUsage = 1000) {
+  let usedNeurons = initialUsage;
+  vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+    const day = new Date().toISOString().slice(0, 10);
+    return Response.json({
+      data: { viewer: { accounts: [{
+        aiInferenceAdaptiveGroups: [{ sum: { totalNeurons: usedNeurons }, dimensions: { date: day } }],
+      }] } },
+    });
+  }));
+  return (nextUsage: number) => { usedNeurons = nextUsage; };
+}
+
+function quotaRequest() {
+  return request("/v1/quota/reserve", {
+    method: "POST",
+    body: JSON.stringify({ reserve_neurons: 200, model_id: "@cf/zai-org/glm-4.7-flash" }),
+  });
+}
+
 describe("shared daily neuron quota coordinator", () => {
-  it("requires auth and rejects stale account telemetry", async () => {
-    const denied=await exports.default.fetch(new Request(new URL("/v1/quota/reserve",endpoint),{method:"POST",body:"{}"}));
+  it("requires auth and fails closed when Worker-side Cloudflare Analytics is unavailable", async () => {
+    const denied = await exports.default.fetch(new Request(new URL("/v1/quota/reserve", endpoint), {
+      method: "POST", body: JSON.stringify({ reserve_neurons: 200, model_id: "@cf/zai-org/glm-4.7-flash" }),
+    }));
     expect(denied.status).toBe(401);
-    const day=new Date().toISOString().slice(0,10);
-    const stale=await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify({day,usedNeurons:0,observedAt:new Date(Date.now()-16*60_000).toISOString(),reserve_neurons:200,model_id:"@cf/zai-org/glm-4.7-flash"})});
-    expect(stale.status).toBe(503);
+    expect((await request("/v1/quota/reserve", {
+      method: "POST", body: JSON.stringify({ reserve_neurons: 200, model_id: "@cf/zai-org/glm-4.7-flash", usedNeurons: 0, day: new Date().toISOString().slice(0, 10) }),
+    })).status).toBe(400);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("unavailable", { status: 503 })));
+    expect((await quotaRequest()).status).toBe(503);
   });
-  it("reserves, settles, and opens a daily circuit breaker", async () => {
-    const day=new Date().toISOString().slice(0,10);
-    const observation={day,usedNeurons:1000,observedAt:new Date().toISOString(),reserve_neurons:200,model_id:"@cf/zai-org/glm-4.7-flash"};
-    const first=await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify(observation)});
+
+  it("uses Worker-fetched authoritative usage and enforces the daily circuit", async () => {
+    const setUsage = mockAnalytics(1000);
+    const first = await quotaRequest();
     expect(first.status).toBe(200);
-    const one=await first.json<{reservation_id:string}>();
-    const second=await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify(observation)});
+    const one = await first.json<{ reservation_id: string }>();
+    const second = await quotaRequest();
     expect(second.status).toBe(200);
-    const two=await second.json<{reservation_id:string}>();
-    const settle=await request("/v1/quota/settle",{method:"POST",body:JSON.stringify({reservation_id:one.reservation_id,actual_neurons:250})});
+    const two = await second.json<{ reservation_id: string }>();
+    const settle = await request("/v1/quota/settle", {
+      method: "POST", body: JSON.stringify({ reservation_id: one.reservation_id, actual_neurons: 250 }),
+    });
     expect(settle.status).toBe(200);
-    expect(await settle.json()).toMatchObject({settled:true,charged_neurons:250});
-    expect((await request("/v1/quota/settle",{method:"POST",body:JSON.stringify({reservation_id:one.reservation_id,actual_neurons:250})})).status).toBe(404);
-    expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify({...observation,usedNeurons:6900})})).status).toBe(429);
-    expect((await request("/v1/quota/circuit",{method:"POST",body:JSON.stringify({reservation_id:two.reservation_id,reason:"cloudflare_daily_quota_exhausted"})})).status).toBe(200);
-    expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify({...observation,usedNeurons:6900})})).status).toBe(429);
+    expect(await settle.json()).toMatchObject({ settled: true, charged_neurons: 250 });
+    expect((await request("/v1/quota/settle", {
+      method: "POST", body: JSON.stringify({ reservation_id: one.reservation_id, actual_neurons: 250 }),
+    })).status).toBe(404);
+    setUsage(6900);
+    expect((await quotaRequest()).status).toBe(429);
+    expect((await request("/v1/quota/circuit", {
+      method: "POST", body: JSON.stringify({ reservation_id: two.reservation_id, reason: "cloudflare_daily_quota_exhausted" }),
+    })).status).toBe(200);
+    expect((await quotaRequest()).status).toBe(429);
   });
-  it("fails closed when authoritative telemetry moves backwards", async () => {
+
+  it("releases unused reservation capacity when estimated usage is below 200", async () => {
+    mockAnalytics(1000);
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 48 * 60 * 60 * 1000);
+    try {
+      const reserved = await quotaRequest();
+      expect(reserved.status).toBe(200);
+      const { reservation_id } = await reserved.json<{ reservation_id: string }>();
+      const settled = await request("/v1/quota/settle", {
+        method: "POST", body: JSON.stringify({ reservation_id, actual_neurons: 12 }),
+      });
+      expect(settled.status).toBe(200);
+      expect(await settled.json()).toMatchObject({ settled: true, charged_neurons: 12 });
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("fails closed when authoritative Cloudflare telemetry moves backwards", async () => {
+    const setUsage = mockAnalytics(2000);
     vi.useFakeTimers();
     vi.setSystemTime(Date.now() + 24 * 60 * 60 * 1000);
-    const day=new Date().toISOString().slice(0,10);
-    const base={day,usedNeurons:2000,observedAt:new Date().toISOString(),reserve_neurons:200,model_id:"@cf/zai-org/glm-4.7-flash"};
-    expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify(base)})).status).toBe(200);
-    expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify({...base,usedNeurons:1900,observedAt:new Date(Date.now()-1).toISOString()})})).status).toBe(503);
-    vi.useRealTimers();
+    try {
+      expect((await quotaRequest()).status).toBe(200);
+      setUsage(1900);
+      expect((await quotaRequest()).status).toBe(503);
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("legacy task authorization Durable Object migration", () => {
+  it("revokes persisted mission grants on reconstruction while preserving owner-approved and terminal task history", async () => {
+    const stub = env.MEMORY.get(env.MEMORY.idFromName(`legacy-migration-${crypto.randomUUID()}`));
+    const rows = [
+      { id: "legacy-queued", ownerApproved: 0, status: "queued" },
+      { id: "legacy-running", ownerApproved: 0, status: "running" },
+      { id: "legacy-approved", ownerApproved: 1, status: "queued" },
+      { id: "legacy-terminal", ownerApproved: 0, status: "succeeded" },
+    ];
+
+    // Initialize the real SQLite-backed Durable Object before seeding pre-migration rows.
+    await runInDurableObject(stub, async (_instance, state) => {
+      for (const row of rows) {
+        state.storage.sql.exec(
+          "INSERT INTO tasks (id,idempotency_key,task_type,title,goal,approved_scope,scope_id,status,owner_approved,mission_authorized,created_at,updated_at,attempt_count,max_attempts,evidence_refs) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          row.id,
+          `migration-${row.id}`,
+          "repo_maintenance",
+          `Legacy ${row.id}`,
+          "Preserve the existing task record while revoking the legacy grant",
+          "No execution until separately approved",
+          "owner_review_required",
+          row.status,
+          row.ownerApproved,
+          1,
+          "2026-11-01T00:00:00.000Z",
+          "2026-11-01T00:00:00.000Z",
+          1,
+          3,
+          '["legacy-evidence"]',
+        );
+      }
+    });
+
+    // Reconstructing the object reruns its blockConcurrencyWhile schema/data migration.
+    await evictDurableObject(stub);
+    mockOwnerGithub();
+    const initialized = await stub.fetch(new Request("https://memory-test.invalid/v1/owner/status", {
+      headers: { authorization: `Bearer ${ownerToken}` },
+    }));
+    expect(initialized.status).toBe(200);
+
+    await runInDurableObject(stub, async (_instance, state) => {
+      const migrated = state.storage.sql.exec<{
+        id: string; status: string; owner_approved: number; mission_authorized: number;
+        title: string; evidence_refs: string; updated_at: string;
+      }>(
+        "SELECT id,status,owner_approved,mission_authorized,title,evidence_refs,updated_at FROM tasks WHERE id LIKE 'legacy-%' ORDER BY id",
+      ).toArray();
+
+      expect(migrated).toHaveLength(4);
+      const byId = new Map(migrated.map((row) => [row.id, row]));
+      expect(byId.get("legacy-queued")).toMatchObject({
+        status: "proposed", owner_approved: 0, mission_authorized: 0,
+        title: "Legacy legacy-queued", evidence_refs: '["legacy-evidence"]',
+      });
+      expect(byId.get("legacy-running")).toMatchObject({
+        status: "proposed", owner_approved: 0, mission_authorized: 0,
+        title: "Legacy legacy-running",
+      });
+      expect(byId.get("legacy-approved")).toMatchObject({
+        status: "queued", owner_approved: 1, mission_authorized: 0,
+        title: "Legacy legacy-approved",
+      });
+      expect(byId.get("legacy-terminal")).toMatchObject({
+        status: "succeeded", owner_approved: 0, mission_authorized: 0,
+        title: "Legacy legacy-terminal",
+      });
+      for (const row of migrated) {
+        expect(row.updated_at).not.toBe("2026-11-01T00:00:00.000Z");
+      }
+    });
   });
 });
 
@@ -62,7 +223,17 @@ describe("persistent memory Worker HTTP contract", () => {
     expect(response.status).toBe(401);
   });
 
-  it("restricts owner review lists and browser access to the owner token and canonical app origin", async () => {
+  it("rejects a valid GitHub user token issued to a different OAuth app or belonging to a different owner", async () => {
+    const wrongAppToken = "local-vitest-wrong-app-token";
+    mockOwnerGithub({ accessToken: wrongAppToken, appClientId: "different-oauth-app" });
+    expect((await request("/v1/owner/tasks", {}, wrongAppToken)).status).toBe(401);
+    const wrongOwnerToken = "local-vitest-wrong-owner-token";
+    mockOwnerGithub({ accessToken: wrongOwnerToken, userId: 999999 });
+    expect((await request("/v1/owner/tasks", {}, wrongOwnerToken)).status).toBe(401);
+  });
+
+  it("restricts owner review lists and browser access to the owner OAuth app and immutable owner ID", async () => {
+    mockOwnerGithub();
     const normalTaskList = await request("/v1/owner/tasks");
     expect(normalTaskList.status).toBe(401);
     const ownerTasks = await request("/v1/owner/tasks?limit=5", {}, ownerToken);
@@ -315,37 +486,28 @@ describe("persistent memory Worker HTTP contract", () => {
     expect(await recall.json()).toMatchObject({ memories: [], experiences: [] });
   });
 
-  it("auto-queues only safe task types under the standing mission mandate", async () => {
-    const safePayload = {
-      idempotency_key: `MISSION-OUTREACH-${crypto.randomUUID()}`,
-      task_type: "customer_outreach",
-      title: "Validate seller workflow",
-      goal: "Conduct a bounded customer discovery experiment",
-      approved_scope: "Research relevant sellers and draft truthful, respectful messages using existing authorized no-cost channels. Do not send if no compliant messaging tool is available."
+  it("never lets an agent-supplied scope authorize or auto-queue a task", async () => {
+    const payload = {
+      idempotency_key: `MISSION-ATTEMPT-${crypto.randomUUID()}`,
+      task_type: "market_research",
+      title: "Research public market information",
+      goal: "Compare public market information",
+      approved_scope: "Read public sources only; no external side effects."
     };
-    const created = await request("/v1/tasks", { method: "POST", body: JSON.stringify(safePayload) });
+    const created = await request("/v1/tasks", { method: "POST", body: JSON.stringify(payload) });
     expect(created.status).toBe(201);
-    const safe = await created.json<{ task: { id: string; status: string; owner_approved: boolean; mission_authorized: boolean }; mission_authorized: boolean }>();
-    expect(safe.mission_authorized).toBe(true);
-    expect(safe.task).toMatchObject({ status: "queued", owner_approved: false, mission_authorized: true });
-    const claimed = await request("/v1/tasks/claim-next", { method: "POST" });
-    expect((await claimed.json<{ task: { id: string; status: string; mission_authorized: boolean } }>()).task)
-      .toMatchObject({ id: safe.task.id, status: "running", mission_authorized: true });
-    await request(`/v1/tasks/${safe.task.id}/transition`, { method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Mission-authorized claim verified" }) });
+    const result = await created.json<{ task: { status: string; owner_approved: boolean; mission_authorized: boolean; scope_id: string }; mission_authorized: boolean }>();
+    expect(result.mission_authorized).toBe(false);
+    expect(result.task).toMatchObject({ status: "proposed", owner_approved: false, mission_authorized: false, scope_id: "owner_review_required" });
 
-    const unsafePayload = {
-      ...safePayload,
-      idempotency_key: `MISSION-UNSAFE-${crypto.randomUUID()}`,
-      task_type: "customer_outreach",
-      title: "Buy a lead list",
-      goal: "This must remain owner-reviewed",
-      approved_scope: "Purchase email lists and send bulk messages."
-    };
-    const unsafeResponse = await request("/v1/tasks", { method: "POST", body: JSON.stringify(unsafePayload) });
-    expect(unsafeResponse.status).toBe(201);
-    const unsafe = await unsafeResponse.json<{ task: { status: string; owner_approved: boolean; mission_authorized: boolean }; mission_authorized: boolean }>();
-    expect(unsafe.mission_authorized).toBe(false);
-    expect(unsafe.task).toMatchObject({ status: "proposed", owner_approved: false, mission_authorized: false });
+    const forgedScope = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
+      ...payload,
+      idempotency_key: `MISSION-FORGED-${crypto.randomUUID()}`,
+      scope_id: "public_web_research_no_contact"
+    }) });
+    expect(forgedScope.status).toBe(400);
+    const claim = await request("/v1/tasks/claim-next", { method: "POST" });
+    expect(await claim.json()).toEqual({ task: null });
   });
 
   it("requires the separate owner credential to approve and claims only approved tasks", async () => {
@@ -362,8 +524,8 @@ describe("persistent memory Worker HTTP contract", () => {
     expect((await approved.json<{ task: { status: string; owner_approved: boolean } }>()).task)
       .toMatchObject({ status: "queued", owner_approved: true });
     const claimed = await request("/v1/tasks/claim-next", { method: "POST" });
-    expect((await claimed.json<{ task: { id: string; status: string; attempt_count: number } }>()).task)
-      .toMatchObject({ id: task.id, status: "running", attempt_count: 1 });
+    expect((await claimed.json<{ task: { id: string; status: string; attempt_count: number; owner_approved: boolean; mission_authorized: boolean } }>()).task)
+      .toMatchObject({ id: task.id, status: "running", attempt_count: 1, owner_approved: true, mission_authorized: false });
     const blocked = await request("/v1/tasks/claim-next", { method: "POST" });
     expect(await blocked.json()).toEqual({ task: null });
     const ownerPause = await request(`/v1/tasks/${task.id}/owner-control`, {
@@ -385,6 +547,39 @@ describe("persistent memory Worker HTTP contract", () => {
       method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Approval test completed" })
     });
     expect(finish.status).toBe(200);
+  });
+
+  it("refreshes only an actively running owner-approved task lease", async () => {
+    const create = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
+      idempotency_key: `TASK-HEARTBEAT-${crypto.randomUUID()}`, task_type: "repo_maintenance",
+      title: "Heartbeat test", goal: "Verify active lease refresh", approved_scope: "Test only"
+    }) });
+    const { task } = await create.json<{ task: { id: string } }>();
+    await request(`/v1/tasks/${task.id}/approve`, { method: "POST" }, ownerToken);
+    const claimed = await request("/v1/tasks/claim-next", { method: "POST" });
+    expect((await claimed.json<{ task: { id: string; owner_approved: boolean; mission_authorized: boolean } }>()).task)
+      .toMatchObject({ id: task.id, owner_approved: true, mission_authorized: false });
+
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(Date.now() + 25 * 60 * 1000);
+      const heartbeat = await request(`/v1/tasks/${task.id}/heartbeat`, { method: "POST", body: "{}" });
+      expect(heartbeat.status).toBe(200);
+      expect(await heartbeat.json()).toMatchObject({ heartbeat: true });
+      vi.setSystemTime(Date.now() + 10 * 60 * 1000);
+      expect(await (await request("/v1/tasks/claim-next", { method: "POST" })).json()).toEqual({ task: null });
+      vi.setSystemTime(Date.now() + 21 * 60 * 1000);
+      const recovered = await request("/v1/tasks/claim-next", { method: "POST" });
+      expect((await recovered.json<{ task: { id: string; status: string; attempt_count: number } }>()).task)
+        .toMatchObject({ id: task.id, status: "running", attempt_count: 2 });
+      const terminal = await request(`/v1/tasks/${task.id}/transition`, {
+        method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Heartbeat recovery test complete" })
+      });
+      expect(terminal.status).toBe(200);
+      expect((await request(`/v1/tasks/${task.id}/heartbeat`, { method: "POST", body: "{}" })).status).toBe(409);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("refuses to queue unapproved tasks and rejects illegal transitions", async () => {

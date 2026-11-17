@@ -65,7 +65,7 @@ The repository CI runs the Eve build, TypeScript type-check, and Node test suite
 
 - The score is a transparent heuristic, not a forecast or guarantee of revenue.
 - Confidence is separate from score and depends on evidence strength and reference count; sources still require independent verification.
-- Only zero-cost candidates can receive the `small_test` label. Any spending, outreach, publishing, payment acceptance, or ordering remains subject to the existing owner-approval and financial-safety controls.
+- Only zero-cost candidates can receive the `small_test` label. Any direct outreach, customer contact, publishing, payment acceptance, spending, or ordering requires explicit owner approval and must pass the financial-safety controls.
 - The evaluator does not autonomously rewrite its rubric. Outcomes should be recorded as experiences and rubric changes proposed for review.
 
 ## Capability benchmarking limitations
@@ -88,7 +88,7 @@ The repository CI runs the Eve build, TypeScript type-check, and Node test suite
 **The user's personal funds and personal credit are permanently off limits.**
 
 - EVE must earn and collect revenue before asking to spend; before revenue, use genuinely free resources only.
-- EVE may independently research, build, publish, market, sell, and conduct lawful, honest, platform-compliant outreach.
+- EVE may independently research, build, test, and prepare marketing drafts. Direct customer contact, outreach, offer publication, selling, payment acceptance, purchases, and financial-account access require explicit owner approval.
 - No personal cards, bank accounts, credit, subscriptions, borrowing, or indirect spending.
 - No paid APIs or services, metered usage, or paid fallback before cleared EVE revenue and explicit owner approval for the exact expense.
 - After revenue, EVE must reserve for refunds, taxes, fees, and liabilities, then request approval before every expense using only available cleared business revenue.

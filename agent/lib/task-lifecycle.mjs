@@ -5,11 +5,18 @@ const TASK_STATUSES = Object.freeze([
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
 
-const MISSION_TASK_TYPES = new Set(["market_research", "product_development", "testing", "documentation", "customer_discovery", "customer_outreach", "offer_publication"]);
-const BLOCKED_MISSION_SCOPE = /\b(?:purchase|buy|spend|pay for|subscribe to|sign up for|create (?:an )?account|account creation|set up (?:a )?(?:payment|checkout)|accept payments?|charge customers?|transfer funds|access (?:a )?bank account|use (?:a )?credit card|place (?:an )?order|ship (?:goods|hardware|products)|deploy to production|production deployment|merge to main|access credentials|send bulk messages|bulk messaging|mass email)\b/i;
-export function isMissionAuthorizedTask(input) {
-  return !!input && MISSION_TASK_TYPES.has(input.task_type) && typeof input.approved_scope === "string" && input.approved_scope.trim().length >= 3 && !BLOCKED_MISSION_SCOPE.test(input.approved_scope);
-}
+// These scope IDs are owner-defined policy, not model-authored free text.
+// Their meanings are deliberately narrow and exclude all external side effects.
+export const OWNER_DEFINED_SCOPE_IDS = Object.freeze({
+  market_research: "public_web_research_no_contact",
+  product_development: "local_prototype_no_external_effects",
+  testing: "automated_tests_no_external_effects",
+  documentation: "documentation_only",
+});
+const OWNER_REVIEW_SCOPE_ID = "owner_review_required";
+// Standing mission authorization is disabled until a trusted owner-controlled
+// delegation mechanism exists. Agent-supplied task metadata is never authority.
+export function isMissionAuthorizedTask(_input) { return false; }
 const TRANSITIONS = Object.freeze({
   proposed: new Set(["queued", "cancelled"]),
   queued: new Set(["running", "paused", "failed", "cancelled"]),
@@ -23,7 +30,7 @@ const TRANSITIONS = Object.freeze({
 
 const REQUIRED = [
   "id", "idempotency_key", "task_type", "title", "goal",
-  "approved_scope", "created_at", "updated_at", "status"
+  "approved_scope", "scope_id", "created_at", "updated_at", "status"
 ];
 
 function nonEmpty(value) {
@@ -76,6 +83,7 @@ export function createTaskRecord(input, { now = new Date().toISOString(), maxAtt
     title: input.title,
     goal: input.goal,
     approved_scope: input.approved_scope,
+    scope_id: input.scope_id ?? OWNER_REVIEW_SCOPE_ID,
     status: missionAuthorized === true ? "queued" : "proposed",
     owner_approved: false,
     mission_authorized: missionAuthorized === true,
@@ -114,7 +122,7 @@ export function selectNextTask(tasks, { now = Date.now() } = {}) {
     const dueQueued = task.status === "queued" && (!task.next_run_at || Date.parse(task.next_run_at) <= now);
     const dueWaiting = task.status === "waiting" && task.next_run_at !== null && task.next_run_at !== undefined && Date.parse(task.next_run_at) <= now;
     if (!dueQueued && !dueWaiting) return false;
-    if (task.owner_approved !== true && task.mission_authorized !== true) return false;
+    if (task.owner_approved !== true || task.mission_authorized === true) return false;
     if (task.attempt_count >= task.max_attempts) return false;
     return true;
   });
@@ -144,7 +152,7 @@ export function transitionTask(task, nextStatus, {
   if (task.status === "proposed" && nextStatus === "queued" && ownerApproved !== true) {
     throw new Error("owner_approval_required");
   }
-  if (nextStatus === "queued" && task.owner_approved !== true && ownerApproved !== true && !(task.status === "waiting" && task.mission_authorized === true)) {
+  if (nextStatus === "queued" && task.owner_approved !== true && ownerApproved !== true) {
     throw new Error("owner_approval_required");
   }
   if (nextStatus === "running" && task.attempt_count >= task.max_attempts) {
@@ -184,6 +192,22 @@ export function isTaskLeaseExpired(task, {
     throw new TypeError("A finite clock and positive lease duration are required");
   }
   return now - Date.parse(task.updated_at) >= leaseMs;
+}
+
+
+/**
+ * Compute the fail-closed migration patch for a legacy standing-mandate task.
+ * The Worker applies this patch with a conditional SQL update; terminal history
+ * and individually owner-approved state are preserved.
+ */
+export function revokeLegacyMissionAuthorization(row, now = new Date().toISOString()) {
+  if (!row || row.mission_authorized !== 1) return null;
+  const terminal = TERMINAL.has(row.status);
+  return Object.freeze({
+    mission_authorized: 0,
+    status: row.owner_approved !== 1 && !terminal ? "proposed" : row.status,
+    updated_at: now
+  });
 }
 
 export const TASK_STATUS_VALUES = TASK_STATUSES;
