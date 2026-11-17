@@ -30,8 +30,8 @@ function mockOwnerGithub(options: { accessToken?: string; userId?: number; appCl
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 function request(path: string, init: RequestInit = {}, credential = token) {
-  if (credential !== token) mockOwnerGithub({ accessToken: credential });
-  else vi.stubGlobal("fetch", vi.fn(async () => new Response("unauthorized", { status: 401 })));
+  if (credential === ownerToken) mockOwnerGithub();
+  else if (credential === token) vi.stubGlobal("fetch", vi.fn(async () => new Response("unauthorized", { status: 401 })));
   return exports.default.fetch(
     new Request(new URL(path, endpoint), {
       ...init,
