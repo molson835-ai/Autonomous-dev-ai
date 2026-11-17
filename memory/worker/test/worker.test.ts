@@ -5,6 +5,26 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const token = "local-vitest-only-token";
 const endpoint = "https://memory-test.invalid";
 const ownerToken = "local-vitest-only-owner-token";
+const ownerGithubId = 341732270;
+const ownerGithubClientId = "local-vitest-only-client-id";
+
+function mockOwnerGithub(options: { userId?: number; appClientId?: string } = {}) {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes("/applications/")) {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { access_token?: string };
+      if (body.access_token !== ownerToken) return new Response("invalid token", { status: 404 });
+      return Response.json({ app: { client_id: options.appClientId ?? ownerGithubClientId } });
+    }
+    if (url === "https://api.github.com/user") {
+      if (new Headers(init?.headers).get("authorization") !== "Bearer " + ownerToken) {
+        return new Response("invalid user token", { status: 401 });
+      }
+      return Response.json({ id: options.userId ?? ownerGithubId, login: "molson835-ai" });
+    }
+    return new Response("unexpected outbound request", { status: 503 });
+  }));
+}
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
@@ -148,6 +168,7 @@ describe("legacy task authorization Durable Object migration", () => {
 
     // Reconstructing the object reruns its blockConcurrencyWhile schema/data migration.
     await evictDurableObject(stub);
+    mockOwnerGithub();
     const initialized = await stub.fetch(new Request("https://memory-test.invalid/v1/owner/status", {
       headers: { authorization: `Bearer ${ownerToken}` },
     }));
@@ -194,7 +215,15 @@ describe("persistent memory Worker HTTP contract", () => {
     expect(response.status).toBe(401);
   });
 
-  it("restricts owner review lists and browser access to the owner token and canonical app origin", async () => {
+  it("rejects a valid GitHub user token issued to a different OAuth app or belonging to a different owner", async () => {
+    mockOwnerGithub({ appClientId: "different-oauth-app" });
+    expect((await request("/v1/owner/tasks", {}, ownerToken)).status).toBe(401);
+    mockOwnerGithub({ userId: 999999 });
+    expect((await request("/v1/owner/tasks", {}, ownerToken)).status).toBe(401);
+  });
+
+  it("restricts owner review lists and browser access to the owner OAuth app and immutable owner ID", async () => {
+    mockOwnerGithub();
     const normalTaskList = await request("/v1/owner/tasks");
     expect(normalTaskList.status).toBe(401);
     const ownerTasks = await request("/v1/owner/tasks?limit=5", {}, ownerToken);
