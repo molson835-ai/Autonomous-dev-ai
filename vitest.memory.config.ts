@@ -11,7 +11,9 @@ export default defineConfig({
         // Test-only credential. Never read or reuse a deployed Worker secret.
         bindings: {
           MEMORY_API_TOKEN: "local-vitest-only-token",
-          TASK_OWNER_APPROVAL_TOKEN: "local-vitest-only-owner-token",
+          GITHUB_CLIENT_ID: "local-owner-oauth-app",
+          GITHUB_CLIENT_SECRET: "local-owner-oauth-secret",
+          OWNER_GITHUB_ID: "12345678",
         },
       },
     }),

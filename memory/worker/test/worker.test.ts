@@ -1,17 +1,38 @@
 import { exports } from "cloudflare:workers";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const token = "local-vitest-only-token";
 const endpoint = "https://memory-test.invalid";
 const ownerToken = "local-vitest-only-owner-token";
 
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+
 function request(path: string, init: RequestInit = {}, credential = token) {
+  if (credential === ownerToken) {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/applications/local-owner-oauth-app/token")) {
+        return Response.json({ app: { client_id: "local-owner-oauth-app" } });
+      }
+      return Response.json({ id: 12345678, login: "renamed-owner-login" });
+    }));
+  } else if (credential === token) {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("unauthorized", { status: 401 })));
+  }
+  if (credential === ownerToken) {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/applications/local-owner-oauth-app/token")) {
+        return Response.json({ app: { client_id: "local-owner-oauth-app" } });
+      }
+      return Response.json({ id: 12345678, login: "renamed-owner-login" });
+    }));
+  }
   return exports.default.fetch(
     new Request(new URL(path, endpoint), {
       ...init,
       headers: {
         authorization: `Bearer ${credential}`,
         ...(init.body ? { "content-type": "application/json" } : {}),
+        "cf-connecting-ip": credential === token ? "203.0.113.2" : "203.0.113.1",
         ...init.headers,
       },
     }),
@@ -69,6 +90,51 @@ describe("shared daily neuron quota coordinator", () => {
     expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify(base)})).status).toBe(200);
     expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify({...base,usedNeurons:1900,observedAt:new Date(Date.now()-1).toISOString()})})).status).toBe(503);
     vi.useRealTimers();
+  });
+});
+
+describe("owner OAuth app and immutable identity verification", () => {
+  it("accepts only a token issued to the configured OAuth app and immutable owner ID", async () => {
+    const fakeFetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/applications/local-owner-oauth-app/token")) {
+        return new Response(JSON.stringify({ app: { client_id: "local-owner-oauth-app" } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ id: 12345678, login: "renamed-owner-login" }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fakeFetch);
+    try {
+      const response = await request("/v1/owner/status", {}, "oauth-token-issued-to-configured-app");
+      expect(response.status).toBe(200);
+      expect(fakeFetch).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("rejects tokens from another OAuth app and accounts with a different immutable ID", async () => {
+    const wrongAppFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ app: { client_id: "another-oauth-app" } }), { status: 200 })
+    );
+    vi.stubGlobal("fetch", wrongAppFetch);
+    try {
+      expect((await request("/v1/owner/status", {}, "oauth-token-from-another-app")).status).toBe(401);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    const wrongOwnerFetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/applications/local-owner-oauth-app/token")) {
+        return new Response(JSON.stringify({ app: { client_id: "local-owner-oauth-app" } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ id: 87654321, login: "same-login-is-not-trusted" }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", wrongOwnerFetch);
+    try {
+      expect((await request("/v1/owner/status", {}, "oauth-token-for-wrong-account")).status).toBe(401);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 
