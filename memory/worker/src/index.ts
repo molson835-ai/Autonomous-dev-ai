@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { isSafeMemoryText, normalizeMemoryQuery } from "../../../agent/lib/memory-policy.mjs";
 import { ensureExperienceExternalIdColumn, findExperienceByExternalId } from "../../../agent/lib/memory-schema.mjs";
-import { createTaskRecord, isMissionAuthorizedTask, isTaskLeaseExpired, selectNextTask, TASK_STATUS_VALUES, transitionTask } from "../../../agent/lib/task-lifecycle.mjs";
+import { createTaskRecord, isMissionAuthorizedTask, isTaskLeaseExpired, revokeLegacyMissionAuthorization, selectNextTask, TASK_STATUS_VALUES, transitionTask } from "../../../agent/lib/task-lifecycle.mjs";
 
 interface Env {
   MEMORY: DurableObjectNamespace<MemoryStore>;
@@ -78,12 +78,18 @@ export class MemoryStore extends DurableObject<Env> {
       if (!taskColumns.some(column => column.name === "scope_id")) {
         ctx.storage.sql.exec("ALTER TABLE tasks ADD COLUMN scope_id TEXT NOT NULL DEFAULT 'owner_review_required'");
       }
-      // Revoke all legacy mission authorization until trusted owner delegation exists.
-      // Preserve history; stop every nonterminal unapproved task by returning it to proposed.
-      ctx.storage.sql.exec(
-        "UPDATE tasks SET mission_authorized=0, status=CASE WHEN owner_approved=0 AND status NOT IN ('succeeded','failed','cancelled') THEN 'proposed' ELSE status END, updated_at=? WHERE mission_authorized=1",
-        new Date().toISOString()
-      );
+      // Revoke legacy standing authorization row-by-row with a conditional update.
+      // The helper is shared with unit tests; terminal history and owner approval are preserved.
+      const migrationNow = new Date().toISOString();
+      const legacyTasks = ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE mission_authorized=1").toArray();
+      for (const legacy of legacyTasks) {
+        const patch = revokeLegacyMissionAuthorization(legacy, migrationNow);
+        if (!patch) continue;
+        ctx.storage.sql.exec(
+          "UPDATE tasks SET mission_authorized=0,status=?,updated_at=? WHERE id=? AND mission_authorized=1",
+          patch.status, patch.updated_at, legacy.id
+        );
+      }
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS task_control (id INTEGER PRIMARY KEY CHECK (id=1), queue_paused INTEGER NOT NULL CHECK (queue_paused IN (0,1)), reason TEXT, updated_at TEXT NOT NULL)");
       ctx.storage.sql.exec("INSERT OR IGNORE INTO task_control (id,queue_paused,reason,updated_at) VALUES (1,0,NULL,?)", new Date().toISOString());
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS quota_daily (day TEXT PRIMARY KEY, baseline_neurons REAL NOT NULL, observed_neurons REAL NOT NULL, observed_at TEXT NOT NULL, local_estimated_neurons REAL NOT NULL DEFAULT 0, circuit_open INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)");
