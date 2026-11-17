@@ -1,4 +1,5 @@
-import { exports } from "cloudflare:workers";
+import { env, exports } from "cloudflare:workers";
+import { evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const token = "local-vitest-only-token";
@@ -108,6 +109,80 @@ describe("shared daily neuron quota coordinator", () => {
       vi.useRealTimers();
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe("legacy task authorization Durable Object migration", () => {
+  it("revokes persisted mission grants on reconstruction while preserving owner-approved and terminal task history", async () => {
+    const stub = env.MEMORY.get(env.MEMORY.idFromName(\`legacy-migration-\${crypto.randomUUID()}\`));
+    const rows = [
+      { id: "legacy-queued", ownerApproved: 0, status: "queued" },
+      { id: "legacy-running", ownerApproved: 0, status: "running" },
+      { id: "legacy-approved", ownerApproved: 1, status: "queued" },
+      { id: "legacy-terminal", ownerApproved: 0, status: "succeeded" },
+    ];
+
+    // Initialize the real SQLite-backed Durable Object before seeding pre-migration rows.
+    await runInDurableObject(stub, async (_instance, state) => {
+      for (const row of rows) {
+        state.storage.sql.exec(
+          "INSERT INTO tasks (id,idempotency_key,task_type,title,goal,approved_scope,scope_id,status,owner_approved,mission_authorized,created_at,updated_at,attempt_count,max_attempts,evidence_refs) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          row.id,
+          \`migration-\${row.id}\`,
+          "repo_maintenance",
+          \`Legacy \${row.id}\`,
+          "Preserve the existing task record while revoking the legacy grant",
+          "No execution until separately approved",
+          "owner_review_required",
+          row.status,
+          row.ownerApproved,
+          1,
+          "2026-11-01T00:00:00.000Z",
+          "2026-11-01T00:00:00.000Z",
+          1,
+          3,
+          '["legacy-evidence"]',
+        );
+      }
+    });
+
+    // Reconstructing the object reruns its blockConcurrencyWhile schema/data migration.
+    await evictDurableObject(stub);
+    const initialized = await stub.fetch(new Request("https://memory-test.invalid/v1/owner/status", {
+      headers: { authorization: \`Bearer \${ownerToken}\` },
+    }));
+    expect(initialized.status).toBe(200);
+
+    await runInDurableObject(stub, async (_instance, state) => {
+      const migrated = state.storage.sql.exec<{
+        id: string; status: string; owner_approved: number; mission_authorized: number;
+        title: string; evidence_refs: string; updated_at: string;
+      }>(
+        "SELECT id,status,owner_approved,mission_authorized,title,evidence_refs,updated_at FROM tasks WHERE id LIKE 'legacy-%' ORDER BY id",
+      ).toArray();
+
+      expect(migrated).toHaveLength(4);
+      const byId = new Map(migrated.map((row) => [row.id, row]));
+      expect(byId.get("legacy-queued")).toMatchObject({
+        status: "proposed", owner_approved: 0, mission_authorized: 0,
+        title: "Legacy legacy-queued", evidence_refs: '["legacy-evidence"]',
+      });
+      expect(byId.get("legacy-running")).toMatchObject({
+        status: "proposed", owner_approved: 0, mission_authorized: 0,
+        title: "Legacy legacy-running",
+      });
+      expect(byId.get("legacy-approved")).toMatchObject({
+        status: "queued", owner_approved: 1, mission_authorized: 0,
+        title: "Legacy legacy-approved",
+      });
+      expect(byId.get("legacy-terminal")).toMatchObject({
+        status: "succeeded", owner_approved: 0, mission_authorized: 0,
+        title: "Legacy legacy-terminal",
+      });
+      for (const row of migrated) {
+        expect(row.updated_at).not.toBe("2026-11-01T00:00:00.000Z");
+      }
+    });
   });
 });
 
