@@ -11,9 +11,11 @@ export default defineConfig({
         // Test-only credential. Never read or reuse a deployed Worker secret.
         bindings: {
           MEMORY_API_TOKEN: "local-vitest-only-token",
+          GITHUB_CLIENT_ID: "local-vitest-only-client-id",
+          GITHUB_CLIENT_SECRET: "local-vitest-only-client-secret",
+          OWNER_GITHUB_ID: "341732270",
           CLOUDFLARE_ACCOUNT_ID: "0123456789abcdef0123456789abcdef",
           CLOUDFLARE_ANALYTICS_API_TOKEN: "local-vitest-only-analytics-token",
-          TASK_OWNER_APPROVAL_TOKEN: "local-vitest-only-owner-token",
         },
       },
     }),
