@@ -46,6 +46,9 @@ describe("shared daily neuron quota coordinator", () => {
       method: "POST", body: JSON.stringify({ reserve_neurons: 200, model_id: "@cf/zai-org/glm-4.7-flash" }),
     }));
     expect(denied.status).toBe(401);
+    expect((await request("/v1/quota/reserve", {
+      method: "POST", body: JSON.stringify({ reserve_neurons: 200, model_id: "@cf/zai-org/glm-4.7-flash", usedNeurons: 0, day: new Date().toISOString().slice(0, 10) }),
+    })).status).toBe(400);
     vi.stubGlobal("fetch", vi.fn(async () => new Response("unavailable", { status: 503 })));
     expect((await quotaRequest()).status).toBe(503);
   });
