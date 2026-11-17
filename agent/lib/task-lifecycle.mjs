@@ -5,10 +5,20 @@ const TASK_STATUSES = Object.freeze([
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
 
-const MISSION_TASK_TYPES = new Set(["market_research", "product_development", "testing", "documentation", "customer_discovery", "customer_outreach", "offer_publication"]);
-const BLOCKED_MISSION_SCOPE = /\b(?:purchase|buy|spend|pay for|subscribe to|sign up for|create (?:an )?account|account creation|set up (?:a )?(?:payment|checkout)|accept payments?|charge customers?|transfer funds|access (?:a )?bank account|use (?:a )?credit card|place (?:an )?order|ship (?:goods|hardware|products)|deploy to production|production deployment|merge to main|access credentials|send bulk messages|bulk messaging|mass email)\b/i;
+// These scope IDs are owner-defined policy, not model-authored free text.
+// Their meanings are deliberately narrow and exclude all external side effects.
+export const OWNER_DEFINED_SCOPE_IDS = Object.freeze({
+  market_research: "public_web_research_no_contact",
+  product_development: "local_prototype_no_external_effects",
+  testing: "automated_tests_no_external_effects",
+  documentation: "documentation_only",
+});
+const OWNER_REVIEW_SCOPE_ID = "owner_review_required";
 export function isMissionAuthorizedTask(input) {
-  return !!input && MISSION_TASK_TYPES.has(input.task_type) && typeof input.approved_scope === "string" && input.approved_scope.trim().length >= 3 && !BLOCKED_MISSION_SCOPE.test(input.approved_scope);
+  if (!input || typeof input !== "object") return false;
+  return Object.entries(OWNER_DEFINED_SCOPE_IDS).some(([taskType, scopeId]) =>
+    input.task_type === taskType && input.scope_id === scopeId
+  );
 }
 const TRANSITIONS = Object.freeze({
   proposed: new Set(["queued", "cancelled"]),
@@ -23,7 +33,7 @@ const TRANSITIONS = Object.freeze({
 
 const REQUIRED = [
   "id", "idempotency_key", "task_type", "title", "goal",
-  "approved_scope", "created_at", "updated_at", "status"
+  "approved_scope", "scope_id", "created_at", "updated_at", "status"
 ];
 
 function nonEmpty(value) {
@@ -76,6 +86,7 @@ export function createTaskRecord(input, { now = new Date().toISOString(), maxAtt
     title: input.title,
     goal: input.goal,
     approved_scope: input.approved_scope,
+    scope_id: input.scope_id ?? OWNER_REVIEW_SCOPE_ID,
     status: missionAuthorized === true ? "queued" : "proposed",
     owner_approved: false,
     mission_authorized: missionAuthorized === true,
