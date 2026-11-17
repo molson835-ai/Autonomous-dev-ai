@@ -143,7 +143,7 @@ export class MemoryStore extends DurableObject<Env> {
         daily={day,baseline_neurons:usedNeurons,observed_neurons:usedNeurons,local_estimated_neurons:0,circuit_open:0};
       } else {
         this.ctx.storage.sql.exec("UPDATE quota_daily SET observed_neurons=?,observed_at=?,updated_at=? WHERE day=?",usedNeurons,observedAt,now,day);
-        daily.observed_neurons=body.usedNeurons;
+        daily.observed_neurons=usedNeurons;
       }
       if (daily.circuit_open===1) return json({error:"Daily Workers AI circuit is open."},429);
       const active=this.ctx.storage.sql.exec<{total:number}>("SELECT COALESCE(SUM(reserved_neurons),0) AS total FROM quota_reservations WHERE day=?",day).one().total;
