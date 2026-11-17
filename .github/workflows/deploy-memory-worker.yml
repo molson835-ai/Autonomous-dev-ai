@@ -47,8 +47,8 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN" || { echo "Missing CLOUDFLARE_API_TOKEN GitHub Actions secret."; exit 1; }
           test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "Missing CLOUDFLARE_ACCOUNT_ID secret or repository variable."; exit 1; }
           test -n "$MEMORY_API_TOKEN" || { echo "Missing MEMORY_API_TOKEN in the cloudflare-production GitHub environment. Set it to the same value as Vercel Production MEMORY_API_TOKEN."; exit 1; }
-          printf '%s' "$MEMORY_API_TOKEN" | npx --yes wrangler@4 secret put MEMORY_API_TOKEN --config memory/worker/wrangler.jsonc
           test -n "$CLOUDFLARE_ANALYTICS_API_TOKEN" || { echo "Missing CLOUDFLARE_ANALYTICS_API_TOKEN in cloudflare-production; configure read-only Account Analytics permission."; exit 1; }
+          printf '%s' "$MEMORY_API_TOKEN" | npx --yes wrangler@4 secret put MEMORY_API_TOKEN --config memory/worker/wrangler.jsonc
           printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | npx --yes wrangler@4 secret put CLOUDFLARE_ACCOUNT_ID --config memory/worker/wrangler.jsonc
           printf '%s' "$CLOUDFLARE_ANALYTICS_API_TOKEN" | npx --yes wrangler@4 secret put CLOUDFLARE_ANALYTICS_API_TOKEN --config memory/worker/wrangler.jsonc
           npx --yes wrangler@4 deploy --config memory/worker/wrangler.jsonc
