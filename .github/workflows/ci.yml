@@ -3,7 +3,7 @@ name: CI
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main, feat/eve-earned-growth-foundation, feat/gdelt-free-news-search, feat/opportunity-evaluation-engine]
+    branches: [main, feat/eve-earned-growth-foundation, feat/gdelt-free-news-search, feat/opportunity-evaluation-engine, fix/task-self-authorization-boundary-2026-11-16, fix/task-authorization-and-neuron-settlement-2026-11-16]
   push:
     branches: [main]
 
