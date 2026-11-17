@@ -69,6 +69,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
             const next = await reader.read();
             if (next.done) {
               if (!settled) { settled = true; await settle(id); }
+              reader.releaseLock();
               controller.close();
               return;
             }
@@ -82,6 +83,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
               settled = true;
               try { await settle(id); } catch { /* Keep the reservation fail-closed. */ }
             }
+            try { reader.releaseLock(); } catch { /* Reader may already be released. */ }
             controller.error(error);
           }
         },
@@ -89,6 +91,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
           try { await reader.cancel(reason); }
           finally {
             if (!settled) { settled = true; await settle(id); }
+            try { reader.releaseLock(); } catch { /* Reader may already be released. */ }
           }
         },
       }) as typeof result.stream;
