@@ -33,7 +33,7 @@ Cloudflare's free daily allowance is measured in neurons, not OpenAI-compatible 
 - An observation is stale after 15 minutes.
 - Local token counts are never represented as authoritative neuron usage.
 
-Important limitation: this commit adds the pure quota decision and Cloudflare error classifier, but it does not yet connect an authoritative account-level neuron telemetry source or enforce the daily gate around every model invocation. The current Cloudflare API token was scoped for Workers AI access; GraphQL account analytics requires a separate Analytics Read permission. Do not describe the daily gate as live until a verified source is connected and the model-call path consumes its decision.
+Deployment limitation: the code now queries account-wide Cloudflare Analytics from the trusted Memory Worker using a separate `CLOUDFLARE_ANALYTICS_API_TOKEN` secret, rather than accepting usage totals from Eve. Production enforcement is not live until that secret is provisioned with read-only Account Analytics permission and the Worker deployment is explicitly approved and verified. Missing credentials or telemetry errors fail closed.
 
 ## Failure handling
 
@@ -45,14 +45,14 @@ Important limitation: this commit adds the pure quota decision and Cloudflare er
 
 ## Runtime integration still required
 
-1. Connect an authoritative, account-wide daily neuron usage source using a separately scoped Analytics Read credential; do not expose the credential to EVE's prompt or tools.
-2. Persist the last verified usage observation and its timestamp in durable storage.
-3. Enforce the daily gate before every Workers AI model invocation, across all runtime instances and concurrent sessions.
+1. Provision the Worker-only `CLOUDFLARE_ANALYTICS_API_TOKEN` with read-only Account Analytics permission in the `cloudflare-production` GitHub environment; do not expose it to EVE's prompt, tools, or Vercel runtime.
+2. Deploy the Worker only after owner approval, then verify the analytics query against the live account without printing credentials.
+3. Keep the shared daily gate on every model invocation and fail closed on missing, stale, regressed, or malformed telemetry.
 4. Enforce one model-heavy task at a time and per-task call/step limits at the shared runtime boundary.
 5. Cache research and compact summaries so repeated work does not resend full context.
-6. Pause on missing/stale telemetry or error 4006, preserve checkpoints, and verify recovery with one controlled probe after reset.
+6. Preserve checkpoints and conservatively settle interrupted streams; verify recovery with one controlled probe after reset.
 7. Add owner-visible quota status with source, observation time, used/remaining neurons, threshold state, and explicit unknown/paused status.
-8. Test concurrency, stale telemetry, quota exhaustion, checkpoint preservation, and zero paid fallback.
+8. Complete and pass tests for concurrency, stale telemetry, quota exhaustion, checkpoint preservation, and zero paid fallback.
 
 ## Release constraints
 
@@ -64,12 +64,10 @@ Important limitation: this commit adds the pure quota decision and Cloudflare er
 
 ## Hybrid runtime integration
 
-The model instance is wrapped with AI SDK v4 middleware. Both generate and stream calls obtain a shared Durable Object reservation before reaching Cloudflare. Streaming reservations settle only on the provider finish event; an interrupted stream keeps its reservation for the UTC day. Cloudflare error 4006 opens the circuit breaker and is never retried.
+The model instance is wrapped with AI SDK v4 middleware. Both generate and stream calls obtain a shared Durable Object reservation before reaching Cloudflare. The Memory Worker—not Eve—queries Cloudflare GraphQL for the current UTC day's account-wide Workers AI neuron total, grouped only by date so all models and request sources are included. The request from Eve contains only the fixed reservation amount and model ID; caller-supplied usage totals and timestamps are rejected. Missing credentials, GraphQL errors, ambiguous aggregates, backwards-moving totals, or invalid usage fail closed. The Analytics credential is a Worker secret and never enters prompts, tools, or the Vercel runtime.
 
-Before every model call, server-side middleware queries Cloudflare GraphQL for the current UTC day's account-wide Workers AI neuron total, grouped only by date so all models and request sources are included. Missing credentials, GraphQL errors, ambiguous aggregates, or invalid totals fail closed. The Cloudflare API token never enters prompts or tools.
+The MemoryStore Durable Object maintains daily observations, local usage estimates, outstanding reservations, and circuit state. Its synchronous request handler serializes read-modify-write operations. It rejects regressed telemetry and reserves against the greater of verified account usage and baseline plus local estimates plus outstanding reservations. The settlement amount remains an SDK-derived estimate; the next reservation refreshes the account-level authoritative aggregate. This is a defense-in-depth design, not proof that Cloudflare Analytics is instantaneous.
 
-The MemoryStore Durable Object maintains daily observations, local usage estimates, outstanding reservations, and circuit state. Its synchronous request handler serializes read-modify-write operations. It rejects stale or backwards-moving telemetry and reserves against the greater of observed account usage and baseline plus EVE's local estimates plus outstanding reservations.
-
-GLM-4.7-Flash's published neuron rates (5,500 per million input tokens and 36,400 per million output tokens) inform a 50%-margin estimate. Output is capped at 1,024 tokens; each call reserves at least 200 neurons. EVE session limits cap new input at 16,384 tokens and output at 4,000 per continuation window. The account target remains 7,000 neurons, leaving a 3,000-neuron reserve. Provider error 4006 remains the hard stop if external or unmodelled use exceeds the target.
+GLM-4.7-Flash's published neuron rates (5,500 per million input tokens and 36,400 per million output tokens) inform a 50%-margin settlement estimate. Valid estimates are not floored to 200; missing or invalid usage falls back conservatively to 200. Output is capped at 1,024 tokens; each call temporarily reserves 200 neurons. Cancelled or interrupted streams settle with the conservative fallback instead of leaving the reservation until midnight. EVE session limits cap new input at 16,384 tokens and output at 4,000 per continuation window. The account target remains 7,000 neurons, leaving a 3,000-neuron reserve. Provider error 4006 remains the hard stop if external or unmodelled use exceeds the target.
 
 A feature-branch-only Vercel deployment exclusion is added so this code push does not consume Preview deployment quota. It does not disable deployments from main.
