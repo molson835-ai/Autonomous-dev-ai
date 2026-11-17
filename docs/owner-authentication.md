@@ -12,10 +12,10 @@ Configure the following in the Vercel Production environment for the owner conso
 
 Configure these in the GitHub Actions `cloudflare-production` environment (or repository variable for the numeric ID):
 
-- Secrets: `CLOUDFLARE_API_TOKEN`, `MEMORY_API_TOKEN`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`.
+- Secrets: `CLOUDFLARE_API_TOKEN`, `MEMORY_API_TOKEN`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and `CLOUDFLARE_ANALYTICS_API_TOKEN` (read-only Account Analytics permission).
 - Variable or secret: `OWNER_GITHUB_ID`.
 
-The Worker deployment workflow copies the OAuth app credentials and owner ID into Worker secrets. Do not put these values in source code, logs, task metadata, memory, or client-side browser code.
+The Worker deployment workflow copies the OAuth app credentials, owner ID, Memory API token, Cloudflare account ID, and read-only Analytics token into Worker secrets. Do not put these values in source code, logs, task metadata, memory, or client-side browser code.
 
 To obtain the numeric owner ID, query the public GitHub user record for the intended account and copy its numeric `id` field. Do not use the login string as a substitute. Confirm the value independently before configuring it.
 
@@ -28,7 +28,7 @@ For each owner-only request, the Worker:
 3. Calls GitHub's authenticated user endpoint and requires its numeric `id` to equal `OWNER_GITHUB_ID`.
 4. Caches successful verification for up to 60 seconds and applies a best-effort per-edge-isolate failure limit.
 
-The cache and failure limiter are intentionally short-lived, in-memory protections, not a globally coordinated rate limiter. GitHub/API failures, missing configuration, malformed responses, or mismatched identities fail closed. A separate exact owner approval token remains supported for controlled automation and local tests; it must never be provided to the Eve agent.
+The cache and failure limiter are intentionally short-lived, in-memory protections, not a globally coordinated rate limiter. GitHub/API failures, missing configuration, malformed responses, or mismatched identities fail closed. The legacy `TASK_OWNER_APPROVAL_TOKEN` bypass is not supported; owner-only routes require the verified GitHub OAuth token.
 
 ## Deployment and acceptance
 
