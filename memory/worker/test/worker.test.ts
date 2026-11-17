@@ -410,8 +410,8 @@ describe("persistent memory Worker HTTP contract", () => {
     expect((await approved.json<{ task: { status: string; owner_approved: boolean } }>()).task)
       .toMatchObject({ status: "queued", owner_approved: true });
     const claimed = await request("/v1/tasks/claim-next", { method: "POST" });
-    expect((await claimed.json<{ task: { id: string; status: string; attempt_count: number } }>()).task)
-      .toMatchObject({ id: task.id, status: "running", attempt_count: 1 });
+    expect((await claimed.json<{ task: { id: string; status: string; attempt_count: number; owner_approved: boolean; mission_authorized: boolean } }>()).task)
+      .toMatchObject({ id: task.id, status: "running", attempt_count: 1, owner_approved: true, mission_authorized: false });
     const blocked = await request("/v1/tasks/claim-next", { method: "POST" });
     expect(await blocked.json()).toEqual({ task: null });
     const ownerPause = await request(`/v1/tasks/${task.id}/owner-control`, {
