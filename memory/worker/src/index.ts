@@ -6,7 +6,6 @@ import { createTaskRecord, isMissionAuthorizedTask, isTaskLeaseExpired, selectNe
 interface Env {
   MEMORY: DurableObjectNamespace<MemoryStore>;
   MEMORY_API_TOKEN: string;
-  TASK_OWNER_APPROVAL_TOKEN?: string;
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
   OWNER_GITHUB_ID?: string;
@@ -521,10 +520,6 @@ export default {
     }
     if (ownerOnlyRoute) {
       let authorizedOwner = supplied ? await isAuthorizedGithubOwner(supplied, env, request) : false;
-      const legacyOwnerToken = env.TASK_OWNER_APPROVAL_TOKEN ?? "";
-      if (!authorizedOwner && legacyOwnerToken && legacyOwnerToken !== env.MEMORY_API_TOKEN) {
-        authorizedOwner = constantTimeEqual(supplied, legacyOwnerToken);
-      }
       if (!authorizedOwner) return withOwnerCors(json({ error: "Unauthorized." }, 401));
     } else if (!env.MEMORY_API_TOKEN || !constantTimeEqual(supplied, env.MEMORY_API_TOKEN)) {
       return withOwnerCors(json({ error: "Unauthorized." }, 401));
