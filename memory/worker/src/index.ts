@@ -301,7 +301,7 @@ export class MemoryStore extends DurableObject<Env> {
       return json({ task: claimed });
     }
 
-    const heartbeatMatch = url.pathname.match(/^\\/v1\\/tasks\\/([0-9a-f-]{36})\\/heartbeat$/i);
+    const heartbeatMatch = url.pathname.match(/^\/v1\/tasks\/([0-9a-f-]{36})\/heartbeat$/i);
     if (request.method === "POST" && heartbeatMatch) {
       const body = await readBody(request);
       if (body && Object.keys(body).length > 0) return json({ error: "Heartbeat body must be empty." }, 400);
