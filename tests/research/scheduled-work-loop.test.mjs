@@ -46,3 +46,32 @@ test("task claiming is owner-approved-only in both tool contract and Worker SQL"
   assert.match(heartbeat, /actively running and individually approved/);
   assert.doesNotMatch(taskList, /standing-mandate allowlist/);
 });
+
+
+test("all active mission and owner-console instructions agree on per-task and external-action approval", async () => {
+  const instructions = await readFile(new URL("../../agent/instructions.md", import.meta.url), "utf8");
+  const mission = await readFile(new URL("../../agent/skills/revenue-mission.md", import.meta.url), "utf8");
+  const earnedGrowth = await readFile(new URL("../../agent/skills/earned-growth.md", import.meta.url), "utf8");
+  const scheduleDocs = await readFile(new URL("../../docs/phase-4-scheduled-work-loop.md", import.meta.url), "utf8");
+  const ownerConsole = await readFile(new URL("../../apps/web/app/owner/owner-console.tsx", import.meta.url), "utf8");
+  const combined = [instructions, mission, earnedGrowth, scheduleDocs, ownerConsole].join("\n");
+
+  assert.match(instructions, /every unit of work must be represented by a task individually approved/i);
+  assert.match(mission, /every unit of work requires an individually owner-approved task/i);
+  assert.match(earnedGrowth, /each unit of work requires explicit owner approval/i);
+  assert.match(scheduleDocs, /only when it is individually owner-approved with mission_authorized=0/i);
+  assert.match(ownerConsole, /Awaiting owner approval/);
+
+  for (const staleDelegation of [
+    /owner has delegated routine business execution/i,
+    /owner has delegated these ordinary business actions to EVE/i,
+    /without routine approval/i,
+    /within EVE's standing mission mandate/i,
+    /standing mission mandate auto-queues/i,
+    /either individually owner-approved or mission-authorized/i,
+    /may conduct relevant, honest, lawful, platform-compliant customer discovery and outreach/i,
+  ]) {
+    assert.doesNotMatch(combined, staleDelegation);
+  }
+  assert.doesNotMatch(ownerConsole, /standing-mission authorized|standing mission mandate/i);
+});
