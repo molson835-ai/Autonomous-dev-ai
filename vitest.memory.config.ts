@@ -11,7 +11,7 @@ export default defineConfig({
         // Test-only credential. Never read or reuse a deployed Worker secret.
         bindings: {
           MEMORY_API_TOKEN: "local-vitest-only-token",
-          CLOUDFLARE_ACCOUNT_ID: "test-account-id",
+          CLOUDFLARE_ACCOUNT_ID: "0123456789abcdef0123456789abcdef",
           CLOUDFLARE_ANALYTICS_API_TOKEN: "local-vitest-only-analytics-token",
           TASK_OWNER_APPROVAL_TOKEN: "local-vitest-only-owner-token",
         },
