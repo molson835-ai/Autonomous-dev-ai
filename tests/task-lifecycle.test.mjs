@@ -179,7 +179,7 @@ test("selector requires individual owner approval and rejects mission authorizat
   assert.equal(selectNextTask([invalid], { now: Date.parse(now) }), null);
   const waitingLegacy = Object.freeze({ ...invalid, status: "waiting", next_run_at: now });
   assert.equal(selectNextTask([waitingLegacy], { now: Date.parse(now) }), null);
-  assert.throws(() => transitionTask(waitingLegacy, "queued", { now }), /owner_approval_required/);
+  assert.throws(() => transitionTask(waitingLegacy, "queued", { now }), /invalid_mission_authorized_scope/);
 });
 
 test("agent-supplied metadata can never grant standing mission authorization", () => {
