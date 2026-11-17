@@ -396,6 +396,39 @@ describe("persistent memory Worker HTTP contract", () => {
     expect(finish.status).toBe(200);
   });
 
+  it("refreshes only an actively running owner-approved task lease", async () => {
+    const create = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
+      idempotency_key: `TASK-HEARTBEAT-${crypto.randomUUID()}`, task_type: "repo_maintenance",
+      title: "Heartbeat test", goal: "Verify active lease refresh", approved_scope: "Test only"
+    }) });
+    const { task } = await create.json<{ task: { id: string } }>();
+    await request(`/v1/tasks/${task.id}/approve`, { method: "POST" }, ownerToken);
+    const claimed = await request("/v1/tasks/claim-next", { method: "POST" });
+    expect((await claimed.json<{ task: { id: string; owner_approved: boolean; mission_authorized: boolean } }>()).task)
+      .toMatchObject({ id: task.id, owner_approved: true, mission_authorized: false });
+
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(Date.now() + 25 * 60 * 1000);
+      const heartbeat = await request(`/v1/tasks/${task.id}/heartbeat`, { method: "POST", body: "{}" });
+      expect(heartbeat.status).toBe(200);
+      expect(await heartbeat.json()).toMatchObject({ heartbeat: true });
+      vi.setSystemTime(Date.now() + 10 * 60 * 1000);
+      expect(await (await request("/v1/tasks/claim-next", { method: "POST" })).json()).toEqual({ task: null });
+      vi.setSystemTime(Date.now() + 21 * 60 * 1000);
+      const recovered = await request("/v1/tasks/claim-next", { method: "POST" });
+      expect((await recovered.json<{ task: { id: string; status: string; attempt_count: number } }>()).task)
+        .toMatchObject({ id: task.id, status: "running", attempt_count: 2 });
+      const terminal = await request(`/v1/tasks/${task.id}/transition`, {
+        method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Heartbeat recovery test complete" })
+      });
+      expect(terminal.status).toBe(200);
+      expect((await request(`/v1/tasks/${task.id}/heartbeat`, { method: "POST", body: "{}" })).status).toBe(409);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("refuses to queue unapproved tasks and rejects illegal transitions", async () => {
     const create = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
       idempotency_key: `TASK-UNAPPROVED-${crypto.randomUUID()}`, task_type: "repo_maintenance",
