@@ -62,13 +62,37 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
       try { result = await doStream(); }
       catch (error) { if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id); throw error; }
       let settled = false;
-      const stream = result.stream.pipeThrough(new TransformStream({
-        async transform(part, controller) {
-          if (part.type === "finish" && !settled) { settled = true; await settle(id, part.usage); }
-          controller.enqueue(part);
+      const reader = result.stream.getReader();
+      const stream = new ReadableStream({
+        async pull(controller) {
+          try {
+            const next = await reader.read();
+            if (next.done) {
+              if (!settled) { settled = true; await settle(id); }
+              controller.close();
+              return;
+            }
+            if (next.value.type === "finish" && !settled) {
+              settled = true;
+              await settle(id, next.value.usage);
+            }
+            controller.enqueue(next.value);
+          } catch (error) {
+            if (!settled) {
+              settled = true;
+              try { await settle(id); } catch { /* Keep the reservation fail-closed. */ }
+            }
+            controller.error(error);
+          }
         },
-      }));
-      // A cancelled stream retains its reservation for the UTC day.
+        async cancel(reason) {
+          try { await reader.cancel(reason); }
+          finally {
+            if (!settled) { settled = true; await settle(id); }
+          }
+        },
+      }) as typeof result.stream;
+      // Interrupted streams settle conservatively with the unknown-usage fallback.
       return { ...result, stream };
     },
   };
