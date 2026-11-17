@@ -4,6 +4,12 @@ export const OWNER_SESSION_COOKIE = "eve_owner_github";
 export const OWNER_OAUTH_STATE_COOKIE = "eve_github_oauth_state";
 export const OWNER_GITHUB_LOGIN = "molson835-ai";
 
+export function isConfiguredOwnerId(value: unknown): boolean {
+  const expected = Number(process.env.OWNER_GITHUB_ID);
+  return Number.isSafeInteger(expected) && expected > 0 &&
+    typeof value === "number" && value === expected;
+}
+
 export async function getVerifiedOwnerLogin(): Promise<string | null> {
   const token = (await cookies()).get(OWNER_SESSION_COOKIE)?.value;
   if (!token || token.length > 4096) return null;
@@ -19,8 +25,11 @@ export async function getVerifiedOwnerLogin(): Promise<string | null> {
     });
     if (!response.ok) return null;
     const user: unknown = await response.json();
-    if (!user || typeof user !== "object" || !("login" in user) || typeof user.login !== "string") return null;
-    return user.login.toLowerCase() === OWNER_GITHUB_LOGIN ? user.login : null;
+    if (!user || typeof user !== "object" ||
+        !("login" in user) || typeof user.login !== "string" ||
+        user.login.toLowerCase() !== OWNER_GITHUB_LOGIN ||
+        !("id" in user) || !isConfiguredOwnerId(user.id)) return null;
+    return user.login;
   } catch {
     return null;
   }
