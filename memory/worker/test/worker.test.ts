@@ -31,12 +31,14 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 function request(path: string, init: RequestInit = {}, credential = token) {
   if (credential !== token) mockOwnerGithub({ accessToken: credential });
+  else vi.stubGlobal("fetch", vi.fn(async () => new Response("unauthorized", { status: 401 })));
   return exports.default.fetch(
     new Request(new URL(path, endpoint), {
       ...init,
       headers: {
         authorization: `Bearer ${credential}`,
         ...(init.body ? { "content-type": "application/json" } : {}),
+        "cf-connecting-ip": credential === token ? "203.0.113.2" : "203.0.113.1",
         ...init.headers,
       },
     }),
