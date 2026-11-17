@@ -9,6 +9,6 @@ export default defineTool({
     decision: z.enum(["approve", "reject"]),
   }),
   async execute() {
-    throw new Error("Memory proposal decisions are unavailable from the Eve agent. The owner-only approval interface is not configured.");
+    throw new Error("Memory proposal decisions are unavailable from the Eve agent. Use the GitHub-authenticated owner console; Eve cannot approve or reject proposals.");
   },
 });
