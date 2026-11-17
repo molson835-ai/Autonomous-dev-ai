@@ -10,12 +10,15 @@ Configure the following in the Vercel Production environment for the owner conso
 - `GITHUB_CLIENT_SECRET`: the matching OAuth App client secret.
 - `OWNER_GITHUB_ID`: the immutable numeric GitHub user ID for the owner account.
 
-Configure these in the GitHub Actions `cloudflare-production` environment (or repository variable for the numeric ID):
+Configure these in the GitHub Actions `cloudflare-production` environment:
 
-- Secrets: `CLOUDFLARE_API_TOKEN`, `MEMORY_API_TOKEN`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and `CLOUDFLARE_ANALYTICS_API_TOKEN` (read-only Account Analytics permission).
+- Secrets: `CLOUDFLARE_API_TOKEN`, `MEMORY_API_TOKEN`, `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, and `CLOUDFLARE_ANALYTICS_API_TOKEN` (read-only Account Analytics permission).
 - Variable or secret: `OWNER_GITHUB_ID`.
+- The OAuth secret names intentionally use the `OAUTH_` prefix because GitHub reserves names beginning with `GITHUB_` for its own use.
 
-The Worker deployment workflow copies the OAuth app credentials, owner ID, Memory API token, Cloudflare account ID, and read-only Analytics token into Worker secrets. Do not put these values in source code, logs, task metadata, memory, or client-side browser code.
+Set `OAUTH_CLIENT_ID` to the same OAuth App client ID stored as Vercel Production `GITHUB_CLIENT_ID`. Set `OAUTH_CLIENT_SECRET` to the same OAuth App client secret stored as Vercel Production `GITHUB_CLIENT_SECRET`. Do not create a second OAuth App just for the Worker.
+
+The manual Worker deployment workflow reads the allowed GitHub Actions secret names `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET`, then writes their values into the Worker secrets `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`, which are the names expected by the Worker runtime. The workflow also copies the owner ID, Memory API token, Cloudflare account ID, and read-only Analytics token into Worker secrets. Do not put these values in source code, logs, task metadata, memory, or client-side browser code.
 
 To obtain the numeric owner ID, query the public GitHub user record for the intended account and copy its numeric `id` field. Do not use the login string as a substitute. Confirm the value independently before configuring it.
 
@@ -32,7 +35,7 @@ The cache and failure limiter are intentionally short-lived, in-memory protectio
 
 ## Deployment and acceptance
 
-The Worker workflow is manual and requires the explicit `DEPLOY` confirmation. This change does not deploy the Worker. Before production deployment, configure all required values in both Vercel and the GitHub Actions environment, then deploy only with owner approval.
+The Worker workflow is manual and requires the explicit `DEPLOY` confirmation. This change does not deploy the Worker. Before production deployment, configure all required values in Vercel and the GitHub Actions environment, then deploy only with owner approval.
 
 After an approved deployment, verify:
 - Owner-console OAuth sign-in succeeds for the configured immutable owner ID.
