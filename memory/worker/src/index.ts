@@ -113,8 +113,8 @@ export class MemoryStore extends DurableObject<Env> {
       const accountId = this.bindings.CLOUDFLARE_ACCOUNT_ID;
       const analyticsToken = this.bindings.CLOUDFLARE_ANALYTICS_API_TOKEN;
       if (!accountId || !/^[a-f0-9]{32}$/i.test(accountId) || !analyticsToken) return json({ error: "Worker-side Cloudflare Analytics credentials unavailable or invalid; paused." },503);
-      const query = "query { viewer { accounts(filter: { accountTag: \\"" + accountId + "\\" }) { " +
-        "aiInferenceAdaptiveGroups(limit: 2, filter: { date_geq: \\"" + day + "\\", date_leq: \\"" + day + "\\" }) " +
+      const query = "query { viewer { accounts(filter: { accountTag: " + JSON.stringify(accountId) + " }) { " +
+        "aiInferenceAdaptiveGroups(limit: 2, filter: { date_geq: " + JSON.stringify(day) + ", date_leq: " + JSON.stringify(day) + " }) " +
         "{ sum { totalNeurons } dimensions { date } } } } }";
       let analyticsResponse: Response;
       try {
