@@ -114,7 +114,7 @@ describe("shared daily neuron quota coordinator", () => {
 
 describe("legacy task authorization Durable Object migration", () => {
   it("revokes persisted mission grants on reconstruction while preserving owner-approved and terminal task history", async () => {
-    const stub = env.MEMORY.get(env.MEMORY.idFromName(\`legacy-migration-\${crypto.randomUUID()}\`));
+    const stub = env.MEMORY.get(env.MEMORY.idFromName(`legacy-migration-${crypto.randomUUID()}`));
     const rows = [
       { id: "legacy-queued", ownerApproved: 0, status: "queued" },
       { id: "legacy-running", ownerApproved: 0, status: "running" },
@@ -128,9 +128,9 @@ describe("legacy task authorization Durable Object migration", () => {
         state.storage.sql.exec(
           "INSERT INTO tasks (id,idempotency_key,task_type,title,goal,approved_scope,scope_id,status,owner_approved,mission_authorized,created_at,updated_at,attempt_count,max_attempts,evidence_refs) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
           row.id,
-          \`migration-\${row.id}\`,
+          `migration-${row.id}`,
           "repo_maintenance",
-          \`Legacy \${row.id}\`,
+          `Legacy ${row.id}`,
           "Preserve the existing task record while revoking the legacy grant",
           "No execution until separately approved",
           "owner_review_required",
@@ -149,7 +149,7 @@ describe("legacy task authorization Durable Object migration", () => {
     // Reconstructing the object reruns its blockConcurrencyWhile schema/data migration.
     await evictDurableObject(stub);
     const initialized = await stub.fetch(new Request("https://memory-test.invalid/v1/owner/status", {
-      headers: { authorization: \`Bearer \${ownerToken}\` },
+      headers: { authorization: `Bearer ${ownerToken}` },
     }));
     expect(initialized.status).toBe(200);
 
