@@ -31,7 +31,11 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 function request(path: string, init: RequestInit = {}, credential = token) {
   if (credential === ownerToken) mockOwnerGithub();
-  else if (credential === token) vi.stubGlobal("fetch", vi.fn(async () => new Response("unauthorized", { status: 401 })));
+  else if (credential === token && (
+    path.startsWith("/v1/owner/") ||
+    /^\/v1\/tasks\/[0-9a-f-]{36}\/(approve|owner-control)$/i.test(path) ||
+    /^\/v1\/proposals\/[0-9a-f-]{36}\/decision$/i.test(path)
+  )) vi.stubGlobal("fetch", vi.fn(async () => new Response("unauthorized", { status: 401 })));
   return exports.default.fetch(
     new Request(new URL(path, endpoint), {
       ...init,
