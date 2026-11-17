@@ -70,4 +70,4 @@ The MemoryStore Durable Object maintains daily observations, local usage estimat
 
 GLM-4.7-Flash's published neuron rates (5,500 per million input tokens and 36,400 per million output tokens) inform a 50%-margin settlement estimate. Valid estimates are not floored to 200; missing or invalid usage falls back conservatively to 200. Output is capped at 1,024 tokens; each call temporarily reserves 200 neurons. Cancelled or interrupted streams settle with the conservative fallback instead of leaving the reservation until midnight. EVE session limits cap new input at 16,384 tokens and output at 4,000 per continuation window. The account target remains 7,000 neurons, leaving a 3,000-neuron reserve. Provider error 4006 remains the hard stop if external or unmodelled use exceeds the target.
 
-A feature-branch-only Vercel deployment exclusion is added so this code push does not consume Preview deployment quota. It does not disable deployments from main.
+Preview deployment quota is not assumed to be excluded for feature branches. Unneeded queued Preview deployments are cancelled; no Production deployment has been performed.
