@@ -136,6 +136,14 @@ test("selector rejects a legacy mission-authorized task even if it is queued", (
   assert.equal(selectNextTask([legacy], { now: Date.parse(now) }), null);
 });
 
+test("selector requires individual owner approval and rejects mission authorization", () => {
+  const invalid = Object.freeze({ ...queued(), mission_authorized: true });
+  assert.equal(selectNextTask([invalid], { now: Date.parse(now) }), null);
+  const waitingLegacy = Object.freeze({ ...invalid, status: "waiting", next_run_at: now });
+  assert.equal(selectNextTask([waitingLegacy], { now: Date.parse(now) }), null);
+  assert.throws(() => transitionTask(waitingLegacy, "queued", { now }), /owner_approval_required/);
+});
+
 test("agent-supplied metadata can never grant standing mission authorization", () => {
   assert.equal(isMissionAuthorizedTask({
     task_type: "market_research",
