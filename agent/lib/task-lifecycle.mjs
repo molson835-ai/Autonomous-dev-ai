@@ -205,7 +205,7 @@ export function revokeLegacyMissionAuthorization(row, now = new Date().toISOStri
   const terminal = TERMINAL.has(row.status);
   return Object.freeze({
     mission_authorized: 0,
-    status: row.owner_approved === 0 && !terminal ? "proposed" : row.status,
+    status: row.owner_approved !== 1 && !terminal ? "proposed" : row.status,
     updated_at: now
   });
 }
