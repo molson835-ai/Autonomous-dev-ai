@@ -1,9 +1,11 @@
 import { exports } from "cloudflare:workers";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const token = "local-vitest-only-token";
 const endpoint = "https://memory-test.invalid";
 const ownerToken = "local-vitest-only-owner-token";
+
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 function request(path: string, init: RequestInit = {}, credential = token) {
   return exports.default.fetch(
