@@ -125,6 +125,17 @@ test("duplicate enqueue keys and malformed task records are handled explicitly",
   assert.equal(validateTaskRecord({ ...proposed(), status: "running" }).valid, false);
 });
 
+test("selector rejects a legacy mission-authorized task even if it is queued", () => {
+  const legacy = Object.freeze({
+    ...proposed({ task_type: "market_research" }),
+    status: "queued",
+    owner_approved: false,
+    mission_authorized: true,
+    scope_id: "public_web_research_no_contact"
+  });
+  assert.equal(selectNextTask([legacy], { now: Date.parse(now) }), null);
+});
+
 test("agent-supplied metadata can never grant standing mission authorization", () => {
   assert.equal(isMissionAuthorizedTask({
     task_type: "market_research",
