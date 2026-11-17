@@ -197,7 +197,7 @@ export default function OwnerConsole() {
                 </div>
                 {task.checkpoint_summary && <p className="text-sm text-muted-foreground">Checkpoint: {task.checkpoint_summary}</p>}
                 {task.result_summary && <p className="text-sm text-muted-foreground">Result: {task.result_summary}</p>}
-                <p className="text-xs text-muted-foreground">Attempts: {task.attempt_count}/{task.max_attempts} · {task.owner_approved ? "Owner approved" : task.mission_authorized ? "Standing mission mandate" : "Awaiting owner approval"} · ID {task.id}</p>
+                <p className="text-xs text-muted-foreground">Attempts: {task.attempt_count}/{task.max_attempts} · {task.mission_authorized ? "Blocked: legacy authorization" : task.owner_approved ? "Owner approved" : "Awaiting owner approval"} · ID {task.id}</p>
                 <div className="flex flex-wrap gap-2">
                   {task.status === "proposed" && (
                     <button type="button" disabled={busy !== null} onClick={() => void perform(task.id, "/v1/tasks/" + task.id + "/approve", "POST")} className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
