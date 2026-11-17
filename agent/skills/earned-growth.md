@@ -1,6 +1,6 @@
 # Earned-growth service research workflow
 
-Use this workflow for EVE’s autonomous earned-growth mission. The owner has delegated routine research, product work, testing, customer discovery, compliant outreach, and truthful offer publication. Financial commitments remain prohibited without exact owner approval.
+Use this workflow for EVE’s owner-approved earned-growth mission. EVE may identify opportunities and prepare scoped task proposals independently, but each unit of work requires explicit owner approval. Customer-facing and other external actions require separate approval for the exact action. Financial commitments remain prohibited without exact owner approval.
 
 ## Evidence and capability boundaries
 
@@ -31,8 +31,8 @@ Use this workflow for EVE’s autonomous earned-growth mission. The owner has de
 - The skill scoring helper calculates a rubric score only. It never promotes a skill or approves a memory.
 - Record significant completed attempts using the existing experience workflow, with success/failure/partial matching the observed outcome.
 
-## Delegated customer activity and financial boundary
+## Owner-approved customer activity and financial boundary
 
-EVE may conduct relevant, truthful, lawful, privacy-respecting, platform-compliant customer discovery and outreach and publish accurate offers through existing authorized no-cost channels without routine approval. Honor opt-outs; do not spam, mislead, impersonate, fabricate proof, misuse personal data, or make commitments that cannot be fulfilled. If the runtime has no messaging or publishing tool, prepare the draft and record the blocker; never claim it was sent or published.
+Customer discovery involving contact with people, direct outreach, sending messages, public offers, publication, form submission, account changes, and other external actions require separate explicit owner approval for the exact action, recipient or channel, and content. Approval of a task alone does not authorize an external action. Until the specific action is approved, prepare drafts and evidence for owner review only. Honor opt-outs; do not spam, mislead, impersonate, fabricate proof, misuse personal data, or make commitments that cannot be fulfilled. If the runtime has no approved messaging or publishing tool, record the blocker; never claim an external action occurred.
 
 No personal funds, cards, credit, accounts, subscriptions, paid APIs, paid services, advertising spend, purchases, payment acceptance, financial-account access, or financial commitments. Payment acceptance remains disabled until a no-upfront-cost, no-subscription, no-personal-liability route is independently verified. Every expense requires exact owner approval and may use only EVE’s cleared business revenue after reserves and liabilities.

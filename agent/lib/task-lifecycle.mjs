@@ -14,12 +14,9 @@ export const OWNER_DEFINED_SCOPE_IDS = Object.freeze({
   documentation: "documentation_only",
 });
 const OWNER_REVIEW_SCOPE_ID = "owner_review_required";
-export function isMissionAuthorizedTask(input) {
-  if (!input || typeof input !== "object") return false;
-  return Object.entries(OWNER_DEFINED_SCOPE_IDS).some(([taskType, scopeId]) =>
-    input.task_type === taskType && input.scope_id === scopeId
-  );
-}
+// Standing mission authorization is disabled until a trusted owner-controlled
+// delegation mechanism exists. Agent-supplied task metadata is never authority.
+export function isMissionAuthorizedTask(_input) { return false; }
 const TRANSITIONS = Object.freeze({
   proposed: new Set(["queued", "cancelled"]),
   queued: new Set(["running", "paused", "failed", "cancelled"]),
