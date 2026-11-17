@@ -22,9 +22,12 @@ test("provider configuration cannot silently use a real credential when unset", 
   assert.doesNotMatch(agent, /fallback|backup|secondary/i);
 });
 
-test("provider model context matches the documented model context window", () => {
-  assert.match(agent, /modelContextWindowTokens: 16_384/);
-  assert.match(agent, /sessionUsage:/);
+test("provider context matches GLM-4.7-Flash while session usage remains independently bounded", () => {
+  assert.match(agent, /modelContextWindowTokens: 131_072/);
+  assert.match(
+    agent,
+    /sessionUsage: \(\{ window \}\) => window\.inputTokens - window\.cacheReadTokens >= 16_384 \|\| window\.outputTokens >= 4_000/,
+  );
   assert.match(agent, /createCloudflareNeuronGuard/);
 });
 

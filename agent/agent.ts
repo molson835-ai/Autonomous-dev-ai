@@ -16,6 +16,6 @@ const cloudflare = createOpenAICompatible({
 
 export default defineAgent({
   model: wrapLanguageModel({ model: cloudflare.chatModel("@cf/zai-org/glm-4.7-flash"), middleware: createCloudflareNeuronGuard() }),
-  modelContextWindowTokens: 16_384,
+  modelContextWindowTokens: 131_072,
   limits: { sessionUsage: ({ window }) => window.inputTokens - window.cacheReadTokens >= 16_384 || window.outputTokens >= 4_000 },
 });
