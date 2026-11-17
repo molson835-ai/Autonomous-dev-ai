@@ -115,6 +115,9 @@ jobs:
       - name: Build Eve agent
         run: npm run build
 
+      - name: Build owner console
+        run: npm run build:web
+
       - name: Bundle Cloudflare memory Worker without deploying
         run: npx --yes wrangler@4 deploy --dry-run --config memory/worker/wrangler.jsonc
 
