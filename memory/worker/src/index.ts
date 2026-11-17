@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { isSafeMemoryText, normalizeMemoryQuery } from "../../../agent/lib/memory-policy.mjs";
 import { ensureExperienceExternalIdColumn, findExperienceByExternalId } from "../../../agent/lib/memory-schema.mjs";
-import { createTaskRecord, isMissionAuthorizedTask, isTaskLeaseExpired, revokeLegacyMissionAuthorization, selectNextTask, TASK_STATUS_VALUES, transitionTask } from "../../../agent/lib/task-lifecycle.mjs";
+import { createTaskRecord, isTaskLeaseExpired, revokeLegacyMissionAuthorization, selectNextTask, TASK_STATUS_VALUES, transitionTask } from "../../../agent/lib/task-lifecycle.mjs";
 
 interface Env {
   MEMORY: DurableObjectNamespace<MemoryStore>;
@@ -112,7 +112,7 @@ export class MemoryStore extends DurableObject<Env> {
         return json({ error: "Invalid quota reservation request." },400);
       const accountId = this.bindings.CLOUDFLARE_ACCOUNT_ID;
       const analyticsToken = this.bindings.CLOUDFLARE_ANALYTICS_API_TOKEN;
-      if (!accountId || !analyticsToken) return json({ error: "Worker-side Cloudflare Analytics credentials unavailable; paused." },503);
+      if (!accountId || !/^[a-f0-9]{32}$/i.test(accountId) || !analyticsToken) return json({ error: "Worker-side Cloudflare Analytics credentials unavailable or invalid; paused." },503);
       const query = "query { viewer { accounts(filter: { accountTag: \\"" + accountId + "\\" }) { " +
         "aiInferenceAdaptiveGroups(limit: 2, filter: { date_geq: \\"" + day + "\\", date_leq: \\"" + day + "\\" }) " +
         "{ sum { totalNeurons } dimensions { date } } } } }";
