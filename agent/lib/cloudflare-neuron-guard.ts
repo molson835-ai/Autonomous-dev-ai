@@ -16,39 +16,12 @@ export function nonRetryableQuotaError(cause: unknown): Error {
   return error;
 }
 
-async function accountUsage() {
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-  const token = process.env.CLOUDFLARE_API_TOKEN;
-  if (!accountId || !token) stop("Cloudflare Analytics credentials unavailable.");
-  const day = new Date().toISOString().slice(0, 10);
-  const query = "query { viewer { accounts(filter: { accountTag: \"" + accountId + "\" }) { " +
-    "aiInferenceAdaptiveGroups(limit: 2, filter: { date_geq: \"" + day + "\", date_leq: \"" + day + "\" }) " +
-    "{ sum { totalNeurons } dimensions { date } } } } }";
-  let response: Response;
-  try {
-    response = await fetch("https://api.cloudflare.com/client/v4/graphql", {
-      method: "POST", headers: { authorization: "Bearer " + token, "content-type": "application/json" },
-      body: JSON.stringify({ query }), signal: AbortSignal.timeout(8000), cache: "no-store",
-    });
-  } catch { return stop("Cloudflare account analytics unavailable."); }
-  if (!response.ok) return stop("Cloudflare account analytics HTTP " + response.status + ".");
-  let payload: any;
-  try { payload = await response.json(); } catch { return stop("Cloudflare account analytics response invalid."); }
-  if (payload?.errors?.length) return stop("Cloudflare account analytics query or permissions failed.");
-  const accounts = payload?.data?.viewer?.accounts;
-  const groups = accounts?.length === 1 ? accounts[0]?.aiInferenceAdaptiveGroups : null;
-  if (!Array.isArray(groups) || groups.length > 1) return stop("Cloudflare daily aggregate missing or ambiguous.");
-  if (groups.length === 1 && groups[0]?.dimensions?.date !== day) return stop("Cloudflare analytics returned the wrong UTC date.");
-  const usedNeurons = groups.length === 0 ? 0 : groups[0]?.sum?.totalNeurons;
-  if (typeof usedNeurons !== "number" || !Number.isFinite(usedNeurons) || usedNeurons < 0)
-    return stop("Authoritative neuron total missing.");
-  return { day, usedNeurons, observedAt: new Date().toISOString() };
-}
-
 async function reserve() {
-  const observation = await accountUsage();
+  // The Worker fetches Cloudflare Analytics with its own read-only credential.
+  // Eve supplies no usage total or timestamp that it could underreport.
   const result = await memoryRequest<{ reservation_id: string }>("/v1/quota/reserve", {
-    method: "POST", body: { ...observation, reserve_neurons: RESERVATION_NEURONS, model_id: MODEL_ID },
+    method: "POST",
+    body: { reserve_neurons: RESERVATION_NEURONS, model_id: MODEL_ID },
   });
   if (!result?.reservation_id) return stop("Shared quota reservation was not issued.");
   return result.reservation_id;
