@@ -5,6 +5,7 @@ import {
   isMissionAuthorizedTask,
   findIdempotentTask,
   isTaskLeaseExpired,
+  revokeLegacyMissionAuthorization,
   selectNextTask,
   transitionTask,
   validateTaskRecord
@@ -123,6 +124,39 @@ test("attempt budget is a hard stop", () => {
 test("duplicate enqueue keys and malformed task records are handled explicitly", () => {
   assert.throws(() => createTaskRecord({ id: "x" }, { now }), /Invalid task record/);
   assert.equal(validateTaskRecord({ ...proposed(), status: "running" }).valid, false);
+});
+
+test("legacy mission authorization migration revokes unapproved work but preserves owner-approved and terminal history", () => {
+  const stamp = "2026-11-16T15:00:00.000Z";
+  const queuedLegacy = revokeLegacyMissionAuthorization({
+    id: "legacy-queued", owner_approved: 0, mission_authorized: 1, status: "queued"
+  }, stamp);
+  assert.deepEqual(queuedLegacy, {
+    mission_authorized: 0, status: "proposed", updated_at: stamp
+  });
+
+  const runningLegacy = revokeLegacyMissionAuthorization({
+    id: "legacy-running", owner_approved: 0, mission_authorized: 1, status: "running"
+  }, stamp);
+  assert.equal(runningLegacy.status, "proposed");
+
+  const ownerApproved = revokeLegacyMissionAuthorization({
+    id: "legacy-approved", owner_approved: 1, mission_authorized: 1, status: "queued"
+  }, stamp);
+  assert.deepEqual(ownerApproved, {
+    mission_authorized: 0, status: "queued", updated_at: stamp
+  });
+
+  for (const status of ["succeeded", "failed", "cancelled"]) {
+    const terminal = revokeLegacyMissionAuthorization({
+      id: "legacy-terminal", owner_approved: 0, mission_authorized: 1, status
+    }, stamp);
+    assert.equal(terminal.status, status);
+    assert.equal(terminal.mission_authorized, 0);
+  }
+  assert.equal(revokeLegacyMissionAuthorization({
+    id: "not-legacy", owner_approved: 0, mission_authorized: 0, status: "proposed"
+  }, stamp), null);
 });
 
 test("selector rejects a legacy mission-authorized task even if it is queued", () => {
