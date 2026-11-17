@@ -1,11 +1,23 @@
 import { exports } from "cloudflare:workers";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const token = "local-vitest-only-token";
 const endpoint = "https://memory-test.invalid";
 const ownerToken = "local-vitest-only-owner-token";
 
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+
 function request(path: string, init: RequestInit = {}, credential = token) {
+  if (credential === ownerToken) {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/applications/local-owner-oauth-app/token")) {
+        return Response.json({ app: { client_id: "local-owner-oauth-app" } });
+      }
+      return Response.json({ id: 12345678, login: "renamed-owner-login" });
+    }));
+  } else if (credential === token) {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("unauthorized", { status: 401 })));
+  }
   if (credential === ownerToken) {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       if (String(input).includes("/applications/local-owner-oauth-app/token")) {
@@ -20,6 +32,7 @@ function request(path: string, init: RequestInit = {}, credential = token) {
       headers: {
         authorization: `Bearer ${credential}`,
         ...(init.body ? { "content-type": "application/json" } : {}),
+        "cf-connecting-ip": credential === token ? "203.0.113.2" : "203.0.113.1",
         ...init.headers,
       },
     }),
