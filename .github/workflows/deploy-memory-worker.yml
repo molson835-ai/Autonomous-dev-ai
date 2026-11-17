@@ -36,7 +36,7 @@ jobs:
       - name: Verify Worker bundle before publishing
         run: npx --yes wrangler@4 deploy --dry-run --config memory/worker/wrangler.jsonc
 
-      - name: Deploy Worker with synchronized memory API credential
+      - name: Deploy Worker with synchronized runtime and Analytics credentials
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID }}
