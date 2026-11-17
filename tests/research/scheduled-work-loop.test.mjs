@@ -35,6 +35,8 @@ test("task claiming is owner-approved-only in both tool contract and Worker SQL"
   const worker = await readFile(new URL("../../memory/worker/src/index.ts", import.meta.url), "utf8");
   assert.match(tool, /individually approved by the owner/);
   assert.doesNotMatch(tool, /standing EVE revenue mission mandate/);
+  assert.match(tool, /external actions are draft-only/);
+  assert.match(tool, /separate explicit owner approval/);
   assert.match(worker, /WHERE owner_approved=1 AND attempt_count<max_attempts/);
   assert.doesNotMatch(worker, /owner_approved=1 OR mission_authorized=1/);
 });
