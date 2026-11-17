@@ -40,7 +40,7 @@ test("task claiming is owner-approved-only in both tool contract and Worker SQL"
   assert.doesNotMatch(tool, /standing EVE revenue mission mandate/);
   assert.match(tool, /external actions are draft-only/);
   assert.match(tool, /separate explicit owner approval/);
-  assert.match(worker, /WHERE owner_approved=1 AND attempt_count<max_attempts/);
+  assert.match(worker, /WHERE owner_approved=1 AND mission_authorized=0 AND attempt_count<max_attempts/);
   assert.doesNotMatch(worker, /owner_approved=1 OR mission_authorized=1/);
   assert.match(worker, /status='running' AND owner_approved=1 AND mission_authorized=0/);
   assert.match(heartbeat, /actively running and individually approved/);
