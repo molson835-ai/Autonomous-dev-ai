@@ -142,6 +142,8 @@ export class MemoryStore extends DurableObject<Env> {
       if (typeof usedNeurons !== "number" || !Number.isFinite(usedNeurons) || usedNeurons < 0)
         return json({ error: "Authoritative neuron total invalid; paused." },503);
       const observedAt = now;
+      // Reservations from prior UTC days can no longer affect the active daily budget.
+      this.ctx.storage.sql.exec("DELETE FROM quota_reservations WHERE day<>?", day);
       let daily = this.ctx.storage.sql.exec<{day:string;baseline_neurons:number;observed_neurons:number;local_estimated_neurons:number;circuit_open:number}>("SELECT * FROM quota_daily WHERE day=? LIMIT 1",day).toArray()[0];
       if (daily && usedNeurons < daily.observed_neurons) return json({error:"Neuron telemetry regressed; paused."},503);
       if (!daily) {
