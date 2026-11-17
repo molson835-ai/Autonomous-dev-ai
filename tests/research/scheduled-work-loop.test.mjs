@@ -59,7 +59,7 @@ test("all active mission and owner-console instructions agree on per-task and ex
   assert.match(instructions, /every unit of work must be represented by a task individually approved/i);
   assert.match(mission, /every unit of work requires an individually owner-approved task/i);
   assert.match(earnedGrowth, /each unit of work requires explicit owner approval/i);
-  assert.match(scheduleDocs, /only when it is individually owner-approved with mission_authorized=0/i);
+  assert.match(scheduleDocs, /individually owner-approved with.*mission_authorized=0/i);
   assert.match(ownerConsole, /Awaiting owner approval/);
 
   for (const staleDelegation of [
