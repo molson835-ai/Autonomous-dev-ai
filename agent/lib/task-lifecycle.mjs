@@ -122,7 +122,7 @@ export function selectNextTask(tasks, { now = Date.now() } = {}) {
     const dueQueued = task.status === "queued" && (!task.next_run_at || Date.parse(task.next_run_at) <= now);
     const dueWaiting = task.status === "waiting" && task.next_run_at !== null && task.next_run_at !== undefined && Date.parse(task.next_run_at) <= now;
     if (!dueQueued && !dueWaiting) return false;
-    if (task.owner_approved !== true && task.mission_authorized !== true) return false;
+    if (task.owner_approved !== true || task.mission_authorized === true) return false;
     if (task.attempt_count >= task.max_attempts) return false;
     return true;
   });
@@ -152,7 +152,7 @@ export function transitionTask(task, nextStatus, {
   if (task.status === "proposed" && nextStatus === "queued" && ownerApproved !== true) {
     throw new Error("owner_approval_required");
   }
-  if (nextStatus === "queued" && task.owner_approved !== true && ownerApproved !== true && !(task.status === "waiting" && task.mission_authorized === true)) {
+  if (nextStatus === "queued" && task.owner_approved !== true && ownerApproved !== true) {
     throw new Error("owner_approval_required");
   }
   if (nextStatus === "running" && task.attempt_count >= task.max_attempts) {
