@@ -54,6 +54,16 @@ describe("private owner auth diagnostic endpoint", () => {
     expect(await response.json()).toEqual({ reason_code: "diagnostic_access_denied" });
   });
 
+  it("rejects browser preflight for the private Worker endpoint", async () => {
+    const response = await callWorker("/v1/internal/owner-auth-diagnostic", {
+      method: "OPTIONS",
+      ip: "203.0.113.94",
+      origin: "https://autonomous-dev-ai.vercel.app",
+    });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ reason_code: "diagnostic_access_denied" });
+  });
+
   it("rejects malformed diagnostic payloads", async () => {
     const response = await diagnostic(
       { access_token: "owner-token", expected_client_id: configuredClientId, extra: "not-allowed" },
