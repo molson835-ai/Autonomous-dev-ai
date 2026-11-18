@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { compareOwnerClientId, diagnosticSharedSecretReason, ownerAuthConfigurationReason, verifyOwnerGithubToken, type OwnerAuthReasonCode } from "./owner-auth";
 import { isSafeMemoryText, normalizeMemoryQuery } from "../../../agent/lib/memory-policy.mjs";
 import { ensureExperienceExternalIdColumn, findExperienceByExternalId } from "../../../agent/lib/memory-schema.mjs";
 import { createTaskRecord, isMissionAuthorizedTask, isTaskLeaseExpired, selectNextTask, TASK_STATUS_VALUES, transitionTask } from "../../../agent/lib/task-lifecycle.mjs";
@@ -420,9 +421,11 @@ export class MemoryStore extends DurableObject<Env> {
 
 const ownerVerificationCache = new Map<string, number>();
 const ownerFailureWindows = new Map<string, { startedAt: number; failures: number }>();
+const ownerDiagnosticWindows = new Map<string, number>();
 const OWNER_CACHE_MS = 60_000;
 const OWNER_FAILURE_LIMIT = 10;
 const OWNER_FAILURE_WINDOW_MS = 60_000;
+const OWNER_DIAGNOSTIC_COOLDOWN_MS = 5_000;
 
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
@@ -451,66 +454,76 @@ function recordOwnerAuthFailure(request: Request): void {
   }
 }
 
-async function isAuthorizedGithubOwner(accessToken: string, env: Env, request: Request): Promise<boolean> {
-  if (!accessToken || accessToken.length > 4096 || ownerAuthRateLimited(request)) return false;
-  const expectedId = Number(env.OWNER_GITHUB_ID);
-  const clientId = env.GITHUB_CLIENT_ID ?? "";
-  const clientSecret = env.GITHUB_CLIENT_SECRET ?? "";
-  if (!Number.isSafeInteger(expectedId) || expectedId <= 0 || !clientId || !clientSecret) return false;
+function ownerDiagnosticRateLimited(request: Request): boolean {
+  const key = request.headers.get("cf-connecting-ip") ?? "server";
+  const now = Date.now();
+  const lastRunAt = ownerDiagnosticWindows.get(key);
+  if (lastRunAt !== undefined && now - lastRunAt < OWNER_DIAGNOSTIC_COOLDOWN_MS) return true;
+  ownerDiagnosticWindows.set(key, now);
+  return false;
+}
+
+async function ownerAuthDiagnostic(request: Request, env: Env): Promise<Response> {
+  if (request.headers.has("origin")) return json({ reason_code: "diagnostic_access_denied" }, 403);
+  const sharedSecretReason = diagnosticSharedSecretReason(env.MEMORY_API_TOKEN);
+  if (sharedSecretReason) return json({ reason_code: sharedSecretReason }, 503);
+  const authorization = request.headers.get("authorization") ?? "";
+  const supplied = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  if (!constantTimeEqual(supplied, env.MEMORY_API_TOKEN)) {
+    return json({ reason_code: "diagnostic_access_denied" }, 401);
+  }
+
+  const body = await readBody(request);
+  const allowed = new Set(["access_token", "expected_client_id"]);
+  if (!body || Object.keys(body).some(key => !allowed.has(key)) ||
+      (body.access_token !== undefined && typeof body.access_token !== "string") ||
+      (body.expected_client_id !== undefined && typeof body.expected_client_id !== "string")) {
+    return json({ reason_code: "diagnostic_request_invalid" }, 400);
+  }
+  const expectedClientId = typeof body.expected_client_id === "string" ? body.expected_client_id : "";
+  const clientIdComparison = compareOwnerClientId(expectedClientId, env.GITHUB_CLIENT_ID);
+  if (clientIdComparison !== "match") {
+    return json({ reason_code: clientIdComparison, client_id_match: false });
+  }
+
+  const configurationReason = ownerAuthConfigurationReason(env);
+  if (configurationReason) {
+    return json({ reason_code: configurationReason, client_id_match: true });
+  }
+
+  const accessToken = typeof body.access_token === "string" ? body.access_token : "";
+  if (!accessToken || accessToken.length > 4096) {
+    return json({ reason_code: "owner_session_token_missing_or_invalid", client_id_match: true });
+  }
+  if (ownerDiagnosticRateLimited(request)) {
+    return json({ reason_code: "diagnostic_rate_limited" }, 429);
+  }
+
+  const reasonCode = await verifyOwnerGithubToken(accessToken, env);
+  return json({ reason_code: reasonCode, client_id_match: true });
+}
+
+async function isAuthorizedGithubOwner(
+  accessToken: string,
+  env: Env,
+  request: Request,
+): Promise<OwnerAuthReasonCode> {
+  if (!accessToken || accessToken.length > 4096) return "owner_session_token_missing_or_invalid";
+  const configurationReason = ownerAuthConfigurationReason(env);
+  if (configurationReason) return configurationReason;
+  if (ownerAuthRateLimited(request)) return "owner_auth_rate_limited";
+
   const tokenHash = await sha256Hex(accessToken);
   const cachedUntil = ownerVerificationCache.get(tokenHash);
-  if (cachedUntil && cachedUntil > Date.now()) return true;
-  try {
-    // GitHub's application token check proves the supplied token was issued to this OAuth app.
-    const checkResponse = await fetch("https://api.github.com/applications/" + encodeURIComponent(clientId) + "/token", {
-      method: "POST",
-      headers: {
-        authorization: "Basic " + btoa(clientId + ":" + clientSecret),
-        accept: "application/vnd.github+json",
-        "content-type": "application/json",
-        "x-github-api-version": "2022-11-28",
-        "user-agent": "EVE-owner-console",
-      },
-      body: JSON.stringify({ access_token: accessToken }),
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!checkResponse.ok) {
-      recordOwnerAuthFailure(request);
-      return false;
-    }
-    const checked: unknown = await checkResponse.json();
-    if (!checked || typeof checked !== "object" || !("app" in checked) ||
-        !checked.app || typeof checked.app !== "object" ||
-        !("client_id" in checked.app) || checked.app.client_id !== clientId) {
-      recordOwnerAuthFailure(request);
-      return false;
-    }
-    const userResponse = await fetch("https://api.github.com/user", {
-      headers: {
-        authorization: "Bearer " + accessToken,
-        accept: "application/vnd.github+json",
-        "x-github-api-version": "2022-11-28",
-        "user-agent": "EVE-owner-console",
-      },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!userResponse.ok) {
-      recordOwnerAuthFailure(request);
-      return false;
-    }
-    const user: unknown = await userResponse.json();
-    const authorized = !!user && typeof user === "object" && "id" in user &&
-      typeof user.id === "number" && user.id === expectedId;
-    if (!authorized) {
-      recordOwnerAuthFailure(request);
-      return false;
-    }
-    ownerVerificationCache.set(tokenHash, Date.now() + OWNER_CACHE_MS);
-    return true;
-  } catch {
+  if (cachedUntil && cachedUntil > Date.now()) return "owner_auth_ok";
+
+  const reasonCode = await verifyOwnerGithubToken(accessToken, env);
+  if (reasonCode !== "owner_auth_ok") {
     recordOwnerAuthFailure(request);
-    return false;
+    return reasonCode;
   }
+  ownerVerificationCache.set(tokenHash, Date.now() + OWNER_CACHE_MS);
+  return "owner_auth_ok";
 }
 
 export default {
@@ -519,6 +532,7 @@ export default {
     const supplied = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
     const url = new URL(request.url);
     const ownerApprovalRoute = request.method === "POST" && /^\/v1\/tasks\/[0-9a-f-]{36}\/approve$/i.test(url.pathname);
+    const ownerDiagnosticRoute = request.method === "POST" && url.pathname === "/v1/internal/owner-auth-diagnostic";
     const ownerControlRoute = request.method === "POST" && /^\/v1\/tasks\/[0-9a-f-]{36}\/owner-control$/i.test(url.pathname);
     const ownerMemoryDecisionRoute = request.method === "POST" && /^\/v1\/proposals\/[0-9a-f-]{36}\/decision$/i.test(url.pathname);
     const ownerReadRoute = request.method === "GET" && ["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status"].includes(url.pathname);
@@ -538,12 +552,21 @@ export default {
     };
     if (origin && origin !== ownerOrigin) return json({ error: "Origin not allowed." }, 403);
     if (request.method === "OPTIONS") {
+      if (url.pathname === "/v1/internal/owner-auth-diagnostic") {
+        return json({ reason_code: "diagnostic_access_denied" }, 403);
+      }
       if (origin !== ownerOrigin) return json({ error: "Origin not allowed." }, 403);
       return withOwnerCors(new Response(null, { status: 204 }));
     }
+    if (ownerDiagnosticRoute) {
+      return await ownerAuthDiagnostic(request, env);
+    }
     if (ownerOnlyRoute) {
-      let authorizedOwner = supplied ? await isAuthorizedGithubOwner(supplied, env, request) : false;
-      if (!authorizedOwner) return withOwnerCors(json({ error: "Unauthorized." }, 401));
+      const reasonCode = await isAuthorizedGithubOwner(supplied, env, request);
+      if (reasonCode !== "owner_auth_ok") {
+        const rateLimited = reasonCode === "owner_auth_rate_limited";
+        return withOwnerCors(json({ error: rateLimited ? "Rate limited." : "Unauthorized.", reason_code: reasonCode }, rateLimited ? 429 : 401));
+      }
     } else if (!env.MEMORY_API_TOKEN || !constantTimeEqual(supplied, env.MEMORY_API_TOKEN)) {
       return withOwnerCors(json({ error: "Unauthorized." }, 401));
     }
