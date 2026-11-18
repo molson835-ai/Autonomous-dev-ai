@@ -75,5 +75,7 @@ Worker diagnostic reason codes:
 
 Ordinary owner routes return `owner_auth_rate_limited` with HTTP 429 when their existing per-isolate failure limit is active; other authentication failures retain HTTP 401 and include their distinct `reason_code`. The existing owner failure window remains 10 failures per 60 seconds. The diagnostic endpoint has a separate five-second per-isolate cooldown and does not reset or alter the ordinary limiter.
 
+The Vercel server route can also return `owner_session_invalid` when the HttpOnly owner session is missing or no longer verifies, `worker_service_unavailable` when the Worker cannot be reached, or `diagnostic_response_invalid` if the Worker returns an unreadable response. These are server/transport failures, not OAuth credential verdicts.
+
 To run the diagnostic after an approved deployment, sign in to the owner console and open `https://autonomous-dev-ai.vercel.app/api/owner/diagnostic` in the same browser session. The response contains only the reason code and the Client ID match boolean.
 
