@@ -3,31 +3,33 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const schedule = await readFile(new URL("../../agent/schedules/owner-approved-work-loop.ts", import.meta.url), "utf8");
+const prompt = await readFile(new URL("../../agent/prompts/owner-approved-work-loop.ts", import.meta.url), "utf8");
+const workLoop = `${schedule}\n${prompt}`;
 
 test("scheduled work loop respects the Vercel Hobby daily cron limit", () => {
   assert.ok(schedule.includes('cron: "0 14 * * *"'));
 });
 
 test("scheduled work claims exactly one individually owner-approved task and checkpoints across fresh sessions", () => {
-  assert.match(schedule, /task_claim_next exactly once/);
-  assert.match(schedule, /task\.owner_approved === true/);
-  assert.match(schedule, /task\.mission_authorized !== true/);
-  assert.match(schedule, /Mission-authorized tasks, standing mandates/);
-  assert.match(schedule, /fresh session/);
-  assert.match(schedule, /checkpoint with waiting/);
-  assert.match(schedule, /resume_after_minutes >= 1320/);
-  assert.match(schedule, /Process one task only/);
-  assert.match(schedule, /task_heartbeat at least every 10 minutes/);
+  assert.match(workLoop, /task_claim_next exactly once/);
+  assert.match(workLoop, /task\.owner_approved === true/);
+  assert.match(workLoop, /task\.mission_authorized !== true/);
+  assert.match(workLoop, /Mission-authorized tasks, standing mandates/);
+  assert.match(workLoop, /fresh session/);
+  assert.match(workLoop, /checkpoint with waiting/);
+  assert.match(workLoop, /resume_after_minutes >= 1320/);
+  assert.match(workLoop, /Process one task only/);
+  assert.match(workLoop, /task_heartbeat at least every 10 minutes/);
 });
 
 test("scheduled work keeps outreach and publication draft-only while preserving financial boundaries", () => {
-  assert.match(schedule, /no standing authority to contact anyone/);
-  assert.match(schedule, /draft-only/);
-  assert.match(schedule, /Never send, publish, submit, or claim that an external action occurred/);
-  assert.match(schedule, /No personal funds, credit, cards, bank accounts, subscriptions/);
-  assert.match(schedule, /Every expense requires separate explicit owner approval/);
-  assert.match(schedule, /No Production deployment/);
-  assert.match(schedule, /never retry through a paid provider/);
+  assert.match(workLoop, /no standing authority to contact anyone/);
+  assert.match(workLoop, /draft-only/);
+  assert.match(workLoop, /Never send, publish, submit, or claim that an external action occurred/);
+  assert.match(workLoop, /No personal funds, credit, cards, bank accounts, subscriptions/);
+  assert.match(workLoop, /Every expense requires separate explicit owner approval/);
+  assert.match(workLoop, /No Production deployment/);
+  assert.match(workLoop, /never retry through a paid provider/);
 });
 
 

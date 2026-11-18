@@ -138,6 +138,33 @@ export default function OwnerConsole() {
     if (authenticated) void load();
   }, [authenticated, load]);
 
+  async function runApprovedTaskNow() {
+    setBusy("run-now");
+    setMessage("");
+    try {
+      const response = await fetch("/api/owner/run-now", {
+        method: "POST",
+        cache: "no-store",
+      });
+      const payload: unknown = await response.json();
+      if (!response.ok) {
+        const errorMessage = payload && typeof payload === "object" && "error" in payload
+          ? String((payload as { error: unknown }).error)
+          : "Run-now request failed (" + response.status + ").";
+        throw new Error(errorMessage);
+      }
+      const sessionId = payload && typeof payload === "object" && "session_id" in payload
+        ? String((payload as { session_id: unknown }).session_id)
+        : "accepted";
+      await load();
+      setMessage("Eve Production session accepted. Task claim and completion are not yet confirmed. Session: " + sessionId);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not start Eve.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function runMemoryDiagnostic() {
     setBusy("memory-diagnostic");
     setMessage("");
@@ -252,6 +279,14 @@ export default function OwnerConsole() {
                 className="rounded-lg border px-3 py-2 text-sm font-medium disabled:opacity-50"
               >
                 {queueStatus.queue_paused ? "Resume queue" : "Pause queue"}
+              </button>
+              <button
+                type="button"
+                disabled={busy !== null || queueStatus.queue_paused || queueStatus.running_tasks !== 0 || queueStatus.queued_tasks < 1}
+                onClick={() => void runApprovedTaskNow()}
+                className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+              >
+                {busy === "run-now" ? "Starting Eve…" : "Run next approved task now"}
               </button>
             </section>
           )}
