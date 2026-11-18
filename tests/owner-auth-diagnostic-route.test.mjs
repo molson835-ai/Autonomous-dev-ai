@@ -25,6 +25,11 @@ test("owner diagnostic gate reports a missing server shared secret", () => {
     accessToken: "session-token",
     sharedSecret: "",
   }), "server_shared_secret_missing");
+  assert.equal(ownerDiagnosticGateReason({
+    ownerSessionValid: true,
+    accessToken: "session-token",
+    sharedSecret: "   ",
+  }), "server_shared_secret_missing");
 });
 
 test("owner diagnostic gate permits only a valid owner session and server secret", () => {
