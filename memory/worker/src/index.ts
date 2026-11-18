@@ -551,6 +551,9 @@ export default {
     };
     if (origin && origin !== ownerOrigin) return json({ error: "Origin not allowed." }, 403);
     if (request.method === "OPTIONS") {
+      if (url.pathname === "/v1/internal/owner-auth-diagnostic") {
+        return json({ reason_code: "diagnostic_access_denied" }, 403);
+      }
       if (origin !== ownerOrigin) return json({ error: "Origin not allowed." }, 403);
       return withOwnerCors(new Response(null, { status: 204 }));
     }
