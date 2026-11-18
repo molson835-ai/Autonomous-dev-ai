@@ -40,6 +40,11 @@ describe("owner OAuth diagnostic reason codes", () => {
     expect(compareOwnerClientId("test-oauth-app", "test-oauth-app")).toBe("match");
   });
 
+  it("reports a missing Worker Client ID in the auth configuration", () => {
+    expect(ownerAuthConfigurationReason({ ...configured, GITHUB_CLIENT_ID: "" }))
+      .toBe("worker_client_id_missing");
+  });
+
   it("reports a missing Worker OAuth secret", () => {
     expect(ownerAuthConfigurationReason({ ...configured, GITHUB_CLIENT_SECRET: "" }))
       .toBe("worker_client_secret_missing");
