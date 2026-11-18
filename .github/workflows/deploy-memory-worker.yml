@@ -22,9 +22,18 @@ jobs:
     steps:
       - name: Validate explicit production confirmation
         env:
-          CONFIRM_PRODUCTION: ${{ inputs.confirm_production }}
+          CONFIRM_PRODUCTION: ${{ github.event.inputs.confirm_production }}
+        shell: bash
         run: |
           set -euo pipefail
+          if [[ -z "$CONFIRM_PRODUCTION" ]]; then
+            echo "::error::Production deployment blocked: GitHub did not provide the required confirmation input."
+            echo "Confirmation input received: no"
+            echo "Confirmation input length: 0"
+            exit 1
+          fi
+          echo "Confirmation input received: yes"
+          echo "Confirmation input length: ${#CONFIRM_PRODUCTION}"
           if [[ "$CONFIRM_PRODUCTION" != "DEPLOY" ]]; then
             echo "::error::Production deployment blocked. Re-run this workflow and enter exactly DEPLOY."
             exit 1
