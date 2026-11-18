@@ -67,10 +67,10 @@ describe("owner OAuth diagnostic reason codes", () => {
 
   it("reports tokens not issued to the configured app", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("not found", { status: 404 })));
-    expect(await verifyOwnerGithubToken("owner-token", configured)).toBe("owner_token_not_issued_by_configured_app");
+    expect(await verifyOwnerGithubToken("owner-token", configured)).toBe("owner_token_not_recognized_by_configured_app");
 
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ app: { client_id: "different-app" } })));
-    expect(await verifyOwnerGithubToken("owner-token", configured)).toBe("owner_token_not_issued_by_configured_app");
+    expect(await verifyOwnerGithubToken("owner-token", configured)).toBe("owner_token_not_recognized_by_configured_app");
   });
 
   it("reports unexpected OAuth token-check responses", async () => {
