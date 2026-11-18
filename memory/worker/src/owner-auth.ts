@@ -37,6 +37,12 @@ export function compareOwnerClientId(
   return expectedClientId === workerClientId ? "match" : "oauth_client_id_mismatch";
 }
 
+export function diagnosticSharedSecretReason(
+  memoryApiToken: string | undefined,
+): "server_shared_secret_missing" | null {
+  return memoryApiToken ? null : "server_shared_secret_missing";
+}
+
 export function ownerAuthConfigurationReason(
   env: OwnerAuthEnvironment,
 ): OwnerAuthReasonCode | null {
