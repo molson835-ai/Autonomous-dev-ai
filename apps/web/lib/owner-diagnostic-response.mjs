@@ -11,7 +11,9 @@ export function normalizeOwnerDiagnosticPayload(payload) {
       typeof payload.reason_code !== "string" || !payload.reason_code) {
     return { reason_code: "diagnostic_response_invalid" };
   }
-  return payload;
+  const safe = { reason_code: payload.reason_code };
+  if (typeof payload.client_id_match === "boolean") safe.client_id_match = payload.client_id_match;
+  return safe;
 }
 
 export const OWNER_DIAGNOSTIC_WORKER_UNAVAILABLE = Object.freeze({
