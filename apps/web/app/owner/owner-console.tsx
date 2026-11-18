@@ -80,7 +80,8 @@ export default function OwnerConsole() {
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);\n  const [memoryDiagnostic, setMemoryDiagnostic] = useState<MemoryDiagnostic | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [memoryDiagnostic, setMemoryDiagnostic] = useState<MemoryDiagnostic | null>(null);
 
   const load = useCallback(async (): Promise<boolean> => {
     if (!authenticated) return false;
@@ -136,6 +137,27 @@ export default function OwnerConsole() {
   useEffect(() => {
     if (authenticated) void load();
   }, [authenticated, load]);
+
+  async function runMemoryDiagnostic() {
+    setBusy("memory-diagnostic");
+    setMessage("");
+    try {
+      const response = await fetch("/api/owner/memory-diagnostic", { cache: "no-store" });
+      const payload: unknown = await response.json();
+      if (!response.ok) {
+        const errorMessage = payload && typeof payload === "object" && "error" in payload
+          ? String((payload as { error: unknown }).error)
+          : "Memory diagnostic request failed (" + response.status + ").";
+        throw new Error(errorMessage);
+      }
+      setMemoryDiagnostic(payload as MemoryDiagnostic);
+      setMessage("Memory endpoint checks completed. Review each HTTP result below.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Memory diagnostic failed.");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function forgetToken() {
     await fetch("/api/auth/github/logout", { method: "POST" });
