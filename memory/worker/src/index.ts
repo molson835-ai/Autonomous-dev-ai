@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { compareOwnerClientId, ownerAuthConfigurationReason, verifyOwnerGithubToken, type OwnerAuthReasonCode } from "./owner-auth";
+import { compareOwnerClientId, diagnosticSharedSecretReason, ownerAuthConfigurationReason, verifyOwnerGithubToken, type OwnerAuthReasonCode } from "./owner-auth";
 import { isSafeMemoryText, normalizeMemoryQuery } from "../../../agent/lib/memory-policy.mjs";
 import { ensureExperienceExternalIdColumn, findExperienceByExternalId } from "../../../agent/lib/memory-schema.mjs";
 import { createTaskRecord, isMissionAuthorizedTask, isTaskLeaseExpired, selectNextTask, TASK_STATUS_VALUES, transitionTask } from "../../../agent/lib/task-lifecycle.mjs";
@@ -465,7 +465,8 @@ function ownerDiagnosticRateLimited(request: Request): boolean {
 
 async function ownerAuthDiagnostic(request: Request, env: Env): Promise<Response> {
   if (request.headers.has("origin")) return json({ reason_code: "diagnostic_access_denied" }, 403);
-  if (!env.MEMORY_API_TOKEN) return json({ reason_code: "server_shared_secret_missing" }, 503);
+  const sharedSecretReason = diagnosticSharedSecretReason(env.MEMORY_API_TOKEN);
+  if (sharedSecretReason) return json({ reason_code: sharedSecretReason }, 503);
   const authorization = request.headers.get("authorization") ?? "";
   const supplied = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
   if (!constantTimeEqual(supplied, env.MEMORY_API_TOKEN)) {
