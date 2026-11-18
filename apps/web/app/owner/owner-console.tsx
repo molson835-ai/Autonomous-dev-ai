@@ -322,9 +322,18 @@ export default function OwnerConsole() {
                     </button>
                   )}
                   {task.status === "paused" && (
-                    <button type="button" disabled={busy !== null} onClick={() => void perform(task.id, "/v1/tasks/" + task.id + "/owner-control", "POST", { action: "resume" })} className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
-                      Resume
-                    </button>
+                    <>
+                      <button type="button" disabled={busy !== null} onClick={() => void perform(task.id, "/v1/tasks/" + task.id + "/owner-control", "POST", { action: "resume" })} className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
+                        Resume
+                      </button>
+                      <button type="button" disabled={busy !== null} onClick={() => {
+                        if (window.confirm("Cancel this paused task? Its history will be preserved, and it cannot be resumed.")) {
+                          void perform(task.id, "/v1/tasks/" + task.id + "/owner-control", "POST", { action: "cancel" });
+                        }
+                      }} className="rounded-lg border border-destructive px-3 py-2 text-sm font-medium text-destructive disabled:opacity-50">
+                        Cancel task
+                      </button>
+                    </>
                   )}
                 </div>
               </article>
