@@ -61,8 +61,9 @@ export async function verifyOwnerGithubToken(
   const clientSecret = env.GITHUB_CLIENT_SECRET!;
   const expectedId = Number(env.OWNER_GITHUB_ID);
 
+  let checkResponse: Response;
   try {
-    const checkResponse = await fetch("https://api.github.com/applications/" + encodeURIComponent(clientId) + "/token", {
+    checkResponse = await fetch("https://api.github.com/applications/" + encodeURIComponent(clientId) + "/token", {
       method: "POST",
       headers: {
         authorization: "Basic " + btoa(clientId + ":" + clientSecret),
@@ -74,23 +75,28 @@ export async function verifyOwnerGithubToken(
       body: JSON.stringify({ access_token: accessToken }),
       signal: AbortSignal.timeout(5000),
     });
+  } catch {
+    return "github_oauth_api_unavailable";
+  }
 
-    if (checkResponse.status === 401) return "oauth_app_credentials_rejected";
-    if (checkResponse.status === 404) return "owner_token_not_issued_by_configured_app";
-    if (checkResponse.status === 429 || checkResponse.status >= 500) return "github_oauth_api_unavailable";
-    if (!checkResponse.ok) return "github_oauth_check_failed";
+  if (checkResponse.status === 401) return "oauth_app_credentials_rejected";
+  if (checkResponse.status === 404) return "owner_token_not_issued_by_configured_app";
+  if (checkResponse.status === 429 || checkResponse.status >= 500) return "github_oauth_api_unavailable";
+  if (!checkResponse.ok) return "github_oauth_check_failed";
 
-    let checked: unknown;
-    try {
-      checked = await checkResponse.json();
-    } catch {
-      return "github_oauth_check_failed";
-    }
-    if (!isObject(checked) || !isObject(checked.app) || checked.app.client_id !== clientId) {
-      return "owner_token_not_issued_by_configured_app";
-    }
+  let checked: unknown;
+  try {
+    checked = await checkResponse.json();
+  } catch {
+    return "github_oauth_check_failed";
+  }
+  if (!isObject(checked) || !isObject(checked.app) || checked.app.client_id !== clientId) {
+    return "owner_token_not_issued_by_configured_app";
+  }
 
-    const userResponse = await fetch("https://api.github.com/user", {
+  let userResponse: Response;
+  try {
+    userResponse = await fetch("https://api.github.com/user", {
       headers: {
         authorization: "Bearer " + accessToken,
         accept: "application/vnd.github+json",
@@ -99,21 +105,22 @@ export async function verifyOwnerGithubToken(
       },
       signal: AbortSignal.timeout(5000),
     });
-    if (userResponse.status === 429 || userResponse.status >= 500) return "github_user_api_unavailable";
-    if (!userResponse.ok) return "github_user_verification_failed";
-
-    let user: unknown;
-    try {
-      user = await userResponse.json();
-    } catch {
-      return "github_user_verification_failed";
-    }
-    if (!isObject(user) || typeof user.id !== "number" || !Number.isSafeInteger(user.id)) {
-      return "github_user_verification_failed";
-    }
-    if (user.id !== expectedId) return "owner_id_mismatch";
-    return "owner_auth_ok";
   } catch {
-    return "github_oauth_api_unavailable";
+    return "github_user_api_unavailable";
   }
+
+  if (userResponse.status === 429 || userResponse.status >= 500) return "github_user_api_unavailable";
+  if (!userResponse.ok) return "github_user_verification_failed";
+
+  let user: unknown;
+  try {
+    user = await userResponse.json();
+  } catch {
+    return "github_user_verification_failed";
+  }
+  if (!isObject(user) || typeof user.id !== "number" || !Number.isSafeInteger(user.id)) {
+    return "github_user_verification_failed";
+  }
+  if (user.id !== expectedId) return "owner_id_mismatch";
+  return "owner_auth_ok";
 }
