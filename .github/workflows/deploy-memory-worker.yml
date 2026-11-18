@@ -17,10 +17,20 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ inputs.confirm_production == 'DEPLOY' }}
     runs-on: ubuntu-latest
     environment: cloudflare-production
     steps:
+      - name: Validate explicit production confirmation
+        env:
+          CONFIRM_PRODUCTION: ${{ inputs.confirm_production }}
+        run: |
+          set -euo pipefail
+          if [[ "$CONFIRM_PRODUCTION" != "DEPLOY" ]]; then
+            echo "::error::Production deployment blocked. Re-run this workflow and enter exactly DEPLOY."
+            exit 1
+          fi
+          echo "Explicit production confirmation accepted."
+
       - name: Check out repository
         uses: actions/checkout@v4
 
