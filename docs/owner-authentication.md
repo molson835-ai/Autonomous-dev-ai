@@ -69,6 +69,10 @@ Worker diagnostic reason codes:
 | `github_user_api_unavailable` | The GitHub user API is unavailable. |
 | `owner_id_mismatch` | The token belongs to a GitHub account other than the configured immutable owner. |
 | `server_shared_secret_missing` | The Worker shared server credential is not configured. |
+| `owner_auth_rate_limited` | An ordinary owner route hit its 10-failures-per-60-seconds limiter; HTTP 429. |
+| `owner_session_invalid` | The Vercel server does not have a valid owner session cookie. |
+| `worker_service_unavailable` | The Vercel server could not reach the Worker diagnostic endpoint. |
+| `diagnostic_response_invalid` | The Worker returned a response that was not a valid diagnostic JSON object. |
 | `diagnostic_access_denied` | The private endpoint did not receive its server credential or was called with a browser Origin. |
 | `diagnostic_request_invalid` | The diagnostic payload is malformed or contains unexpected fields. |
 | `diagnostic_rate_limited` | The private diagnostic cooldown is active. |
