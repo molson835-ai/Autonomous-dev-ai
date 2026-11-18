@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { OWNER_SESSION_COOKIE, getVerifiedOwnerLogin, isSameOriginRequest } from "@/lib/owner-github";
-import { OWNER_APPROVED_WORK_LOOP_PROMPT } from "../../../../../agent/prompts/owner-approved-work-loop";
+import { OWNER_APPROVED_WORK_LOOP_PROMPT } from "../../../../../../agent/prompts/owner-approved-work-loop";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
