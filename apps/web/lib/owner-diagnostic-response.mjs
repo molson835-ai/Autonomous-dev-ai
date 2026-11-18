@@ -2,7 +2,7 @@ export function ownerDiagnosticGateReason({ ownerSessionValid, accessToken, shar
   if (!ownerSessionValid || typeof accessToken !== "string" || !accessToken || accessToken.length > 4096) {
     return "owner_session_invalid";
   }
-  if (typeof sharedSecret !== "string" || !sharedSecret) return "server_shared_secret_missing";
+  if (typeof sharedSecret !== "string" || !sharedSecret.trim()) return "server_shared_secret_missing";
   return null;
 }
 
