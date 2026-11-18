@@ -28,6 +28,25 @@ type Proposal = {
 };
 
 type QueueStatus = { queue_paused: boolean; reason: string | null; running_tasks: number; queued_tasks: number; updated_at: string };
+type MemoryProbe = {
+  name: string;
+  status: number | null;
+  ok: boolean;
+  duration_ms: number;
+  result: "ok" | "http_error" | "timeout" | "network_error";
+  content_type?: string;
+  body_kind?: "json" | "non_json" | "empty";
+  response_bytes?: number;
+  response_keys?: string[];
+};
+type MemoryDiagnostic = {
+  checked_at: string;
+  environment: string;
+  configured: boolean;
+  configuration: string;
+  host_matches_expected: boolean | null;
+  checks: MemoryProbe[];
+};
 
 
 async function ownerRequest<T>(path: string, method = "GET", body?: unknown): Promise<T> {
@@ -62,6 +81,7 @@ export default function OwnerConsole() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [memoryDiagnostic, setMemoryDiagnostic] = useState<MemoryDiagnostic | null>(null);
 
   const load = useCallback(async (): Promise<boolean> => {
     if (!authenticated) return false;
@@ -118,6 +138,27 @@ export default function OwnerConsole() {
     if (authenticated) void load();
   }, [authenticated, load]);
 
+  async function runMemoryDiagnostic() {
+    setBusy("memory-diagnostic");
+    setMessage("");
+    try {
+      const response = await fetch("/api/owner/memory-diagnostic", { cache: "no-store" });
+      const payload: unknown = await response.json();
+      if (!response.ok) {
+        const errorMessage = payload && typeof payload === "object" && "error" in payload
+          ? String((payload as { error: unknown }).error)
+          : "Memory diagnostic request failed (" + response.status + ").";
+        throw new Error(errorMessage);
+      }
+      setMemoryDiagnostic(payload as MemoryDiagnostic);
+      setMessage("Memory endpoint checks completed. Review each HTTP result below.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Memory diagnostic failed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function forgetToken() {
     await fetch("/api/auth/github/logout", { method: "POST" });
     setAuthenticated(false);
@@ -155,6 +196,42 @@ export default function OwnerConsole() {
         {authenticated && <button type="button" onClick={() => void load()} disabled={busy !== null} className="mt-3 rounded-lg border px-4 py-2 text-sm font-medium disabled:opacity-50">{busy === "load" ? "Loading…" : "Refresh reviews"}</button>}
         {message && <p role="status" className="mt-3 text-sm text-muted-foreground">{message}</p>}
       </section>
+
+      {authenticated && (
+        <section className="space-y-3 rounded-xl border bg-card p-4 shadow-sm">
+          <div className="space-y-1">
+            <h2 className="font-semibold">Persistent memory connection test</h2>
+            <p className="text-sm text-muted-foreground">Checks both read-only memory endpoints using the server-side Production/Preview configuration. Memory contents and credentials are never displayed; no tasks or records are changed.</p>
+          </div>
+          <button type="button" onClick={() => void runMemoryDiagnostic()} disabled={busy !== null} className="rounded-lg border px-4 py-2 text-sm font-medium disabled:opacity-50">
+            {busy === "memory-diagnostic" ? "Testing memory…" : "Run memory connection test"}
+          </button>
+          {memoryDiagnostic && (
+            <div className="space-y-3" aria-live="polite">
+              <p className="text-xs text-muted-foreground">
+                Checked {new Date(memoryDiagnostic.checked_at).toLocaleString()} · Environment: {memoryDiagnostic.environment}
+              </p>
+              <p className="text-sm">
+                Configuration: <strong>{memoryDiagnostic.configuration}</strong>
+                {memoryDiagnostic.host_matches_expected === true ? " · Expected Worker host confirmed" : memoryDiagnostic.host_matches_expected === false ? " · Worker host mismatch or invalid URL; no credential was sent" : ""}
+              </p>
+              {memoryDiagnostic.checks.length === 0 && <p className="text-sm text-muted-foreground">No requests were sent. Check the Vercel environment configuration before proceeding.</p>}
+              {memoryDiagnostic.checks.map(check => (
+                <article key={check.name} className="rounded-lg border p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <strong className="text-sm">{check.name}</strong>
+                    <span className="text-sm font-medium">{check.status === null ? check.result : "HTTP " + check.status + " · " + check.result}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {check.duration_ms} ms{check.content_type ? " · " + check.content_type : ""}{check.response_bytes !== undefined ? " · " + check.response_bytes + " response bytes" : ""}
+                  </p>
+                  {check.response_keys && <p className="mt-1 break-words text-xs text-muted-foreground">Response fields: {check.response_keys.join(", ")}</p>}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {loaded && (
         <>
