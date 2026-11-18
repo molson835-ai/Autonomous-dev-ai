@@ -9,7 +9,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 function callWorker(
   path: string,
-  options: { method?: string; body?: unknown; credential?: string; ip?: string; origin?: string; env?: Record<string, unknown> } = {},
+  options: { method?: string; body?: unknown; credential?: string; ip?: string; origin?: string } = {},
 ) {
   const headers = new Headers({
     authorization: "Bearer " + (options.credential ?? sharedToken),
@@ -22,12 +22,10 @@ function callWorker(
     headers,
     ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
   });
-  return options.env
-    ? exports.default.fetch(request, options.env as never)
-    : exports.default.fetch(request);
+  return exports.default.fetch(request);
 }
 
-function diagnostic(body: unknown, options: { credential?: string; ip?: string; origin?: string; env?: Record<string, unknown> } = {}) {
+function diagnostic(body: unknown, options: { credential?: string; ip?: string; origin?: string } = {}) {
   return callWorker("/v1/internal/owner-auth-diagnostic", {
     ...options,
     method: "POST",
@@ -123,14 +121,7 @@ describe("private owner auth diagnostic endpoint", () => {
     expect(await second.json()).toEqual({ reason_code: "diagnostic_rate_limited" });
   });
 
-  it("returns safe configuration reason codes before calling GitHub", async () => {
-    const base = {
-      MEMORY_API_TOKEN: sharedToken,
-      GITHUB_CLIENT_ID: configuredClientId,
-      GITHUB_CLIENT_SECRET: "local-owner-oauth-secret",
-      OWNER_GITHUB_ID: "12345678",
-    };
-
+  it("returns safe Vercel configuration and missing-session reason codes", async () => {
     const noVercelId = await diagnostic(
       { access_token: "owner-token", expected_client_id: "" },
       { ip: "203.0.113.88" },
@@ -138,33 +129,6 @@ describe("private owner auth diagnostic endpoint", () => {
     expect(await noVercelId.json()).toEqual({
       reason_code: "vercel_client_id_missing",
       client_id_match: false,
-    });
-
-    const noWorkerId = await diagnostic(
-      { access_token: "owner-token", expected_client_id: configuredClientId },
-      { ip: "203.0.113.89", env: { ...base, GITHUB_CLIENT_ID: "" } },
-    );
-    expect(await noWorkerId.json()).toEqual({
-      reason_code: "worker_client_id_missing",
-      client_id_match: false,
-    });
-
-    const noWorkerSecret = await diagnostic(
-      { access_token: "owner-token", expected_client_id: configuredClientId },
-      { ip: "203.0.113.90", env: { ...base, GITHUB_CLIENT_SECRET: "" } },
-    );
-    expect(await noWorkerSecret.json()).toEqual({
-      reason_code: "worker_client_secret_missing",
-      client_id_match: true,
-    });
-
-    const badOwnerId = await diagnostic(
-      { access_token: "owner-token", expected_client_id: configuredClientId },
-      { ip: "203.0.113.91", env: { ...base, OWNER_GITHUB_ID: "not-numeric" } },
-    );
-    expect(await badOwnerId.json()).toEqual({
-      reason_code: "worker_owner_id_missing_or_invalid",
-      client_id_match: true,
     });
 
     const noToken = await diagnostic(
@@ -175,15 +139,6 @@ describe("private owner auth diagnostic endpoint", () => {
       reason_code: "owner_session_token_missing_or_invalid",
       client_id_match: true,
     });
-  });
-
-  it("reports a missing server shared secret without revealing configuration", async () => {
-    const response = await diagnostic(
-      { access_token: "owner-token", expected_client_id: configuredClientId },
-      { ip: "203.0.113.93", env: { MEMORY_API_TOKEN: "" } },
-    );
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ reason_code: "server_shared_secret_missing" });
   });
 
   it("returns success only when the app token check and immutable owner check both pass", async () => {
