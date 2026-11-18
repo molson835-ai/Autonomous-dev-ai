@@ -490,11 +490,14 @@ async function ownerAuthDiagnostic(request: Request, env: Env): Promise<Response
     return json({ reason_code: configurationReason, client_id_match: true });
   }
 
+  const accessToken = typeof body.access_token === "string" ? body.access_token : "";
+  if (!accessToken || accessToken.length > 4096) {
+    return json({ reason_code: "owner_session_token_missing_or_invalid", client_id_match: true });
+  }
   if (ownerDiagnosticRateLimited(request)) {
     return json({ reason_code: "diagnostic_rate_limited" }, 429);
   }
 
-  const accessToken = typeof body.access_token === "string" ? body.access_token : "";
   const reasonCode = await verifyOwnerGithubToken(accessToken, env);
   return json({ reason_code: reasonCode, client_id_match: true });
 }
