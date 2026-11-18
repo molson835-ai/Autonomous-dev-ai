@@ -479,10 +479,6 @@ async function ownerAuthDiagnostic(request: Request, env: Env): Promise<Response
       (body.expected_client_id !== undefined && typeof body.expected_client_id !== "string")) {
     return json({ reason_code: "diagnostic_request_invalid" }, 400);
   }
-  if (ownerDiagnosticRateLimited(request)) {
-    return json({ reason_code: "diagnostic_rate_limited" }, 429);
-  }
-
   const expectedClientId = typeof body.expected_client_id === "string" ? body.expected_client_id : "";
   const clientIdComparison = compareOwnerClientId(expectedClientId, env.GITHUB_CLIENT_ID);
   if (clientIdComparison !== "match") {
@@ -492,6 +488,10 @@ async function ownerAuthDiagnostic(request: Request, env: Env): Promise<Response
   const configurationReason = ownerAuthConfigurationReason(env);
   if (configurationReason) {
     return json({ reason_code: configurationReason, client_id_match: true });
+  }
+
+  if (ownerDiagnosticRateLimited(request)) {
+    return json({ reason_code: "diagnostic_rate_limited" }, 429);
   }
 
   const accessToken = typeof body.access_token === "string" ? body.access_token : "";
