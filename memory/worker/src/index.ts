@@ -411,7 +411,15 @@ export class MemoryStore extends DurableObject<Env> {
         "UPDATE memories SET status = ?, updated_at = ? WHERE id = ? AND status = 'pending' RETURNING id",
         status, now, match[1]
       ).toArray();
-      if (result.length !== 1) return json({ error: "Pending proconst ownerVerificationCache = new Map<string, number>();
+      if (result.length !== 1) return json({ error: "Pending proposal not found." }, 404);
+      return json({ id: match[1], status });
+    }
+
+    return json({ error: "Not found." }, 404);
+  }
+}
+
+const ownerVerificationCache = new Map<string, number>();
 const ownerFailureWindows = new Map<string, { startedAt: number; failures: number }>();
 const ownerDiagnosticWindows = new Map<string, number>();
 const OWNER_CACHE_MS = 60_000;
@@ -456,7 +464,6 @@ function ownerDiagnosticRateLimited(request: Request): boolean {
 }
 
 async function ownerAuthDiagnostic(request: Request, env: Env): Promise<Response> {
-  // This endpoint is server-to-server only. Browser-originated requests are never accepted.
   if (request.headers.has("origin")) return json({ reason_code: "diagnostic_access_denied" }, 403);
   if (!env.MEMORY_API_TOKEN) return json({ reason_code: "server_shared_secret_missing" }, 503);
   const authorization = request.headers.get("authorization") ?? "";
@@ -500,8 +507,6 @@ async function isAuthorizedGithubOwner(
   if (!accessToken || accessToken.length > 4096) return "owner_session_token_missing_or_invalid";
   const configurationReason = ownerAuthConfigurationReason(env);
   if (configurationReason) return configurationReason;
-  // Report a rate limit explicitly; the private diagnostic endpoint bypasses this limiter
-  // so it can identify the underlying OAuth failure without waiting for the window to expire.
   if (ownerAuthRateLimited(request)) return "owner_auth_rate_limited";
 
   const tokenHash = await sha256Hex(accessToken);
@@ -515,13 +520,6 @@ async function isAuthorizedGithubOwner(
   }
   ownerVerificationCache.set(tokenHash, Date.now() + OWNER_CACHE_MS);
   return "owner_auth_ok";
-}
-t(tokenHash, Date.now() + OWNER_CACHE_MS);
-    return true;
-  } catch {
-    recordOwnerAuthFailure(request);
-    return false;
-  }
 }
 
 export default {
