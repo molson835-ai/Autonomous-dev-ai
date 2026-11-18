@@ -135,6 +135,9 @@ jobs:
             echo "No TypeScript source files yet; type-check will run when the first agent tool is added."
           fi
 
+      - name: Type-check the Next.js owner console and diagnostic route
+        run: npx --no-install tsc --noEmit -p apps/web/tsconfig.json
+
       - name: Test planning and financial safety contract
         run: node --test tests/*.test.mjs
 
