@@ -13,7 +13,7 @@ export type OwnerAuthReasonCode =
   | "worker_owner_id_missing_or_invalid"
   | "owner_session_token_missing_or_invalid"
   | "oauth_app_credentials_rejected"
-  | "owner_token_not_issued_by_configured_app"
+  | "owner_token_not_recognized_by_configured_app"
   | "github_oauth_check_failed"
   | "github_oauth_api_unavailable"
   | "github_user_verification_failed"
@@ -82,7 +82,7 @@ export async function verifyOwnerGithubToken(
   }
 
   if (checkResponse.status === 401) return "oauth_app_credentials_rejected";
-  if (checkResponse.status === 404) return "owner_token_not_issued_by_configured_app";
+  if (checkResponse.status === 404) return "owner_token_not_recognized_by_configured_app";
   if (checkResponse.status === 429 || checkResponse.status >= 500) return "github_oauth_api_unavailable";
   if (!checkResponse.ok) return "github_oauth_check_failed";
 
@@ -93,7 +93,7 @@ export async function verifyOwnerGithubToken(
     return "github_oauth_check_failed";
   }
   if (!isObject(checked) || !isObject(checked.app) || checked.app.client_id !== clientId) {
-    return "owner_token_not_issued_by_configured_app";
+    return "owner_token_not_recognized_by_configured_app";
   }
 
   let userResponse: Response;
