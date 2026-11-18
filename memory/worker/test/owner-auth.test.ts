@@ -48,6 +48,7 @@ describe("owner OAuth diagnostic reason codes", () => {
 
   it("reports a missing Worker server shared secret", () => {
     expect(diagnosticSharedSecretReason("")).toBe("server_shared_secret_missing");
+    expect(diagnosticSharedSecretReason("   ")).toBe("server_shared_secret_missing");
     expect(diagnosticSharedSecretReason("configured-server-secret")).toBeNull();
   });
 
