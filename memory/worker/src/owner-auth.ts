@@ -24,7 +24,9 @@ export type OwnerAuthReasonCode =
   | "diagnostic_rate_limited"
   | "diagnostic_request_invalid"
   | "server_shared_secret_missing"
-  | "owner_session_invalid";
+  | "owner_session_invalid"
+  | "diagnostic_response_invalid"
+  | "worker_service_unavailable";
 
 export function compareOwnerClientId(
   expectedClientId: string,
