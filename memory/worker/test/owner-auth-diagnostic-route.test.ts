@@ -105,7 +105,7 @@ describe("private owner auth diagnostic endpoint", () => {
     );
     expect(diagnosticResponse.status).toBe(200);
     expect(await diagnosticResponse.json()).toEqual({
-      reason_code: "owner_token_not_issued_by_configured_app",
+      reason_code: "owner_token_not_recognized_by_configured_app",
       client_id_match: true,
     });
   });
@@ -116,7 +116,7 @@ describe("private owner auth diagnostic endpoint", () => {
     const payload = { access_token: "owner-token", expected_client_id: configuredClientId };
     const first = await diagnostic(payload, { ip });
     expect(first.status).toBe(200);
-    expect((await first.json()).reason_code).toBe("owner_token_not_issued_by_configured_app");
+    expect((await first.json()).reason_code).toBe("owner_token_not_recognized_by_configured_app");
 
     const second = await diagnostic(payload, { ip });
     expect(second.status).toBe(429);
