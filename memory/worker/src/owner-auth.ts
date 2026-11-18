@@ -40,7 +40,7 @@ export function compareOwnerClientId(
 export function diagnosticSharedSecretReason(
   memoryApiToken: string | undefined,
 ): "server_shared_secret_missing" | null {
-  return memoryApiToken ? null : "server_shared_secret_missing";
+  return memoryApiToken?.trim() ? null : "server_shared_secret_missing";
 }
 
 export function ownerAuthConfigurationReason(
