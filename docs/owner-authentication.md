@@ -62,7 +62,7 @@ Worker diagnostic reason codes:
 | `worker_owner_id_missing_or_invalid` | Worker owner ID is missing or invalid. |
 | `owner_session_token_missing_or_invalid` | The server-side owner session token is missing or malformed. |
 | `oauth_app_credentials_rejected` | GitHub rejected the Worker's OAuth app credentials. |
-| `owner_token_not_issued_by_configured_app` | The session token is not recognized as belonging to the configured OAuth app. |
+| `owner_token_not_recognized_by_configured_app` | The session token is not recognized as belonging to the configured OAuth app. |
 | `github_oauth_check_failed` | GitHub returned an unexpected OAuth token-check response. |
 | `github_oauth_api_unavailable` | The GitHub OAuth token-check API is unavailable. |
 | `github_user_verification_failed` | GitHub could not verify the session's authenticated user. |
