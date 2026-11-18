@@ -1,4 +1,4 @@
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { OWNER_SESSION_COOKIE, getVerifiedOwnerLogin } from "@/lib/owner-github";
 
@@ -8,8 +8,7 @@ export const dynamic = "force-dynamic";
 const MEMORY_API = "https://autonomous-dev-memory.molson835.workers.dev";
 
 export async function GET(request: Request) {
-  const requestHeaders = await headers();
-  const origin = requestHeaders.get("origin");
+  const origin = request.headers.get("origin");
   if (origin && origin !== new URL(request.url).origin) {
     return NextResponse.json({ reason_code: "diagnostic_access_denied" }, { status: 403, headers: { "cache-control": "no-store" } });
   }
