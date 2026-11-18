@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   compareOwnerClientId,
+  diagnosticSharedSecretReason,
   ownerAuthConfigurationReason,
   verifyOwnerGithubToken,
   type OwnerAuthEnvironment,
@@ -43,6 +44,11 @@ describe("owner OAuth diagnostic reason codes", () => {
   it("reports a missing Worker Client ID in the auth configuration", () => {
     expect(ownerAuthConfigurationReason({ ...configured, GITHUB_CLIENT_ID: "" }))
       .toBe("worker_client_id_missing");
+  });
+
+  it("reports a missing Worker server shared secret", () => {
+    expect(diagnosticSharedSecretReason("")).toBe("server_shared_secret_missing");
+    expect(diagnosticSharedSecretReason("configured-server-secret")).toBeNull();
   });
 
   it("reports a missing Worker OAuth secret", () => {
