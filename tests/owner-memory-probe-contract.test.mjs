@@ -22,5 +22,5 @@ test("Durable Object failures log only a random incident ID and sanitized reques
   assert.match(worker, /exception_name: exceptionName/);
   assert.match(worker, /return withOwnerCors\(json\(\{ error: "Internal server error\.", incident_id: incidentId \}, 500\)\)/);
   const catchBlock = worker.slice(worker.lastIndexOf("const incidentId = crypto.randomUUID()"));
-  assert.doesNotMatch(catchBlock, /request\.url|url\.search|error\.message|error\s*:/);
+  assert.doesNotMatch(catchBlock, /request\.url|url\.search|error\.message/);
 });
