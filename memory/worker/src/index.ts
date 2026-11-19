@@ -106,8 +106,8 @@ export class MemoryStore extends DurableObject<Env> {
           body.reserve_neurons !== 200 || body.model_id !== "@cf/zai-org/glm-4.7-flash")
         return json({ error: "Invalid quota reservation request." }, 400);
       // Usage is queried inside the trusted Worker; the caller cannot lower the observed total.
-      const accountId = this.bindings.CLOUDFLARE_ACCOUNT_ID;
-      const analyticsToken = this.bindings.CLOUDFLARE_ANALYTICS_API_TOKEN;
+      const accountId = this.env.CLOUDFLARE_ACCOUNT_ID;
+      const analyticsToken = this.env.CLOUDFLARE_ANALYTICS_API_TOKEN;
       if (!accountId || !/^[a-f0-9]{32}$/i.test(accountId) || !analyticsToken)
         return json({ error: "Worker-side Cloudflare Analytics credentials unavailable or invalid; paused." }, 503);
       const query = "query { viewer { accounts(filter: { accountTag: " + JSON.stringify(accountId) + " }) { " +
