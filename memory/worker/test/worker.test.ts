@@ -50,9 +50,17 @@ function mockAnalytics(initialUsage = 1000) {
   return (nextUsage: number) => { usedNeurons = nextUsage; };
 }
 function quotaRequest() {
-  return request("/v1/quota/reserve", { method: "POST", body: JSON.stringify({
-    reserve_neurons: 200, model_id: "@cf/zai-org/glm-4.7-flash",
-  }) });
+  // Do not use request(): its default test credential stubs global fetch for GitHub auth,
+  // overwriting the Analytics fetch mock used by these quota integration tests.
+  return exports.default.fetch(new Request(new URL("/v1/quota/reserve", endpoint), {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+      "cf-connecting-ip": "203.0.113.1",
+    },
+    body: JSON.stringify({ reserve_neurons: 200, model_id: "@cf/zai-org/glm-4.7-flash" }),
+  }));
 }
 describe("shared daily neuron quota coordinator", () => {
   it("requires auth and fails closed when Worker-side Cloudflare Analytics is unavailable", async () => {
