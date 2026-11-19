@@ -575,6 +575,13 @@ export default {
     }
     if (!url.pathname.startsWith("/v1/")) return withOwnerCors(json({ error: "Not found." }, 404));
     const id = env.MEMORY.idFromName("single-owner-memory");
-    return withOwnerCors(await env.MEMORY.get(id).fetch(request));
+    try {
+      return withOwnerCors(await env.MEMORY.get(id).fetch(request));
+    } catch (error) {
+      const incidentId = crypto.randomUUID();
+      const exceptionName = error instanceof Error && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(error.name) ? error.name : "UnknownError";
+      console.error(JSON.stringify({ incident_id: incidentId, route: url.pathname, method: request.method, exception_name: exceptionName }));
+      return withOwnerCors(json({ error: "Internal server error.", incident_id: incidentId }, 500));
+    }
   },
 };

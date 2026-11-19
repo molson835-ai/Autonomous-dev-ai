@@ -64,6 +64,16 @@ test("migration is safe to run repeatedly", () => {
   db.close();
 });
 
+test("migration is idempotent when the database already has external_id", () => {
+  const db = legacyDatabase();
+  db.exec("ALTER TABLE experiences ADD COLUMN external_id TEXT");
+  db.prepare("UPDATE experiences SET external_id = ? WHERE id = ?").run("already-present", "legacy-uuid");
+  const sql = sqlAdapter(db);
+  assert.doesNotThrow(() => { ensureExperienceExternalIdColumn(sql); ensureExperienceExternalIdColumn(sql); });
+  assert.equal(db.prepare("SELECT external_id FROM experiences WHERE id = ?").get("legacy-uuid").external_id, "already-present");
+  assert.ok(db.prepare("PRAGMA index_list(experiences)").all().some((index) => index.name === "experiences_external_id_unique"));
+  db.close();
+});
 test("external identifier lookup is exact, not a keyword or substring search", () => {
   const db = legacyDatabase();
   const sql = sqlAdapter(db);
