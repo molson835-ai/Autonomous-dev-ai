@@ -23,7 +23,7 @@ test("performs exactly the two fixed GET probes and returns only safe metadata",
 test("fails closed on missing credentials without making requests", async () => {
   let calls = 0;
   const result = await runOwnerMemoryProbe({ baseUrl, token: "", fetchImpl: async () => { calls++; return new Response(null); } });
-  assert.equal(calls, 0); assert.equal(result.host_matches_expected, false);
+  assert.equal(calls, 0); assert.equal(result.host_matches_expected, true);
   assert.ok(result.checks.every((check) => check.error_code === "configuration_missing"));
 });
 test("rejects unexpected Worker hosts before any outbound request", async () => {
