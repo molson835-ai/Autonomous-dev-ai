@@ -99,14 +99,14 @@ describe("shared daily neuron quota coordinator", () => {
     });
     expect(settled.status).toBe(200);
     expect(await settled.json()).toMatchObject({ settled: true, charged_neurons: 250 });
-    expect((await request("/v1/quota/settle", { method: "POST", body: JSON.stringify({
+    expect((await quotaControlRequest("/v1/quota/settle", {
       reservation_id: one.reservation_id, actual_neurons: 250,
-    }) })).status).toBe(404);
+    })).status).toBe(404);
     setUsage(6900);
     expect((await quotaRequest()).status).toBe(429);
     expect((await quotaControlRequest("/v1/quota/circuit", {
       reservation_id: two.reservation_id, reason: "cloudflare_daily_quota_exhausted",
-    }).status).toBe(200);
+    })).status).toBe(200);
     expect((await quotaRequest()).status).toBe(429);
   });
   it("releases unused reservation capacity when actual usage is below 200", async () => {
@@ -117,7 +117,7 @@ describe("shared daily neuron quota coordinator", () => {
       const reserved = await quotaRequest();
       expect(reserved.status).toBe(200);
       const { reservation_id } = await reserved.json<{ reservation_id: string }>();
-      const settled = await request("/v1/quota/settle", { method: "POST", body: JSON.stringify({
+      const settled = await quotaControlRequest("/v1/quota/settle", {
         reservation_id, actual_neurons: 12,
       });
       expect(settled.status).toBe(200);
