@@ -15,7 +15,7 @@ async function probe(name, endpoint, token, fetchImpl) {
 export async function runOwnerMemoryProbe({ baseUrl, token, fetchImpl = fetch }) {
   let parsedBase;
   try {
-    if (typeof baseUrl !== "string" || !baseUrl || typeof token !== "string" || !token) throw new Error("missing");
+    if (typeof baseUrl !== "string" || !baseUrl) throw new Error("missing_url");
     parsedBase = new URL(baseUrl);
   } catch {
     const code = typeof baseUrl === "string" && baseUrl ? "configuration_invalid" : "configuration_missing";
@@ -23,6 +23,7 @@ export async function runOwnerMemoryProbe({ baseUrl, token, fetchImpl = fetch })
   }
   const hostMatches = parsedBase.protocol === "https:" && !parsedBase.username && !parsedBase.password && !parsedBase.search && !parsedBase.hash && (!parsedBase.port || parsedBase.port === "443") && parsedBase.hostname.toLowerCase() === EXPECTED_WORKER_HOST;
   if (!hostMatches) return { host_matches_expected: false, checks: [emptyCheck("memory_recall", "worker_host_mismatch"), emptyCheck("memory_experiences", "worker_host_mismatch")] };
+  if (typeof token !== "string" || !token) return { host_matches_expected: true, checks: [emptyCheck("memory_recall", "configuration_missing"), emptyCheck("memory_experiences", "configuration_missing")] };
   const checks = await Promise.all([
     probe("memory_recall", new URL("/v1/recall?limit=1", parsedBase), token, fetchImpl),
     probe("memory_experiences", new URL("/v1/experiences?external_id=test", parsedBase), token, fetchImpl),
