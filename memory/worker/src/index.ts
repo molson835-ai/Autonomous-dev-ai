@@ -10,6 +10,8 @@ interface Env {
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
   OWNER_GITHUB_ID?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_ANALYTICS_API_TOKEN?: string;
 }
 
 type MemoryRow = {
@@ -99,45 +101,71 @@ export class MemoryStore extends DurableObject<Env> {
 
 
     if (request.method === "POST" && url.pathname === "/v1/quota/reserve") {
-      const body = await readBody(request), day = now.slice(0,10);
-      const observedMs = Date.parse(typeof body?.observedAt === "string" ? body.observedAt : "");
-      if (!body || Object.keys(body).some(k => !["day","usedNeurons","observedAt","reserve_neurons","model_id"].includes(k)) ||
-          body.day !== day || typeof body.usedNeurons !== "number" || !Number.isFinite(body.usedNeurons) || body.usedNeurons < 0 ||
-          body.reserve_neurons !== 200 || body.model_id !== "@cf/zai-org/glm-4.7-flash" ||
-          !Number.isFinite(observedMs) || Date.parse(now)-observedMs < 0 || Date.parse(now)-observedMs > 900000)
-        return json({ error: "Authoritative daily neuron telemetry missing, stale, or invalid; paused." },503);
-      let daily = this.ctx.storage.sql.exec<{day:string;baseline_neurons:number;observed_neurons:number;local_estimated_neurons:number;circuit_open:number}>("SELECT * FROM quota_daily WHERE day=? LIMIT 1",day).toArray()[0];
-      if (daily && body.usedNeurons < daily.observed_neurons) return json({error:"Neuron telemetry regressed; paused."},503);
+      const body = await readBody(request), day = now.slice(0, 10);
+      if (!body || Object.keys(body).some(k => !["reserve_neurons", "model_id"].includes(k)) ||
+          body.reserve_neurons !== 200 || body.model_id !== "@cf/zai-org/glm-4.7-flash")
+        return json({ error: "Invalid quota reservation request." }, 400);
+      // Usage is queried inside the trusted Worker; the caller cannot lower the observed total.
+      const accountId = this.bindings.CLOUDFLARE_ACCOUNT_ID;
+      const analyticsToken = this.bindings.CLOUDFLARE_ANALYTICS_API_TOKEN;
+      if (!accountId || !/^[a-f0-9]{32}$/i.test(accountId) || !analyticsToken)
+        return json({ error: "Worker-side Cloudflare Analytics credentials unavailable or invalid; paused." }, 503);
+      const query = "query { viewer { accounts(filter: { accountTag: " + JSON.stringify(accountId) + " }) { " +
+        "aiInferenceAdaptiveGroups(limit: 2, filter: { date_geq: " + JSON.stringify(day) + ", date_leq: " + JSON.stringify(day) + " }) " +
+        "{ sum { totalNeurons } dimensions { date } } } } }";
+      let analyticsResponse: Response;
+      try {
+        analyticsResponse = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+          method: "POST",
+          headers: { authorization: "Bearer " + analyticsToken, "content-type": "application/json" },
+          body: JSON.stringify({ query }), signal: AbortSignal.timeout(8000), cache: "no-store",
+        });
+      } catch { return json({ error: "Cloudflare Analytics unavailable; quota enforcement paused." }, 503); }
+      if (!analyticsResponse.ok) return json({ error: "Cloudflare Analytics HTTP " + analyticsResponse.status + "; paused." }, 503);
+      let analyticsPayload: any;
+      try { analyticsPayload = await analyticsResponse.json(); }
+      catch { return json({ error: "Cloudflare Analytics response invalid; paused." }, 503); }
+      if (analyticsPayload?.errors?.length) return json({ error: "Cloudflare Analytics query or permissions failed; paused." }, 503);
+      const accounts = analyticsPayload?.data?.viewer?.accounts;
+      const groups = accounts?.length === 1 ? accounts[0]?.aiInferenceAdaptiveGroups : null;
+      if (!Array.isArray(groups) || groups.length > 1 || (groups.length === 1 && groups[0]?.dimensions?.date !== day))
+        return json({ error: "Cloudflare daily neuron aggregate missing or ambiguous; paused." }, 503);
+      const usedNeurons = groups.length === 0 ? 0 : groups[0]?.sum?.totalNeurons;
+      if (typeof usedNeurons !== "number" || !Number.isFinite(usedNeurons) || usedNeurons < 0)
+        return json({ error: "Authoritative neuron total invalid; paused." }, 503);
+      const observedAt = now;
+      this.ctx.storage.sql.exec("DELETE FROM quota_reservations WHERE day<>?", day);
+      let daily = this.ctx.storage.sql.exec<{day:string;baseline_neurons:number;observed_neurons:number;local_estimated_neurons:number;circuit_open:number}>("SELECT * FROM quota_daily WHERE day=? LIMIT 1", day).toArray()[0];
+      if (daily && usedNeurons < daily.observed_neurons) return json({ error: "Neuron telemetry regressed; paused." }, 503);
       if (!daily) {
-        this.ctx.storage.sql.exec("INSERT INTO quota_daily (day,baseline_neurons,observed_neurons,observed_at,local_estimated_neurons,circuit_open,updated_at) VALUES (?,?,?,?,0,0,?)",day,body.usedNeurons,body.usedNeurons,body.observedAt,now);
-        daily={day,baseline_neurons:body.usedNeurons,observed_neurons:body.usedNeurons,local_estimated_neurons:0,circuit_open:0};
+        this.ctx.storage.sql.exec("INSERT INTO quota_daily (day,baseline_neurons,observed_neurons,observed_at,local_estimated_neurons,circuit_open,updated_at) VALUES (?,?,?,?,0,0,?)", day, usedNeurons, usedNeurons, observedAt, now);
+        daily = { day, baseline_neurons: usedNeurons, observed_neurons: usedNeurons, local_estimated_neurons: 0, circuit_open: 0 };
       } else {
-        this.ctx.storage.sql.exec("UPDATE quota_daily SET observed_neurons=?,observed_at=?,updated_at=? WHERE day=?",body.usedNeurons,body.observedAt,now,day);
-        daily.observed_neurons=body.usedNeurons;
+        this.ctx.storage.sql.exec("UPDATE quota_daily SET observed_neurons=?,observed_at=?,updated_at=? WHERE day=?", usedNeurons, observedAt, now, day);
+        daily.observed_neurons = usedNeurons;
       }
-      if (daily.circuit_open===1) return json({error:"Daily Workers AI circuit is open."},429);
-      const active=this.ctx.storage.sql.exec<{total:number}>("SELECT COALESCE(SUM(reserved_neurons),0) AS total FROM quota_reservations WHERE day=?",day).one().total;
-      const projected=Math.max(daily.observed_neurons,daily.baseline_neurons+daily.local_estimated_neurons+active);
-      if (projected+200>7000) return json({error:"Daily neuron target reached; 3,000-neuron reserve preserved."},429);
-      const id=crypto.randomUUID();
-      this.ctx.storage.sql.exec("INSERT INTO quota_reservations (id,day,reserved_neurons,created_at) VALUES (?,?,200,?)",id,day,now);
-      return json({reservation_id:id,projected_neurons:projected,reserved_neurons:200,target_neurons:7000});
+      if (daily.circuit_open === 1) return json({ error: "Daily Workers AI circuit is open." }, 429);
+      const active = this.ctx.storage.sql.exec<{total:number}>("SELECT COALESCE(SUM(reserved_neurons),0) AS total FROM quota_reservations WHERE day=?", day).one().total;
+      const projected = Math.max(daily.observed_neurons, daily.baseline_neurons + daily.local_estimated_neurons + active);
+      if (projected + 200 > 7000) return json({ error: "Daily neuron target reached; 3,000-neuron reserve preserved." }, 429);
+      const id = crypto.randomUUID();
+      this.ctx.storage.sql.exec("INSERT INTO quota_reservations (id,day,reserved_neurons,created_at) VALUES (?,?,200,?)", id, day, now);
+      return json({ reservation_id: id, projected_neurons: projected, reserved_neurons: 200, target_neurons: 7000 });
     }
     if (request.method === "POST" && url.pathname === "/v1/quota/settle") {
-      const body=await readBody(request);
-      if (!body || Object.keys(body).some(k=>!["reservation_id","actual_neurons"].includes(k)) ||
-          typeof body.reservation_id!=="string" || !/^[0-9a-f-]{36}$/i.test(body.reservation_id) ||
-          typeof body.actual_neurons!=="number" || !Number.isFinite(body.actual_neurons) || body.actual_neurons<0 || body.actual_neurons>100000)
-        return json({error:"Invalid quota settlement."},400);
-      const row=this.ctx.storage.sql.exec<{id:string;day:string;reserved_neurons:number}>("SELECT * FROM quota_reservations WHERE id=? LIMIT 1",body.reservation_id).toArray()[0];
-      if (!row) return json({error:"Reservation not found or already settled."},404);
-      // The reservation is a temporary concurrency hold, not a minimum charge.
-      // Actual usage may be below the hold; missing usage is handled conservatively by the caller.
-      const charged=body.actual_neurons;
-      const updated=this.ctx.storage.sql.exec<{day:string}>("UPDATE quota_daily SET local_estimated_neurons=local_estimated_neurons+?,updated_at=? WHERE day=? RETURNING day",charged,now,row.day).toArray();
-      if (updated.length!==1) return json({error:"Quota ledger unavailable; reservation retained."},503);
-      this.ctx.storage.sql.exec("DELETE FROM quota_reservations WHERE id=?",row.id);
-      return json({settled:true,charged_neurons:charged});
+      const body = await readBody(request);
+      if (!body || Object.keys(body).some(k => !["reservation_id", "actual_neurons"].includes(k)) ||
+          typeof body.reservation_id !== "string" || !/^[0-9a-f-]{36}$/i.test(body.reservation_id) ||
+          typeof body.actual_neurons !== "number" || !Number.isFinite(body.actual_neurons) || body.actual_neurons < 0 || body.actual_neurons > 100000)
+        return json({ error: "Invalid quota settlement." }, 400);
+      const row = this.ctx.storage.sql.exec<{id:string;day:string;reserved_neurons:number}>("SELECT * FROM quota_reservations WHERE id=? LIMIT 1", body.reservation_id).toArray()[0];
+      if (!row) return json({ error: "Reservation not found or already settled." }, 404);
+      // A reservation is a temporary concurrency hold, not a minimum charge.
+      const charged = body.actual_neurons;
+      const updated = this.ctx.storage.sql.exec<{day:string}>("UPDATE quota_daily SET local_estimated_neurons=local_estimated_neurons+?,updated_at=? WHERE day=? RETURNING day", charged, now, row.day).toArray();
+      if (updated.length !== 1) return json({ error: "Quota ledger unavailable; reservation retained." }, 503);
+      this.ctx.storage.sql.exec("DELETE FROM quota_reservations WHERE id=?", row.id);
+      return json({ settled: true, charged_neurons: charged });
     }
     if (request.method === "POST" && url.pathname === "/v1/quota/circuit") {
       const body=await readBody(request);
