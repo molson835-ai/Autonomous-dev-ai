@@ -645,3 +645,83 @@ describe("persistent memory Worker HTTP contract", () => {
   });
 
 });
+
+
+describe("persistent quarantined resource catalog and owner review", () => {
+  it("stores only allowlisted metadata in quarantine and makes duplicate submissions idempotent", async () => {
+    const candidate = {
+      id: `test.resource.${crypto.randomUUID()}`,
+      name: "Test resource",
+      summary: "Metadata-only resource intake integration test.",
+      resource_type: "documentation",
+      skill_tags: ["testing"],
+      source_url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript",
+      maintainer: "unknown",
+      license: "unknown",
+      version_or_revision: "unknown",
+      cost_model: "unknown",
+      dependencies: [],
+      permissions: [],
+      network_or_execution_requirements: ["HTTPS read only"],
+      security_notes: "Not executed; awaiting owner review."
+    };
+    const created = await request("/v1/resources", { method: "POST", body: JSON.stringify(candidate) });
+    expect(created.status).toBe(201);
+    expect(await created.json()).toMatchObject({ id: candidate.id, trust_state: "quarantined", created: true });
+    const duplicate = await request("/v1/resources", { method: "POST", body: JSON.stringify(candidate) });
+    expect(duplicate.status).toBe(200);
+    expect(await duplicate.json()).toMatchObject({ id: candidate.id, trust_state: "quarantined", created: false });
+
+    const ownerDenied = await request("/v1/owner/resources");
+    expect(ownerDenied.status).toBe(401);
+    const listed = await request("/v1/owner/resources?limit=50", {}, ownerToken);
+    expect(listed.status).toBe(200);
+    const resources = await listed.json<{ resources: Array<{ id: string; trust_state: string; resource: { name: string } }> }>();
+    expect(resources.resources).toContainEqual(expect.objectContaining({
+      id: candidate.id, trust_state: "quarantined",
+      resource: expect.objectContaining({ name: candidate.name, trust_state: "quarantined" })
+    }));
+  });
+
+  it("requires owner authentication and evidence for every resource decision", async () => {
+    const id = `review.resource.${crypto.randomUUID()}`;
+    const candidate = {
+      id, name: "Review test", summary: "Owner decision boundary test.",
+      resource_type: "documentation", source_url: "https://owasp.org/www-project-top-ten/",
+      skill_tags: [], dependencies: [], permissions: [],
+      network_or_execution_requirements: ["HTTPS read only"]
+    };
+    expect((await request("/v1/resources", { method: "POST", body: JSON.stringify(candidate) })).status).toBe(201);
+    const path = `/v1/owner/resources/${id}/decision`;
+    expect((await request(path, { method: "POST", body: JSON.stringify({ decision: "approve", review_evidence: ["Reviewed"] }) })).status).toBe(401);
+    expect((await request(path, { method: "POST", body: JSON.stringify({ decision: "approve" }) }, ownerToken)).status).toBe(400);
+    const approved = await request(path, {
+      method: "POST",
+      body: JSON.stringify({ decision: "approve", review_evidence: ["Owner inspected provenance, license, permissions, and cost metadata."] })
+    }, ownerToken);
+    expect(approved.status).toBe(200);
+    expect(await approved.json()).toMatchObject({ id, trust_state: "approved", reviewer: "owner" });
+    expect((await request(path, {
+      method: "POST",
+      body: JSON.stringify({ decision: "reject", review_evidence: ["Conflicting decision must not overwrite approval."] })
+    }, ownerToken)).status).toBe(409);
+    const listed = await request("/v1/owner/resources?limit=50", {}, ownerToken);
+    const resources = await listed.json<{ resources: Array<{ id: string; trust_state: string; review_evidence: string[] }> }>();
+    expect(resources.resources.find(item => item.id === id)).toMatchObject({
+      trust_state: "approved",
+      review_evidence: ["Owner inspected provenance, license, permissions, and cost metadata."]
+    });
+  });
+
+  it("rejects malformed or unapproved resource source hosts without storing them", async () => {
+    const id = `unsafe.resource.${crypto.randomUUID()}`;
+    const bad = await request("/v1/resources", {
+      method: "POST",
+      body: JSON.stringify({ id, name: "Unsafe", summary: "Must be rejected", resource_type: "tool", source_url: "https://evil.example/tool" })
+    });
+    expect(bad.status).toBe(400);
+    const listed = await request("/v1/owner/resources?limit=50", {}, ownerToken);
+    const resources = await listed.json<{ resources: Array<{ id: string }> }>();
+    expect(resources.resources.some(item => item.id === id)).toBe(false);
+  });
+});
