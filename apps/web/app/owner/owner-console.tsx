@@ -299,7 +299,7 @@ export default function OwnerConsole() {
               <p className="text-xs text-muted-foreground">
                 Source: local model estimate, not Cloudflare's live account meter. The {quotaStatus.protected_reserve_neurons.toLocaleString()}-neuron reserve is preserved. UTC day: {quotaStatus.day}.
               </p>
-              {quotaStatus.observed_at && <p className="text-xs text-muted-foreground">Last local ledger update: {new Date(quotaStatus.observed_at).toLocaleString()}</p>}
+              {quotaStatus.updated_at && <p className="text-xs text-muted-foreground">Last local ledger update: {new Date(quotaStatus.updated_at).toLocaleString()}</p>}
               {quotaStatus.circuit_open && <p className="text-sm">A confirmed provider quota error opened the safety circuit. This cannot be cleared by changing local estimates.</p>}
             </section>
           )}
