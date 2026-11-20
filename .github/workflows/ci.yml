@@ -3,7 +3,6 @@ name: CI
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main, fix/owner-memory-diagnostics, fix/task-self-authorization-boundary-2026-11-16, fix/task-authorization-and-neuron-settlement-2026-11-16, feat/eve-earned-growth-foundation, feat/gdelt-free-news-search, feat/opportunity-evaluation-engine, feat/owner-run-approved-task-now, feat/owner-memory-diagnostic-hardening]
   push:
     branches: [main]
 
