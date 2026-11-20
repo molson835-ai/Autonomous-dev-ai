@@ -39,18 +39,6 @@ function request(path: string, init: RequestInit = {}, credential = token) {
   );
 }
 
-function mockAnalytics(initialUsage = 1000) {
-  let usedNeurons = initialUsage;
-  vi.stubGlobal("fetch", vi.fn(async () => {
-    const day = new Date().toISOString().slice(0, 10);
-    return Response.json({
-      data: { viewer: { accounts: [{
-        aiInferenceAdaptiveGroups: [{ sum: { totalNeurons: usedNeurons }, dimensions: { date: day } }],
-      }] } },
-    });
-  }));
-  return (nextUsage: number) => { usedNeurons = nextUsage; };
-}
 function quotaRequest() {
   return exports.default.fetch(new Request(new URL("/v1/quota/reserve", endpoint), {
     method: "POST",
@@ -66,19 +54,20 @@ function quotaControlRequest(path: "/v1/quota/settle" | "/v1/quota/circuit" | "/
   }));
 }
 describe("shared daily neuron quota coordinator", () => {
-  it("requires auth and fails closed when Worker-side Cloudflare Analytics is unavailable", async () => {
+  it("requires auth and rejects caller-supplied reservation sizes or usage", async () => {
     const denied = await exports.default.fetch(new Request(new URL("/v1/quota/reserve", endpoint), {
       method: "POST", body: JSON.stringify({ reserve_neurons: 200, model_id: "@cf/zai-org/glm-4.7-flash" }),
     }));
     expect(denied.status).toBe(401);
-    expect((await request("/v1/quota/reserve", {
-      method: "POST", body: JSON.stringify({ reserve_neurons: 200, model_id: "@cf/zai-org/glm-4.7-flash", usedNeurons: 0 }),
-    })).status).toBe(400);
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("unavailable", { status: 503 })));
-    expect((await quotaRequest()).status).toBe(503);
+    const invalid = await exports.default.fetch(new Request(new URL("/v1/quota/reserve", endpoint), {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ reserve_neurons: 1, model_id: "@cf/zai-org/glm-4.7-flash" }),
+    }));
+    expect(invalid.status).toBe(400);
+    expect((await quotaRequest()).status).toBe(200);
   });
-  it("uses verified usage and charges the model-specific estimate, not the full reservation", async () => {
-    mockAnalytics(1000);
+  it("charges reported-token neuron estimates instead of the full 200-neuron hold", async () => {
     const first = await quotaRequest();
     expect(first.status).toBe(200);
     const one = await first.json<{ reservation_id: string; reserved_neurons: number }>();
@@ -89,14 +78,17 @@ describe("shared daily neuron quota coordinator", () => {
     expect((await quotaControlRequest("/v1/quota/settle", { reservation_id: one.reservation_id, actual_neurons: 12 })).status).toBe(404);
   });
   it("enforces the 7000-neuron target and returns a machine-readable reason", async () => {
-    const setUsage = mockAnalytics(6900);
+    for (let i = 0; i < 6; i += 1) {
+      const reserved = await quotaRequest();
+      expect(reserved.status).toBe(200);
+      const { reservation_id } = await reserved.json<{ reservation_id: string }>();
+      expect((await quotaControlRequest("/v1/quota/settle", { reservation_id, actual_neurons: 1200 })).status).toBe(200);
+    }
     const blocked = await quotaRequest();
     expect(blocked.status).toBe(429);
     expect(await blocked.json()).toMatchObject({ reason_code: "local_neuron_budget_reached" });
-    setUsage(1000);
   });
   it("keeps a failed-provider circuit open and identifies it distinctly", async () => {
-    mockAnalytics(1000);
     const reserved = await quotaRequest();
     const { reservation_id } = await reserved.json<{ reservation_id: string }>();
     expect((await quotaControlRequest("/v1/quota/circuit", {
@@ -106,11 +98,20 @@ describe("shared daily neuron quota coordinator", () => {
     expect(blocked.status).toBe(429);
     expect(await blocked.json()).toMatchObject({ reason_code: "quota_circuit_open" });
   });
-  it("exposes authenticated read-only quota status without resetting the ledger", async () => {
-    mockAnalytics(1500);
-    expect((await quotaControlRequest("/v1/quota/status")).status).toBe(200);
+  it("exposes authenticated read-only quota status and labels estimates accurately", async () => {
+    const reserved = await quotaRequest();
+    const { reservation_id } = await reserved.json<{ reservation_id: string }>();
+    const status = await quotaControlRequest("/v1/quota/status");
+    expect(status.status).toBe(200);
+    expect(await status.json()).toMatchObject({
+      source: "local_model_estimate_not_provider_telemetry",
+      target_neurons: 7000,
+      protected_reserve_neurons: 3000,
+      active_reserved_neurons: 200,
+    });
     const denied = await exports.default.fetch(new Request(new URL("/v1/quota/status", endpoint)));
     expect(denied.status).toBe(401);
+    expect((await quotaControlRequest("/v1/quota/settle", { reservation_id, actual_neurons: 0 })).status).toBe(200);
   });
 });
 
