@@ -291,14 +291,21 @@ export class MemoryStore extends DurableObject<Env> {
 
     const approveMatch = url.pathname.match(/^\/v1\/tasks\/([0-9a-f-]{36})\/approve$/i);
     if (request.method === "POST" && approveMatch) {
+      const body = await readBody(request);
+      const allowedScopes = new Set(["owner_review_required", "product_development", "testing", "documentation", "market_research"]);
+      if (body && (Object.keys(body).some(key => key !== "scope_id") ||
+          (body.scope_id !== undefined && (typeof body.scope_id !== "string" || !allowedScopes.has(body.scope_id))))) {
+        return json({ error: "Only an allowlisted owner-selected scope may be assigned during approval." }, 400);
+      }
+      const scopeId = typeof body?.scope_id === "string" ? body.scope_id : "owner_review_required";
       const row = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE id = ? LIMIT 1", approveMatch[1]).toArray()[0];
       if (!row) return json({ error: "Task not found." }, 404);
       const current = taskFromRow(row);
       if (current.status !== "proposed") return json({ error: "Only proposed tasks can be approved." }, 409);
       const approved = transitionTask(current, "queued", { ownerApproved: true, now });
-      const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status='queued', owner_approved=1, updated_at=? WHERE id=? AND status='proposed' AND owner_approved=0 RETURNING id", now, current.id).toArray();
+      const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status='queued', owner_approved=1, scope_id=?, updated_at=? WHERE id=? AND status='proposed' AND owner_approved=0 RETURNING id", scopeId, now, current.id).toArray();
       if (updated.length !== 1) return json({ error: "Task approval state conflict." }, 409);
-      return json({ task: approved });
+      return json({ task: { ...approved, scope_id: scopeId } });
     }
 
     if (request.method === "POST" && url.pathname === "/v1/tasks/claim-next") {

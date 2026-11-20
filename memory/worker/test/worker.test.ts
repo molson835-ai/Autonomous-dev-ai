@@ -442,6 +442,21 @@ describe("persistent memory Worker HTTP contract", () => {
     expect(await claim.json()).toEqual({ task: null });
   });
 
+  it("rejects unapproved scope identifiers and keeps tasks proposed", async () => {
+    const create = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
+      idempotency_key: `TASK-INVALID-SCOPE-${crypto.randomUUID()}`, task_type: "repo_maintenance",
+      title: "Invalid owner scope test", goal: "Reject an unknown scope", approved_scope: "Test only"
+    }) });
+    const { task } = await create.json<{ task: { id: string; scope_id: string } }>();
+    const denied = await request(`/v1/tasks/${task.id}/approve`, {
+      method: "POST", body: JSON.stringify({ scope_id: "customer_outreach" })
+    }, ownerToken);
+    expect(denied.status).toBe(400);
+    const unchanged = await request(`/v1/tasks/${task.id}`);
+    expect((await unchanged.json<{ task: { status: string; owner_approved: boolean; scope_id: string } }>()).task)
+      .toMatchObject({ status: "proposed", owner_approved: false, scope_id: "owner_review_required" });
+  });
+
   it("requires the separate owner credential to approve and claims only approved tasks", async () => {
     const create = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
       idempotency_key: `TASK-APPROVAL-${crypto.randomUUID()}`, task_type: "repo_maintenance",
@@ -451,10 +466,12 @@ describe("persistent memory Worker HTTP contract", () => {
     const { task } = await create.json<{ task: { id: string } }>();
     const denied = await request(`/v1/tasks/${task.id}/approve`, { method: "POST" });
     expect(denied.status).toBe(401);
-    const approved = await request(`/v1/tasks/${task.id}/approve`, { method: "POST" }, ownerToken);
+    const approved = await request(`/v1/tasks/${task.id}/approve`, {
+      method: "POST", body: JSON.stringify({ scope_id: "testing" })
+    }, ownerToken);
     expect(approved.status).toBe(200);
-    expect((await approved.json<{ task: { status: string; owner_approved: boolean } }>()).task)
-      .toMatchObject({ status: "queued", owner_approved: true });
+    expect((await approved.json<{ task: { status: string; owner_approved: boolean; scope_id: string } }>()).task)
+      .toMatchObject({ status: "queued", owner_approved: true, scope_id: "testing" });
     const claimed = await request("/v1/tasks/claim-next", { method: "POST" });
     expect((await claimed.json<{ task: { id: string; status: string; attempt_count: number } }>()).task)
       .toMatchObject({ id: task.id, status: "running", attempt_count: 1 });
