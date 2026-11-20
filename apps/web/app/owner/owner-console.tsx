@@ -27,6 +27,7 @@ type Proposal = {
   created_at: string;
 };
 
+type Resource = { id: string; resource: Record<string, unknown> | null; trust_state: string; created_at: string; reviewer: string | null; reviewed_at: string | null; review_evidence: string[] };
 type QueueStatus = { queue_paused: boolean; reason: string | null; running_tasks: number; queued_tasks: number; updated_at: string };
 type MemoryProbe = {
   name: string;
@@ -77,6 +78,7 @@ export default function OwnerConsole() {
   const [authenticated, setAuthenticated] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [resources, setResources] = useState<Resource[]>([]);
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -88,13 +90,15 @@ export default function OwnerConsole() {
     setBusy("load");
     setMessage("");
     try {
-      const [taskData, proposalData, statusData] = await Promise.all([
+      const [taskData, proposalData, statusData, resourceData] = await Promise.all([
         ownerRequest<{ tasks: Task[] }>("/v1/owner/tasks?limit=30"),
         ownerRequest<{ proposals: Proposal[] }>("/v1/owner/proposals?limit=30"),
         ownerRequest<QueueStatus>("/v1/owner/status"),
+        ownerRequest<{ resources: Resource[] }>("/v1/owner/resources?limit=50"),
       ]);
       setTasks(taskData.tasks);
       setProposals(proposalData.proposals);
+      setResources(resourceData.resources);
       setQueueStatus(statusData);
       setLoaded(true);
       setMessage("Owner review data loaded. Your GitHub identity is verified server-side.");
@@ -191,6 +195,7 @@ export default function OwnerConsole() {
     setAuthenticated(false);
     setTasks([]);
     setProposals([]);
+    setResources([]);
     setQueueStatus(null);
     setLoaded(false);
     setMessage("Signed out of the owner console.");
@@ -336,6 +341,41 @@ export default function OwnerConsole() {
                     </>
                   )}
                 </div>
+              </article>
+            ))}
+          </section>
+
+          <section className="space-y-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="text-xl font-semibold">Resource catalog & security review</h2>
+              <span className="text-sm text-muted-foreground">{resources.length} resources</span>
+            </div>
+            <p className="text-sm text-muted-foreground">New entries remain quarantined. Approval records owner evidence only; it does not install, execute, fetch, or grant permissions to a resource.</p>
+            {resources.length === 0 && <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">No resource candidates have been submitted.</p>}
+            {resources.map(item => (
+              <article key={item.id} className="space-y-3 rounded-xl border bg-card p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="font-semibold">{String(item.resource?.name ?? item.id)}</h3>
+                  <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium">{item.trust_state}</span>
+                </div>
+                <p className="text-sm">{String(item.resource?.summary ?? "Metadata unavailable")}</p>
+                <p className="break-all text-xs text-muted-foreground">Source: {String(item.resource?.source_url ?? "unknown")}</p>
+                <p className="text-xs text-muted-foreground">Type: {String(item.resource?.resource_type ?? "unknown")} · License: {String(item.resource?.license ?? "unknown")} · Cost: {String(item.resource?.cost_model ?? "unknown")}</p>
+                <p className="text-xs text-muted-foreground">ID {item.id}</p>
+                {item.review_evidence.length > 0 && <p className="text-sm text-muted-foreground">Review evidence: {item.review_evidence.join(" · ")}</p>}
+                {(item.trust_state === "quarantined" || item.trust_state === "reviewed") && (
+                  <div className="flex flex-wrap gap-2">
+                    {(["reviewed", "approve", "reject", "stale"] as const).map(decision => (
+                      <button key={decision} type="button" disabled={busy !== null} onClick={() => {
+                        const evidence = window.prompt("Enter review evidence for this decision (required):");
+                        if (!evidence?.trim()) return;
+                        void perform(item.id, "/v1/owner/resources/" + encodeURIComponent(item.id) + "/decision", "POST", { decision, review_evidence: [evidence.trim()] });
+                      }} className="rounded-lg border px-3 py-2 text-sm font-medium disabled:opacity-50">
+                        {decision === "approve" ? "Approve metadata" : decision === "reject" ? "Reject" : decision === "stale" ? "Mark stale" : "Mark reviewed"}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </article>
             ))}
           </section>
