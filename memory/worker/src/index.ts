@@ -104,14 +104,41 @@ export class MemoryStore extends DurableObject<Env> {
 
 
 
+    if (request.method === "GET" && url.pathname === "/v1/quota/status") {
+      const day = now.slice(0, 10);
+      const daily = this.ctx.storage.sql.exec<{
+        day: string; baseline_neurons: number; observed_neurons: number;
+        observed_at: string; local_estimated_neurons: number; circuit_open: number; updated_at: string;
+      }>("SELECT * FROM quota_daily WHERE day=? LIMIT 1", day).toArray()[0];
+      const active = this.ctx.storage.sql.exec<{ total: number }>(
+        "SELECT COALESCE(SUM(reserved_neurons),0) AS total FROM quota_reservations WHERE day=?", day
+      ).one().total;
+      const projected = daily
+        ? Math.max(daily.observed_neurons, daily.baseline_neurons + daily.local_estimated_neurons) + active
+        : active;
+      return json({
+        day,
+        source: "local_model_estimate_not_provider_telemetry",
+        target_neurons: 7000,
+        protected_reserve_neurons: 3000,
+        observed_neurons: daily?.observed_neurons ?? null,
+        observed_at: daily?.observed_at ?? null,
+        local_estimated_neurons: daily?.local_estimated_neurons ?? 0,
+        active_reserved_neurons: active,
+        projected_neurons: projected,
+        remaining_to_target: Math.max(0, 7000 - projected),
+        circuit_open: daily?.circuit_open === 1,
+        updated_at: daily?.updated_at ?? null,
+      });
+    }
     if (request.method === "POST" && url.pathname === "/v1/quota/reserve") {
       const body = await readBody(request), day = now.slice(0, 10);
       if (!body || Object.keys(body).some(k => !["reserve_neurons", "model_id"].includes(k)) ||
-          body.reserve_neurons !== 1200 || body.model_id !== "@cf/zai-org/glm-4.7-flash")
+          body.reserve_neurons !== 200 || body.model_id !== "@cf/zai-org/glm-4.7-flash")
         return json({ error: "Invalid quota reservation request." }, 400);
 
-      // Adaptive Analytics is sampled and is not a billing-grade counter. Enforce
-      // Eve's own UTC-day budget with a Durable Object ledger instead.
+      // The reservation is a small concurrency hold. Settlement uses the
+      // model-specific estimate from provider-reported token counts.
       this.ctx.storage.sql.exec("DELETE FROM quota_reservations WHERE day<>?", day);
       let daily = this.ctx.storage.sql.exec<{day:string;baseline_neurons:number;observed_neurons:number;local_estimated_neurons:number;circuit_open:number}>(
         "SELECT * FROM quota_daily WHERE day=? LIMIT 1", day
@@ -123,32 +150,39 @@ export class MemoryStore extends DurableObject<Env> {
         );
         daily = { day, baseline_neurons: 0, observed_neurons: 0, local_estimated_neurons: 0, circuit_open: 0 };
       }
-      if (daily.circuit_open === 1) return json({ error: "Daily Workers AI circuit is open." }, 429);
+      if (daily.circuit_open === 1) return json({
+        error: "Workers AI provider quota circuit is open after a confirmed provider quota failure.",
+        reason_code: "quota_circuit_open",
+      }, 429);
       const active = this.ctx.storage.sql.exec<{total:number}>(
         "SELECT COALESCE(SUM(reserved_neurons),0) AS total FROM quota_reservations WHERE day=?", day
       ).one().total;
-      // Preserve any conservative carry-forward from a pre-ledger deployment.
       const projected = Math.max(daily.observed_neurons, daily.baseline_neurons + daily.local_estimated_neurons) + active;
-      if (projected + 1200 > 7000)
-        return json({ error: "Daily neuron target reached; 3,000-neuron reserve preserved." }, 429);
+      if (projected + 200 > 7000) return json({
+        error: "Eve's local neuron safety target is reached; the 3,000-neuron reserve is preserved.",
+        reason_code: "local_neuron_budget_reached",
+      }, 429);
       const id = crypto.randomUUID();
       this.ctx.storage.sql.exec(
-        "INSERT INTO quota_reservations (id,day,reserved_neurons,created_at) VALUES (?,?,1200,?)", id, day, now
+        "INSERT INTO quota_reservations (id,day,reserved_neurons,created_at) VALUES (?,?,200,?)", id, day, now
       );
-      return json({ reservation_id: id, projected_neurons: projected, reserved_neurons: 1200, target_neurons: 7000 });
+      return json({ reservation_id: id, projected_neurons: projected, reserved_neurons: 200, target_neurons: 7000 });
     }
     if (request.method === "POST" && url.pathname === "/v1/quota/settle") {
       const body = await readBody(request);
-      if (!body || Object.keys(body).some(k => k !== "reservation_id") ||
-          typeof body.reservation_id !== "string" || !/^[0-9a-f-]{36}$/i.test(body.reservation_id))
+      if (!body || Object.keys(body).some(k => !["reservation_id", "actual_neurons"].includes(k)) ||
+          typeof body.reservation_id !== "string" || !/^[0-9a-f-]{36}$/i.test(body.reservation_id) ||
+          typeof body.actual_neurons !== "number" || !Number.isFinite(body.actual_neurons) ||
+          body.actual_neurons < 0 || body.actual_neurons > 100000)
         return json({ error: "Invalid quota settlement." }, 400);
       const row = this.ctx.storage.sql.exec<{id:string;day:string;reserved_neurons:number}>(
         "SELECT * FROM quota_reservations WHERE id=? LIMIT 1", body.reservation_id
       ).toArray()[0];
       if (!row) return json({ error: "Reservation not found or already settled." }, 404);
-      // Never trust caller-reported usage to release reserved capacity. Charge the
-      // entire hold, including requests that fail, time out, or end mid-stream.
-      const charged = row.reserved_neurons;
+      // Provider-reported token usage is converted using the published model rates
+      // plus a 50% margin in the trusted server-side middleware. Missing usage
+      // settles to a conservative 200-neuron fallback.
+      const charged = body.actual_neurons;
       const updated = this.ctx.storage.sql.exec<{day:string}>(
         "UPDATE quota_daily SET local_estimated_neurons=local_estimated_neurons+?,updated_at=? WHERE day=? RETURNING day",
         charged, now, row.day
@@ -158,14 +192,16 @@ export class MemoryStore extends DurableObject<Env> {
       return json({ settled: true, charged_neurons: charged });
     }
     if (request.method === "POST" && url.pathname === "/v1/quota/circuit") {
-      const body=await readBody(request);
-      if (!body || Object.keys(body).some(k=>!["reservation_id","reason"].includes(k)) ||
-          typeof body.reservation_id!=="string" || body.reason!=="cloudflare_daily_quota_exhausted")
-        return json({error:"Invalid quota circuit request."},400);
-      const row=this.ctx.storage.sql.exec<{day:string}>("SELECT day FROM quota_reservations WHERE id=? LIMIT 1",body.reservation_id).toArray()[0];
-      if (!row) return json({error:"Reservation not found."},404);
-      const updated=this.ctx.storage.sql.exec("UPDATE quota_daily SET circuit_open=1,updated_at=? WHERE day=?",now,row.day);
-      return json({circuit_open:true,day:row.day});
+      const body = await readBody(request);
+      if (!body || Object.keys(body).some(k => !["reservation_id", "reason"].includes(k)) ||
+          typeof body.reservation_id !== "string" || body.reason !== "cloudflare_daily_quota_exhausted")
+        return json({ error: "Invalid quota circuit request." }, 400);
+      const row = this.ctx.storage.sql.exec<{day:string}>(
+        "SELECT day FROM quota_reservations WHERE id=? LIMIT 1", body.reservation_id
+      ).toArray()[0];
+      if (!row) return json({ error: "Reservation not found." }, 404);
+      this.ctx.storage.sql.exec("UPDATE quota_daily SET circuit_open=1,updated_at=? WHERE day=?", now, row.day);
+      return json({ circuit_open: true, day: row.day });
     }
     if (request.method === "POST" && url.pathname === "/v1/resources") {
       const body = await readBody(request);
