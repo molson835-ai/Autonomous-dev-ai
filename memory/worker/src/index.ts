@@ -231,6 +231,44 @@ export class MemoryStore extends DurableObject<Env> {
       return json({ tasks: rows.map(taskFromRow) });
     }
 
+    if (request.method === "GET" && url.pathname === "/v1/owner/resources") {
+      const limit = boundedLimit(url.searchParams.get("limit"), 30);
+      const rows = this.ctx.storage.sql.exec<ResourceRow>("SELECT * FROM resources ORDER BY created_at DESC LIMIT ?", limit).toArray();
+      return json({ resources: rows.map(row => {
+        let resource: unknown = null;
+        try { resource = JSON.parse(row.resource_json); } catch { /* Keep corrupt metadata visible without trusting it. */ }
+        let reviewEvidence: string[] = [];
+        try { const parsed: unknown = JSON.parse(row.review_evidence); if (Array.isArray(parsed) && parsed.every(item => typeof item === "string")) reviewEvidence = parsed; } catch { /* Fail closed. */ }
+        return { id: row.id, resource, trust_state: row.trust_state, created_at: row.created_at, updated_at: row.updated_at, reviewer: row.reviewer, reviewed_at: row.reviewed_at, review_evidence: reviewEvidence };
+      }) });
+    }
+
+    const resourceDecision = url.pathname.match(/^\/v1\/owner\/resources\/([a-z0-9][a-z0-9._:-]{0,159})\/decision$/);
+    if (request.method === "POST" && resourceDecision) {
+      const body = await readBody(request);
+      if (!body || Object.keys(body).some(key => !["decision", "review_evidence"].includes(key)) ||
+          !["reviewed", "approve", "reject", "stale"].includes(String(body.decision)) ||
+          !Array.isArray(body.review_evidence) || body.review_evidence.length < 1 || body.review_evidence.length > 10 ||
+          body.review_evidence.some(item => !isSafeMemoryText(item, 1000))) {
+        return json({ error: "A valid decision and 1–10 evidence notes are required." }, 400);
+      }
+      const row = this.ctx.storage.sql.exec<ResourceRow>("SELECT * FROM resources WHERE id=? LIMIT 1", resourceDecision[1]).toArray()[0];
+      if (!row) return json({ error: "Resource not found." }, 404);
+      if (row.trust_state !== "quarantined" && row.trust_state !== "reviewed") return json({ error: "This resource is already decided; submit a new revision for re-review." }, 409);
+      const status = body.decision === "approve" ? "approved" : body.decision === "reject" ? "rejected" : body.decision === "stale" ? "stale" : "reviewed";
+      let resource: Record<string, unknown>;
+      try { resource = JSON.parse(row.resource_json) as Record<string, unknown>; }
+      catch { return json({ error: "Stored resource metadata is corrupt." }, 500); }
+      resource.trust_state = status;
+      const evidence = (body.review_evidence as string[]).map(item => item.trim());
+      const updated = this.ctx.storage.sql.exec<{ id: string }>(
+        "UPDATE resources SET resource_json=?,trust_state=?,updated_at=?,reviewer='owner',reviewed_at=?,review_evidence=? WHERE id=? AND trust_state=? RETURNING id",
+        JSON.stringify(resource), status, now, now, JSON.stringify(evidence), row.id, row.trust_state
+      ).toArray();
+      if (updated.length !== 1) return json({ error: "Resource review state conflict." }, 409);
+      return json({ id: row.id, trust_state: status, reviewer: "owner", reviewed_at: now, review_evidence: evidence });
+    }
+
     if (request.method === "GET" && url.pathname === "/v1/owner/proposals") {
       const limit = boundedLimit(url.searchParams.get("limit"), 20);
       const proposals = this.ctx.storage.sql.exec<MemoryRow>(
@@ -571,9 +609,10 @@ export default {
     const ownerDiagnosticRoute = request.method === "POST" && url.pathname === "/v1/internal/owner-auth-diagnostic";
     const ownerControlRoute = request.method === "POST" && /^\/v1\/tasks\/[0-9a-f-]{36}\/owner-control$/i.test(url.pathname);
     const ownerMemoryDecisionRoute = request.method === "POST" && /^\/v1\/proposals\/[0-9a-f-]{36}\/decision$/i.test(url.pathname);
-    const ownerReadRoute = request.method === "GET" && ["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status"].includes(url.pathname);
+    const ownerResourceDecisionRoute = request.method === "POST" && /^\/v1\/owner\/resources\/[a-z0-9][a-z0-9._:-]{0,159}\/decision$/.test(url.pathname);
+    const ownerReadRoute = request.method === "GET" && ["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status", "/v1/owner/resources"].includes(url.pathname);
     const ownerQueueControlRoute = request.method === "POST" && url.pathname === "/v1/owner/control";
-    const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute || ownerMemoryDecisionRoute || ownerReadRoute || ownerQueueControlRoute;
+    const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute || ownerMemoryDecisionRoute || ownerResourceDecisionRoute || ownerReadRoute || ownerQueueControlRoute;
     const ownerOrigin = "https://autonomous-dev-ai.vercel.app";
     const origin = request.headers.get("origin");
     const withOwnerCors = (response: Response) => {
