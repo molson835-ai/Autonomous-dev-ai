@@ -121,6 +121,11 @@ describe("shared daily neuron quota coordinator", () => {
     });
     const denied = await exports.default.fetch(new Request(new URL("/v1/quota/status", endpoint)));
     expect(denied.status).toBe(401);
+    const ownerDenied = await request("/v1/owner/quota/status");
+    expect(ownerDenied.status).toBe(401);
+    const ownerStatus = await request("/v1/owner/quota/status", {}, ownerToken);
+    expect(ownerStatus.status).toBe(200);
+    expect(await ownerStatus.json()).toMatchObject({ source: "local_model_estimate_not_provider_telemetry", target_neurons: 7000 });
     expect((await quotaControlRequest("/v1/quota/settle", { reservation_id, actual_neurons: 0 })).status).toBe(200);
   });
 });
