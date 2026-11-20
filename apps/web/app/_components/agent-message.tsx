@@ -315,7 +315,7 @@ function ArtifactToolContent({ output }: { readonly output: unknown }) {
   const result = (typeof output === "string" ? safeJson(output) : output) as ArtifactResult | undefined;
   const artifact = result?.artifact;
   const [device, setDevice] = useState<"mobile" | "desktop">("mobile");
-  if (result?.valid !== true || !artifact?.content || !artifact.previewHtml || !artifact.filename) return <ToolOutput output={output} />;
+  if (result?.valid !== true || !artifact?.content || !artifact.previewHtml || !artifact.filename) return <ToolOutput errorText={undefined} output={output} />;
   const download = () => {
     const blob = new Blob([artifact.content!], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
