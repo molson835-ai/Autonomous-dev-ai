@@ -7,7 +7,7 @@ const SAFE_QUOTA_MESSAGES = Object.freeze({
 
 export function memoryFailureMessage(status, payload) {
   const reason = payload && typeof payload === "object" ? payload.reason_code : undefined;
-  if (status === 429 && typeof reason === "string" && SAFE_QUOTA_MESSAGES[reason]) {
+  if (status === 429 && typeof reason === "string" && Object.hasOwn(SAFE_QUOTA_MESSAGES, reason)) {
     return SAFE_QUOTA_MESSAGES[reason];
   }
   if (status === 503 && typeof reason === "string" && SAFE_QUOTA_MESSAGES[reason]) {
