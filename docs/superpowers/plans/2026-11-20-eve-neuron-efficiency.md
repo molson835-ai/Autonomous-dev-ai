@@ -40,7 +40,7 @@
 - [x] Use the model's published input/output neuron rates and 50% margin.
 - [x] Settle successful generate/stream calls from provider-reported usage.
 - [x] Use 200 as the fallback when usage is absent or invalid.
-- [ ] Verify typecheck and tests in CI.
+- [x] Verify typecheck and tests in CI.
 
 ### Task 2: Worker quota ledger and diagnostics
 
@@ -57,7 +57,7 @@
 - [x] Return separate safe reason codes for local budget and provider circuit blocks.
 - [x] Add authenticated read-only quota status, with an explicit local-estimate source label.
 - [x] Map allowlisted reason codes to safe user-facing messages.
-- [ ] Verify Worker tests and Node tests in CI.
+- [x] Verify Worker tests and Node tests in CI.
 
 ### Task 3: Owner visibility and operating guidance
 
@@ -71,7 +71,7 @@
 - [x] Display local estimated usage, reservations, headroom, reserve, and circuit state.
 - [x] Document batching, caching, context reduction, and deterministic-code preference.
 - [x] Explicitly disclose that broad zero-neuron task execution is not yet implemented.
-- [ ] Verify web build and full repository CI.
+- [x] Verify web build and full repository CI.
 
 ## Risks and dependencies
 
