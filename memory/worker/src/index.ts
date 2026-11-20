@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { compareOwnerClientId, diagnosticSharedSecretReason, ownerAuthConfigurationReason, verifyOwnerGithubToken, type OwnerAuthReasonCode } from "./owner-auth";
 import { isSafeMemoryText, normalizeMemoryQuery } from "../../../agent/lib/memory-policy.mjs";
+import { prepareResourceCandidate } from "../../../agent/resources/intake.mjs";
 import { ensureExperienceExternalIdColumn, findExperienceByExternalId } from "../../../agent/lib/memory-schema.mjs";
 import { createTaskRecord, isMissionAuthorizedTask, isTaskLeaseExpired, selectNextTask, TASK_STATUS_VALUES, transitionTask } from "../../../agent/lib/task-lifecycle.mjs";
 
@@ -19,6 +20,7 @@ type MemoryRow = {
   confidence: number; status: string; created_at: string; updated_at: string;
 };
 type TaskRow = { id: string; idempotency_key: string; task_type: string; title: string; goal: string; approved_scope: string; scope_id: string; status: string; owner_approved: number; mission_authorized: number; created_at: string; updated_at: string; attempt_count: number; max_attempts: number; next_run_at: string | null; checkpoint_summary: string | null; result_summary: string | null; evidence_refs: string; started_at: string | null; finished_at: string | null; };
+type ResourceRow = { id: string; resource_json: string; trust_state: string; created_at: string; updated_at: string; reviewer: string | null; reviewed_at: string | null; review_evidence: string; };
 type ExperienceRow = {
   id: string; external_id: string | null; task: string; outcome: string; result: string;
   evidence: string; created_at: string;
@@ -91,6 +93,8 @@ export class MemoryStore extends DurableObject<Env> {
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS quota_reservations (id TEXT PRIMARY KEY, day TEXT NOT NULL, reserved_neurons REAL NOT NULL, created_at TEXT NOT NULL)");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS quota_reservations_day ON quota_reservations(day)");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS tasks_status_created ON tasks(status, created_at)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS resources (id TEXT PRIMARY KEY, resource_json TEXT NOT NULL, trust_state TEXT NOT NULL CHECK (trust_state IN ('quarantined','reviewed','approved','rejected','stale')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, reviewer TEXT, reviewed_at TEXT, review_evidence TEXT NOT NULL DEFAULT '[]')");
+      ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS resources_state_updated ON resources(trust_state, updated_at DESC)");
     });
   }
 
@@ -163,6 +167,21 @@ export class MemoryStore extends DurableObject<Env> {
       const updated=this.ctx.storage.sql.exec("UPDATE quota_daily SET circuit_open=1,updated_at=? WHERE day=?",now,row.day);
       return json({circuit_open:true,day:row.day});
     }
+    if (request.method === "POST" && url.pathname === "/v1/resources") {
+      const body = await readBody(request);
+      if (!body) return json({ error: "Invalid resource candidate." }, 400);
+      let candidate: ReturnType<typeof prepareResourceCandidate>;
+      try { candidate = prepareResourceCandidate(body, now); }
+      catch (error) { return json({ error: error instanceof Error ? error.message : "Invalid resource candidate." }, 400); }
+      const existing = this.ctx.storage.sql.exec<ResourceRow>("SELECT * FROM resources WHERE id=? LIMIT 1", candidate.id).toArray()[0];
+      if (existing) return json({ id: existing.id, trust_state: existing.trust_state, created: false }, 200);
+      this.ctx.storage.sql.exec(
+        "INSERT INTO resources (id,resource_json,trust_state,created_at,updated_at,reviewer,reviewed_at,review_evidence) VALUES (?,?,'quarantined',?,?,NULL,NULL,'[]')",
+        candidate.id, JSON.stringify(candidate), now, now
+      );
+      return json({ id: candidate.id, trust_state: "quarantined", created: true }, 201);
+    }
+
     if (request.method === "POST" && url.pathname === "/v1/tasks") {
       const body = await readBody(request);
       const allowed = new Set(["idempotency_key", "task_type", "title", "goal", "approved_scope"]);
