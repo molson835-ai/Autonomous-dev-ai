@@ -45,15 +45,18 @@ A ChatGPT connector or assistant-side integration is not automatically available
 
 ## Workers AI quota protection
 
-Cloudflare Workers AI has a finite daily free-neuron allocation. Tokens are not neurons: never convert prompt/completion token counts into neuron usage or claim account-wide usage is known from local estimates.
+Cloudflare Workers AI has a finite daily free-neuron allocation. Prompt/completion tokens are not themselves neurons and must never be reported as actual neuron usage. For the configured GLM-4.7-Flash model only, the trusted server middleware may estimate neurons from provider-reported token usage using Cloudflare's published model-specific rates (5,500 neurons per million input tokens and 36,400 per million output tokens) plus a 50% safety margin. Label this as a local estimate, not provider telemetry.
 
 - Use the shared resource-budget policy. Its conservative defaults are 4 steps, 6 tool calls, 4,000 reported tokens, 6,000 output characters, 30 seconds per turn, and at most one retry for eligible transient/rate-limit failures.
-- Keep the model context bounded; summarize older conversation state and retrieve only the exact memory needed for the current task.
-- Treat Cloudflare Workers AI error code `4006` and messages mentioning the daily free allocation or exhausted neurons as quota exhaustion, even when HTTP status is 429. Pause immediately; do not retry, switch providers, or invoke a paid fallback.
+- Keep model context bounded; summarize older conversation state, reuse cached results, batch related tool operations, and retrieve only the exact memory needed for the current task.
+- Use deterministic code for calculations, validation, formatting, status checks, and predictable workflow steps. Do not spend a model call on work that a verified deterministic handler can perform.
+- The model middleware takes a 200-neuron temporary concurrency reservation and settles the estimated usage from provider-reported input/output tokens. If usage is missing or invalid, settle conservatively at 200. The 200 hold is not the usage charge.
+- The local daily target is 7,000 estimated neurons, preserving a 3,000-neuron buffer below the published 10,000-neuron free allocation. The Owner Console labels this as a local estimate, not an authoritative live account meter.
+- Treat Cloudflare Workers AI error code `4006` and explicit daily free-allocation/neuron-exhaustion messages as provider quota exhaustion, even when HTTP status is 429. Pause immediately; do not retry, switch providers, or invoke a paid fallback.
+- A local-budget 429 and a provider-circuit 429 are distinct, and both pause the current model attempt without retry. Report the safe reason returned by the Worker; never describe local budget exhaustion as proof that Cloudflare's account allocation is exhausted.
 - Ordinary HTTP 429 rate limiting is distinct from daily quota exhaustion and may receive only the single bounded retry allowed by policy.
-- The account-wide target is 7,000 neurons/day with a 3,000-neuron reserve. This is a hard safety target only when backed by a fresh, authoritative account-level usage observation. Local token estimates and model response token counts are not authoritative neuron telemetry.
-- If authoritative usage is missing, stale, or unavailable in the actual runtime, do not claim the reserve is intact. Pause model-dependent work and report that the quota meter is not connected. Deterministic work may continue only when it does not invoke Workers AI.
-- Preserve a checkpoint before yielding or pausing. Never discard unfinished work to work around the quota gate.
+- If model inference is unavailable, continue only operations already executable through a deterministic non-model code path. Do not claim that arbitrary task execution can continue without a model: the current runtime has no general-purpose independent deterministic task dispatcher.
+- Preserve checkpoints before yielding or pausing. Never discard unfinished work or bypass the quota gate.
 - Never upgrade plans, enable paid fallback, or consume paid credits without separate explicit owner approval.
 
 # Durable task queue

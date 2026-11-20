@@ -30,6 +30,21 @@ type Proposal = {
 
 type Resource = { id: string; resource: Record<string, unknown> | null; trust_state: string; created_at: string; reviewer: string | null; reviewed_at: string | null; review_evidence: string[] };
 type QueueStatus = { queue_paused: boolean; reason: string | null; running_tasks: number; queued_tasks: number; updated_at: string };
+type QuotaStatus = {
+  day: string;
+  source: string;
+  target_neurons: number;
+  protected_reserve_neurons: number;
+  observed_neurons: number | null;
+  observed_at: string | null;
+  local_estimated_neurons: number;
+  active_reserved_neurons: number;
+  projected_neurons: number;
+  remaining_to_target: number;
+  circuit_open: boolean;
+  model_calls_allowed: boolean;
+  updated_at: string | null;
+};
 type MemoryProbe = {
   name: string;
   status: number | null;
@@ -82,6 +97,7 @@ export default function OwnerConsole() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
+  const [quotaStatus, setQuotaStatus] = useState<QuotaStatus | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -92,16 +108,18 @@ export default function OwnerConsole() {
     setBusy("load");
     setMessage("");
     try {
-      const [taskData, proposalData, statusData, resourceData] = await Promise.all([
+      const [taskData, proposalData, statusData, resourceData, quotaData] = await Promise.all([
         ownerRequest<{ tasks: Task[] }>("/v1/owner/tasks?limit=30"),
         ownerRequest<{ proposals: Proposal[] }>("/v1/owner/proposals?limit=30"),
         ownerRequest<QueueStatus>("/v1/owner/status"),
         ownerRequest<{ resources: Resource[] }>("/v1/owner/resources?limit=50"),
+        ownerRequest<QuotaStatus>("/v1/owner/quota/status").catch(() => null),
       ]);
       setTasks(taskData.tasks);
       setProposals(proposalData.proposals);
       setResources(resourceData.resources);
       setQueueStatus(statusData);
+      setQuotaStatus(quotaData);
       setLoaded(true);
       setMessage("Owner review data loaded. Your GitHub identity is verified server-side.");
       return true;
@@ -199,6 +217,7 @@ export default function OwnerConsole() {
     setProposals([]);
     setResources([]);
     setQueueStatus(null);
+    setQuotaStatus(null);
     setLoaded(false);
     setMessage("Signed out of the owner console.");
     setBusy(null);
@@ -269,6 +288,22 @@ export default function OwnerConsole() {
 
       {loaded && (
         <>
+          {quotaStatus && (
+            <section className="space-y-2 rounded-xl border bg-card p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-semibold">Workers AI neuron budget</h2>
+                <span className="text-xs font-medium">{quotaStatus.circuit_open ? "Provider circuit open" : quotaStatus.model_calls_allowed ? "Model calls permitted by local ledger" : "Paused by local quota guard"}</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {quotaStatus.local_estimated_neurons.toLocaleString()} locally estimated · {quotaStatus.active_reserved_neurons.toLocaleString()} reserved · {quotaStatus.remaining_to_target.toLocaleString()} remaining to Eve's {quotaStatus.target_neurons.toLocaleString()} target
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Source: local model estimate, not Cloudflare's live account meter. The target leaves a {quotaStatus.protected_reserve_neurons.toLocaleString()}-neuron buffer below the published free allocation; other account usage is not included. UTC day: {quotaStatus.day}.
+              </p>
+              {quotaStatus.updated_at && <p className="text-xs text-muted-foreground">Last local ledger update: {new Date(quotaStatus.updated_at).toLocaleString()}</p>}
+              {quotaStatus.circuit_open && <p className="text-sm">A confirmed provider quota error opened the safety circuit. This cannot be cleared by changing local estimates.</p>}
+            </section>
+          )}
           {queueStatus && (
             <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4">
               <div className="space-y-1">

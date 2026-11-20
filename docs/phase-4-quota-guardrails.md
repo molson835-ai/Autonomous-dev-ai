@@ -1,75 +1,62 @@
-# Phase 4 — quota and execution guardrails
+# Phase 4 — neuron efficiency, quota recovery, and deterministic work
 
-## Purpose
+## Goal
 
-Keep EVE productive on free resources without allowing long contexts, excessive steps, retries, or provider failures to consume an unbounded allowance. Quota exhaustion must stop work safely; it must never trigger a paid provider, paid plan, billing change, or personal-funds use.
+Keep Eve productive within the existing no-cost Workers AI allowance by charging a model-specific estimate instead of a fixed 1,200-neuron amount for every call, making quota blockers diagnosable, and avoiding model calls for deterministic work.
 
-## Current policy module
+## Current limits and evidence
 
-`agent/lib/resource-budget.mjs` is a pure decision module. It classifies provider/runtime failures and returns bounded continuation decisions. It does not itself call providers, schedule work, persist state, or perform external actions.
+- Cloudflare's published Workers AI free allocation is 10,000 neurons per UTC day. Eve's local safety target is 7,000, retaining a 3,000-neuron buffer.
+- Eve uses `@cf/zai-org/glm-4.7-flash`.
+- Cloudflare publishes 5,500 neurons per million input tokens and 36,400 neurons per million output tokens for this model.
+- Provider-reported token usage is not itself neuron telemetry. Eve converts it to a **local estimate** using the published model rates plus a 50% safety margin.
+- The current runtime's local ledger is not an authoritative account-wide Cloudflare meter. Owner Console must label it accordingly.
 
-Conservative per-turn defaults:
+## Reservation and settlement
 
-- 4 model/tool steps.
-- 6 tool calls.
-- 6,000 output characters.
-- 4,000 reported tokens.
-- 30-second application-level turn ceiling (not a statement of Vercel's platform timeout).
-- At most 1 retry for eligible transient/rate-limit failures.
-- 2 consecutive failures maximum.
-- 24-hour maximum task age.
+- New model calls temporarily reserve 200 neurons to coordinate concurrent calls. The Worker also accepts the legacy 1,200-neuron request and settlement format during a Worker-first rollout; legacy calls continue to be charged the full 1,200.
+- On successful generation or stream completion, middleware settles the estimate derived from provider-reported input/output token usage.
+- Valid low usage is not floored to 200. Missing or invalid usage settles conservatively at 200.
+- Interrupted streams settle conservatively at 200 rather than leaving the reservation stranded.
+- Provider error 4006 opens the daily circuit and is never retried.
+- Local-budget and provider-circuit HTTP 429 responses have distinct safe reason codes.
 
-The agent context window is capped at 16,384 tokens to reduce oversized prompt/history transmission. This is a context ceiling, not a promise that every turn uses that many tokens.
+## Diagnostics
 
-## Daily neuron budget policy
+- `GET /v1/owner/quota/status` is owner-authenticated and read-only.
+- The response reports the UTC day, local estimated usage, active reservations, projected usage, remaining headroom to 7,000, and circuit state.
+- It explicitly identifies its source as `local_model_estimate_not_provider_telemetry`.
+- The endpoint does not reset, clear, or rewrite the ledger.
+- Quota errors expose only a small allowlist of reason codes; raw Worker response text is not passed into Eve's prompt or UI.
 
-Cloudflare's free daily allowance is measured in neurons, not OpenAI-compatible prompt/completion tokens. The policy target is 7,000 neurons/day, preserving 3,000 neurons from the published 10,000-neuron free allocation.
+## Reduce model calls
 
-`evaluateDailyNeuronBudget` applies these rules:
+- Batch related tool operations when possible.
+- Reuse cached results and compact summaries.
+- Retrieve only the exact memory needed for the current task.
+- Use deterministic code for calculations, validation, formatting, status checks, and predictable workflow steps.
+- Do not retry quota failures, switch providers, or use paid fallback.
 
-- Missing, unverified, malformed, or stale usage observations fail closed and disallow model calls.
-- At 50%, 70%, and 85% of the 7,000-neuron target, status moves through restricted, high, and critical.
-- At 7,000 neurons, model calls are paused to preserve the 3,000-neuron reserve.
-- An observation is stale after 15 minutes.
-- Local token counts are never represented as authoritative neuron usage.
+## Zero-neuron operating mode: current boundary
 
-Important limitation: this commit adds the pure quota decision and Cloudflare error classifier, but it does not yet connect an authoritative account-level neuron telemetry source or enforce the daily gate around every model invocation. The current Cloudflare API token was scoped for Workers AI access; GraphQL account analytics requires a separate Analytics Read permission. Do not describe the daily gate as live until a verified source is connected and the model-call path consumes its decision.
+Some deterministic operations can run without Workers AI when a non-model code path invokes them. The existing runtime does **not** yet have a general-purpose deterministic task dispatcher that can independently execute arbitrary owner-approved tasks after model inference is blocked. Do not claim that broad autonomous work continues at zero neurons until that dispatcher exists and is tested.
 
-## Failure handling
+A future deterministic dispatcher must use an explicit allowlist of operations, preserve owner approval and task scope, write checkpoints, and reject any operation requiring model reasoning or external side effects.
 
-- Cloudflare Workers AI error code `4006`, or an explicit daily free-allocation/neuron-exhaustion message, is quota exhaustion even when HTTP status is 429. Pause immediately, with zero retries and no provider fallback.
-- A generic HTTP 429 remains a rate-limit response and may yield for the single bounded retry.
-- Authorization and permanent errors stop rather than retry.
-- Transient failures yield with bounded exponential backoff.
-- Checkpoint before yielding or pausing. Never discard unfinished work to work around quota limits.
+## Risks and dependencies
 
-## Runtime integration still required
+- The model-specific neuron conversion is an estimate with a safety margin, not a billing-grade per-request measurement.
+- The local ledger cannot account for other Workers AI consumers in the Cloudflare account. The 3,000-neuron buffer reduces risk but is not a guarantee against external usage.
+- If Cloudflare rejects a request with daily quota error 4006, local accounting cannot override that provider restriction.
+- Historical fixed 1,200-neuron settlements remain in the current UTC day's local ledger. New calls use the smaller reservation and actual-usage estimate; no ledger reset or bypass is performed.
+- No paid model, plan upgrade, billing change, Production deployment, or Worker deployment is authorized by this change.
 
-1. Connect an authoritative, account-wide daily neuron usage source using a separately scoped Analytics Read credential; do not expose the credential to EVE's prompt or tools.
-2. Persist the last verified usage observation and its timestamp in durable storage.
-3. Enforce the daily gate before every Workers AI model invocation, across all runtime instances and concurrent sessions.
-4. Enforce one model-heavy task at a time and per-task call/step limits at the shared runtime boundary.
-5. Cache research and compact summaries so repeated work does not resend full context.
-6. Pause on missing/stale telemetry or error 4006, preserve checkpoints, and verify recovery with one controlled probe after reset.
-7. Add owner-visible quota status with source, observation time, used/remaining neurons, threshold state, and explicit unknown/paused status.
-8. Test concurrency, stale telemetry, quota exhaustion, checkpoint preservation, and zero paid fallback.
+## Acceptance criteria
 
-## Release constraints
-
-- No paid plan, paid provider, paid fallback, or billing changes.
-- No Production deployment or merge without separate owner approval.
-- Preview deployment is deferred until code and tests are ready and the owner approves use of deployment quota.
-- Do not claim autonomous background quota protection until the runtime integration and closed-browser tests pass.
-
-
-## Hybrid runtime integration
-
-The model instance is wrapped with AI SDK v4 middleware. Both generate and stream calls obtain a shared Durable Object reservation before reaching Cloudflare. Streaming reservations settle only on the provider finish event; an interrupted stream keeps its reservation for the UTC day. Cloudflare error 4006 opens the circuit breaker and is never retried.
-
-Before every model call, server-side middleware queries Cloudflare GraphQL for the current UTC day's account-wide Workers AI neuron total, grouped only by date so all models and request sources are included. Missing credentials, GraphQL errors, ambiguous aggregates, or invalid totals fail closed. The Cloudflare API token never enters prompts or tools.
-
-The MemoryStore Durable Object maintains daily observations, local usage estimates, outstanding reservations, and circuit state. Its synchronous request handler serializes read-modify-write operations. It rejects stale or backwards-moving telemetry and reserves against the greater of observed account usage and baseline plus EVE's local estimates plus outstanding reservations.
-
-GLM-4.7-Flash's published neuron rates (5,500 per million input tokens and 36,400 per million output tokens) inform a 50%-margin estimate. Output is capped at 1,024 tokens; each call reserves at least 200 neurons. EVE session limits cap new input at 16,384 tokens and output at 4,000 per continuation window. The account target remains 7,000 neurons, leaving a 3,000-neuron reserve. Provider error 4006 remains the hard stop if external or unmodelled use exceeds the target.
-
-A feature-branch-only Vercel deployment exclusion is added so this code push does not consume Preview deployment quota. It does not disable deployments from main.
+- A typical 16,384-input-token / 1,024-output-token call estimates 192 neurons with the published rates and 50% margin.
+- A valid 0-token usage report settles at 0; missing/invalid usage settles at 200.
+- The Worker accepts only its fixed 200-neuron reservation request and validates settlement values.
+- A local 7,000-neuron target block returns `local_neuron_budget_reached`; provider circuit block returns `quota_circuit_open`.
+- Owner quota status is authenticated, read-only, and labels local estimates accurately.
+- Deterministic status/validation/formatting paths are documented as zero-neuron candidates, without claiming a general dispatcher exists.
+- Existing approval, spending, memory, and no-paid-fallback boundaries remain unchanged.
