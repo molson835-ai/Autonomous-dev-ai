@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { memoryFailureMessage } from "../agent/lib/quota-error.mjs";
 
 test("quota budget exhaustion is distinguished from provider quota circuit", () => {
-  assert.match(memoryFailureMessage(429, { reason_code: "local_neuron_budget_reached" }), /local neuron safety budget/i);
+  assert.match(memoryFailureMessage(429, { reason_code: "local_neuron_budget_reached" }), /local neuron safety target/i);
   assert.match(memoryFailureMessage(429, { reason_code: "quota_circuit_open" }), /provider.*quota/i);
 });
 
