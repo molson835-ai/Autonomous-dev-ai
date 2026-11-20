@@ -31,7 +31,7 @@ function validPath(path) {
   if (path.startsWith("/") || path.includes("\\") || path.includes("\0") ||
       path.includes("%") || path.includes(":") || path.trim() !== path) return false;
   const parts = path.split("/");
-  if (parts.some((part) => !part || part === "." || part === ".." || DENIED_SEGMENTS.has(part))) return false;
+  if (parts.some((part) => !part || part === "." || part === ".." || part.startsWith(".") || DENIED_SEGMENTS.has(part.toLowerCase()))) return false;
   if (DENIED_NAMES.has(parts.at(-1))) return false;
   if (DENIED_PREFIXES.some((prefix) => path.startsWith(prefix))) return false;
   return ALLOWED_ROOTS.some((root) => path.startsWith(root));
