@@ -17,8 +17,8 @@ export function nonRetryableQuotaError(cause: unknown): Error {
 }
 
 async function reserve() {
-  // The Worker fetches Cloudflare Analytics with its own read-only credential.
-  // Eve supplies no usage total or timestamp that it could underreport.
+  // The Worker owns the shared UTC-day ledger. Reservation size is fixed server-side;
+  // settlement usage is estimated in this trusted middleware from provider-reported tokens.
   const result = await memoryRequest<{ reservation_id: string }>("/v1/quota/reserve", {
     method: "POST",
     body: { reserve_neurons: RESERVATION_NEURONS, model_id: MODEL_ID },
