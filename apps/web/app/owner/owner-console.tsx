@@ -42,6 +42,7 @@ type QuotaStatus = {
   projected_neurons: number;
   remaining_to_target: number;
   circuit_open: boolean;
+  model_calls_allowed: boolean;
   updated_at: string | null;
 };
 type MemoryProbe = {
@@ -291,7 +292,7 @@ export default function OwnerConsole() {
             <section className="space-y-2 rounded-xl border bg-card p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="font-semibold">Workers AI neuron budget</h2>
-                <span className="text-xs font-medium">{quotaStatus.circuit_open ? "Provider circuit open" : "Model calls permitted by local ledger"}</span>
+                <span className="text-xs font-medium">{quotaStatus.circuit_open ? "Provider circuit open" : quotaStatus.model_calls_allowed ? "Model calls permitted by local ledger" : "Paused by local quota guard"}</span>
               </div>
               <p className="text-sm text-muted-foreground">
                 {quotaStatus.local_estimated_neurons.toLocaleString()} locally estimated · {quotaStatus.active_reserved_neurons.toLocaleString()} reserved · {quotaStatus.remaining_to_target.toLocaleString()} remaining to Eve's {quotaStatus.target_neurons.toLocaleString()} target
