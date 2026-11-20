@@ -14,6 +14,8 @@ export default defineConfig({
           GITHUB_CLIENT_ID: "local-owner-oauth-app",
           GITHUB_CLIENT_SECRET: "local-owner-oauth-secret",
           OWNER_GITHUB_ID: "12345678",
+          CLOUDFLARE_ACCOUNT_ID: "0123456789abcdef0123456789abcdef",
+          CLOUDFLARE_ANALYTICS_API_TOKEN: "local-vitest-only-analytics-token",
         },
       },
     }),

@@ -39,57 +39,76 @@ function request(path: string, init: RequestInit = {}, credential = token) {
   );
 }
 
+function quotaRequest() {
+  // Do not use request(): its default test credential stubs global fetch for GitHub auth,
+  // overwriting the Analytics fetch mock used by these quota integration tests.
+  return exports.default.fetch(new Request(new URL("/v1/quota/reserve", endpoint), {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+      "cf-connecting-ip": "203.0.113.1",
+    },
+    body: JSON.stringify({ reserve_neurons: 1200, model_id: "@cf/zai-org/glm-4.7-flash" }),
+  }));
+}
+function quotaControlRequest(path: "/v1/quota/settle" | "/v1/quota/circuit", body: Record<string, unknown>) {
+  // Keep the Analytics fetch mock intact; request() replaces global fetch with its auth stub.
+  return exports.default.fetch(new Request(new URL(path, endpoint), {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+      "cf-connecting-ip": "203.0.113.1",
+    },
+    body: JSON.stringify(body),
+  }));
+}
 describe("shared daily neuron quota coordinator", () => {
-  it("requires auth and rejects stale account telemetry", async () => {
-    const denied=await exports.default.fetch(new Request(new URL("/v1/quota/reserve",endpoint),{method:"POST",body:"{}"}));
+  it("requires auth and rejects caller-supplied usage or reservation sizes", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-19T12:00:00.000Z"));
+    const denied = await exports.default.fetch(new Request(new URL("/v1/quota/reserve", endpoint), {
+      method: "POST", body: JSON.stringify({ reserve_neurons: 1200, model_id: "@cf/zai-org/glm-4.7-flash" }),
+    }));
     expect(denied.status).toBe(401);
-    const day=new Date().toISOString().slice(0,10);
-    const stale=await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify({day,usedNeurons:0,observedAt:new Date(Date.now()-16*60_000).toISOString(),reserve_neurons:200,model_id:"@cf/zai-org/glm-4.7-flash"})});
-    expect(stale.status).toBe(503);
+    expect((await quotaRequest()).status).toBe(200);
+    expect((await quotaControlRequest("/v1/quota/settle", {
+      reservation_id: crypto.randomUUID(), actual_neurons: 1,
+    })).status).toBe(400);
+    expect((await quotaControlRequest("/v1/quota/settle", {
+      reservation_id: crypto.randomUUID(),
+    })).status).toBe(404);
   });
-  it("reserves, settles, and opens a daily circuit breaker", async () => {
-    const day=new Date().toISOString().slice(0,10);
-    const observation={day,usedNeurons:1000,observedAt:new Date().toISOString(),reserve_neurons:200,model_id:"@cf/zai-org/glm-4.7-flash"};
-    const first=await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify(observation)});
+  it("charges the full Worker-issued reservation and rejects duplicate settlement", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-20T12:00:00.000Z"));
+    const first = await quotaRequest();
     expect(first.status).toBe(200);
-    const one=await first.json<{reservation_id:string}>();
-    const second=await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify(observation)});
-    expect(second.status).toBe(200);
-    const two=await second.json<{reservation_id:string}>();
-    const settle=await request("/v1/quota/settle",{method:"POST",body:JSON.stringify({reservation_id:one.reservation_id,actual_neurons:250})});
-    expect(settle.status).toBe(200);
-    expect(await settle.json()).toMatchObject({settled:true,charged_neurons:250});
-    expect((await request("/v1/quota/settle",{method:"POST",body:JSON.stringify({reservation_id:one.reservation_id,actual_neurons:250})})).status).toBe(404);
-    expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify({...observation,usedNeurons:6900})})).status).toBe(429);
-    expect((await request("/v1/quota/circuit",{method:"POST",body:JSON.stringify({reservation_id:two.reservation_id,reason:"cloudflare_daily_quota_exhausted"})})).status).toBe(200);
-    expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify({...observation,usedNeurons:6900})})).status).toBe(429);
+    const one = await first.json<{ reservation_id: string; reserved_neurons: number }>();
+    expect(one.reserved_neurons).toBe(1200);
+    const settled = await quotaControlRequest("/v1/quota/settle", { reservation_id: one.reservation_id });
+    expect(settled.status).toBe(200);
+    expect(await settled.json()).toMatchObject({ settled: true, charged_neurons: 1200 });
+    expect((await quotaControlRequest("/v1/quota/settle", { reservation_id: one.reservation_id })).status).toBe(404);
+    const next = await quotaRequest();
+    expect(next.status).toBe(200);
   });
-  it("releases unused reservation capacity when actual usage is below 200", async () => {
-    // Use a separate UTC day so this test is independent of the circuit-breaker
-    // state left by the preceding quota test in the shared Durable Object.
+  it("enforces the 7000-neuron target under concurrent reservations", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(Date.now() + 48 * 60 * 60 * 1000);
-    try {
-      const day=new Date().toISOString().slice(0,10);
-      const observation={day,usedNeurons:1000,observedAt:new Date().toISOString(),reserve_neurons:200,model_id:"@cf/zai-org/glm-4.7-flash"};
-      const reserved=await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify(observation)});
-      expect(reserved.status).toBe(200);
-      const {reservation_id}=await reserved.json<{reservation_id:string}>();
-      const settled=await request("/v1/quota/settle",{method:"POST",body:JSON.stringify({reservation_id,actual_neurons:12})});
-      expect(settled.status).toBe(200);
-      expect(await settled.json()).toMatchObject({settled:true,charged_neurons:12});
-    } finally {
-      vi.useRealTimers();
-    }
+    vi.setSystemTime(new Date("2026-11-21T12:00:00.000Z"));
+    const reservations = await Promise.all(Array.from({ length: 6 }, () => quotaRequest()));
+    expect(reservations.map(r => r.status).sort()).toEqual([200, 200, 200, 200, 200, 429]);
   });
-  it("fails closed when authoritative telemetry moves backwards", async () => {
+  it("keeps a failed-provider circuit open for the UTC day", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(Date.now() + 24 * 60 * 60 * 1000);
-    const day=new Date().toISOString().slice(0,10);
-    const base={day,usedNeurons:2000,observedAt:new Date().toISOString(),reserve_neurons:200,model_id:"@cf/zai-org/glm-4.7-flash"};
-    expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify(base)})).status).toBe(200);
-    expect((await request("/v1/quota/reserve",{method:"POST",body:JSON.stringify({...base,usedNeurons:1900,observedAt:new Date(Date.now()-1).toISOString()})})).status).toBe(503);
-    vi.useRealTimers();
+    vi.setSystemTime(new Date("2026-11-22T12:00:00.000Z"));
+    const reserved = await quotaRequest();
+    const { reservation_id } = await reserved.json<{ reservation_id: string }>();
+    expect((await quotaControlRequest("/v1/quota/circuit", {
+      reservation_id, reason: "cloudflare_daily_quota_exhausted",
+    })).status).toBe(200);
+    expect((await quotaRequest()).status).toBe(429);
   });
 });
 

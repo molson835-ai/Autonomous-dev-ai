@@ -1,9 +1,8 @@
 import type { LanguageModelV4Middleware } from "@ai-sdk/provider";
 import { memoryRequest } from "./memory-client";
-import { estimateGlm47FlashNeurons } from "./neuron-budget.mjs";
 const MODEL_ID = "@cf/zai-org/glm-4.7-flash";
 const MAX_OUTPUT_TOKENS = 1024;
-const RESERVATION_NEURONS = 200;
+const RESERVATION_NEURONS = 1200;
 function stop(reason: string): never { throw new Error("EVE quota guard paused model work: " + reason); }
 
 // Deliberately throw a plain Error for provider quota exhaustion. The AI SDK's
@@ -16,48 +15,17 @@ export function nonRetryableQuotaError(cause: unknown): Error {
   return error;
 }
 
-async function accountUsage() {
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-  const token = process.env.CLOUDFLARE_API_TOKEN;
-  if (!accountId || !token) stop("Cloudflare Analytics credentials unavailable.");
-  const day = new Date().toISOString().slice(0, 10);
-  const query = "query { viewer { accounts(filter: { accountTag: \"" + accountId + "\" }) { " +
-    "aiInferenceAdaptiveGroups(limit: 2, filter: { date_geq: \"" + day + "\", date_leq: \"" + day + "\" }) " +
-    "{ sum { totalNeurons } dimensions { date } } } } }";
-  let response: Response;
-  try {
-    response = await fetch("https://api.cloudflare.com/client/v4/graphql", {
-      method: "POST", headers: { authorization: "Bearer " + token, "content-type": "application/json" },
-      body: JSON.stringify({ query }), signal: AbortSignal.timeout(8000), cache: "no-store",
-    });
-  } catch { return stop("Cloudflare account analytics unavailable."); }
-  if (!response.ok) return stop("Cloudflare account analytics HTTP " + response.status + ".");
-  let payload: any;
-  try { payload = await response.json(); } catch { return stop("Cloudflare account analytics response invalid."); }
-  if (payload?.errors?.length) return stop("Cloudflare account analytics query or permissions failed.");
-  const accounts = payload?.data?.viewer?.accounts;
-  const groups = accounts?.length === 1 ? accounts[0]?.aiInferenceAdaptiveGroups : null;
-  if (!Array.isArray(groups) || groups.length > 1) return stop("Cloudflare daily aggregate missing or ambiguous.");
-  if (groups.length === 1 && groups[0]?.dimensions?.date !== day) return stop("Cloudflare analytics returned the wrong UTC date.");
-  const usedNeurons = groups.length === 0 ? 0 : groups[0]?.sum?.totalNeurons;
-  if (typeof usedNeurons !== "number" || !Number.isFinite(usedNeurons) || usedNeurons < 0)
-    return stop("Authoritative neuron total missing.");
-  return { day, usedNeurons, observedAt: new Date().toISOString() };
-}
-
 async function reserve() {
-  const observation = await accountUsage();
+  // The Worker owns the UTC-day reservation ledger; caller-supplied usage is never trusted.
   const result = await memoryRequest<{ reservation_id: string }>("/v1/quota/reserve", {
-    method: "POST", body: { ...observation, reserve_neurons: RESERVATION_NEURONS, model_id: MODEL_ID },
+    method: "POST",
+    body: { reserve_neurons: RESERVATION_NEURONS, model_id: MODEL_ID },
   });
   if (!result?.reservation_id) return stop("Shared quota reservation was not issued.");
   return result.reservation_id;
 }
-async function settle(id: string, usage?: { inputTokens?: { total?: number }; outputTokens?: { total?: number } }) {
-  await memoryRequest("/v1/quota/settle", { method: "POST", body: {
-    reservation_id: id,
-    actual_neurons: estimateGlm47FlashNeurons(usage?.inputTokens?.total, usage?.outputTokens?.total),
-  }});
+async function settle(id: string) {
+  await memoryRequest("/v1/quota/settle", { method: "POST", body: { reservation_id: id } });
 }
 async function circuit(id: string) {
   try { await memoryRequest("/v1/quota/circuit", { method: "POST", body: {
@@ -80,7 +48,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
       let result;
       try { result = await doGenerate(); }
       catch (error) { if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id); throw error; }
-      await settle(id, result.usage);
+      await settle(id);
       return result;
     },
     wrapStream: async ({ doStream }) => {
@@ -89,13 +57,40 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
       try { result = await doStream(); }
       catch (error) { if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id); throw error; }
       let settled = false;
-      const stream = result.stream.pipeThrough(new TransformStream({
-        async transform(part, controller) {
-          if (part.type === "finish" && !settled) { settled = true; await settle(id, part.usage); }
-          controller.enqueue(part);
+      const reader = result.stream.getReader();
+      const stream = new ReadableStream({
+        async pull(controller) {
+          try {
+            const next = await reader.read();
+            if (next.done) {
+              if (!settled) { settled = true; await settle(id); }
+              reader.releaseLock();
+              controller.close();
+              return;
+            }
+            if (next.value.type === "finish" && !settled) {
+              settled = true;
+              await settle(id);
+            }
+            controller.enqueue(next.value);
+          } catch (error) {
+            if (!settled) {
+              settled = true;
+              try { await settle(id); } catch { /* Keep the reservation fail-closed. */ }
+            }
+            try { reader.releaseLock(); } catch { /* Reader may already be released. */ }
+            controller.error(error);
+          }
         },
-      }));
-      // A cancelled stream retains its reservation for the UTC day.
+        async cancel(reason) {
+          try { await reader.cancel(reason); }
+          finally {
+            if (!settled) { settled = true; await settle(id); }
+            try { reader.releaseLock(); } catch { /* Reader may already be released. */ }
+          }
+        },
+      }) as typeof result.stream;
+      // Interrupted streams settle conservatively with the unknown-usage fallback.
       return { ...result, stream };
     },
   };
