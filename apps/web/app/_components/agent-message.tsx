@@ -293,6 +293,8 @@ function ToolLine({
             input={part.input}
             output={part.output}
           />
+        ) : part.name === "create_artifact" ? (
+          <ArtifactToolContent output={part.output} />
         ) : (
           <>
             {part.input === undefined ? null : <ToolInput input={part.input} />}
@@ -303,6 +305,46 @@ function ToolLine({
     </TraceCollapsible>
   );
 }
+
+
+type ArtifactResult = {
+  valid?: boolean;
+  artifact?: { name?: string; filename?: string; bytes?: number; content?: string; previewHtml?: string };
+};
+function ArtifactToolContent({ output }: { readonly output: unknown }) {
+  const result = (typeof output === "string" ? safeJson(output) : output) as ArtifactResult | undefined;
+  const artifact = result?.artifact;
+  const [device, setDevice] = useState<"mobile" | "desktop">("mobile");
+  if (result?.valid !== true || !artifact?.content || !artifact.previewHtml || !artifact.filename) return <ToolOutput errorText={undefined} output={output} />;
+  const download = () => {
+    const blob = new Blob([artifact.content!], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url; link.download = artifact.filename!;
+    document.body.append(link); link.click(); link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  return (
+    <section className="w-full space-y-3 rounded-lg border bg-card p-3" aria-label="Created artifact">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0"><p className="truncate font-medium text-sm">{artifact.name ?? "Eve artifact"}</p><p className="text-xs text-muted-foreground">{artifact.filename} · {formatBytes(artifact.bytes)}</p></div>
+        <Button onClick={download} size="sm" type="button"><FileIcon className="size-4" /> Download HTML</Button>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium text-muted-foreground">Live preview · sandboxed</p>
+        <div className="flex gap-1">
+          <Button onClick={() => setDevice("mobile")} size="xs" type="button" variant={device === "mobile" ? "secondary" : "ghost"}>Mobile</Button>
+          <Button onClick={() => setDevice("desktop")} size="xs" type="button" variant={device === "desktop" ? "secondary" : "ghost"}>Desktop</Button>
+        </div>
+      </div>
+      <div className="flex justify-center overflow-hidden rounded-md bg-muted p-2">
+        <iframe title={artifact.name ?? "Eve artifact preview"} sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={artifact.previewHtml} className="h-[min(65vh,620px)] w-full rounded border bg-white" style={{ maxWidth: device === "mobile" ? 390 : 960 }} />
+      </div>
+      <p className="text-xs text-muted-foreground">Preview scripts run in an isolated iframe. Network requests, external assets, forms, and navigation are blocked. The browser creates the download; Eve does not store files on the server.</p>
+    </section>
+  );
+}
+function safeJson(value: string): unknown { try { return JSON.parse(value) as unknown; } catch { return undefined; } }
 
 function ReasoningLine({ part }: { readonly part: Extract<Step, { type: "reasoning" }> }) {
   const [open, setOpen] = useState<boolean>();
