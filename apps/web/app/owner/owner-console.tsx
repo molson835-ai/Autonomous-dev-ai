@@ -112,7 +112,7 @@ export default function OwnerConsole() {
         ownerRequest<{ proposals: Proposal[] }>("/v1/owner/proposals?limit=30"),
         ownerRequest<QueueStatus>("/v1/owner/status"),
         ownerRequest<{ resources: Resource[] }>("/v1/owner/resources?limit=50"),
-        ownerRequest<QuotaStatus>("/v1/owner/quota/status"),
+        ownerRequest<QuotaStatus>("/v1/owner/quota/status").catch(() => null),
       ]);
       setTasks(taskData.tasks);
       setProposals(proposalData.proposals);
