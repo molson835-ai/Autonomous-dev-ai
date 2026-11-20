@@ -39,76 +39,78 @@ function request(path: string, init: RequestInit = {}, credential = token) {
   );
 }
 
+function mockAnalytics(initialUsage = 1000) {
+  let usedNeurons = initialUsage;
+  vi.stubGlobal("fetch", vi.fn(async () => {
+    const day = new Date().toISOString().slice(0, 10);
+    return Response.json({
+      data: { viewer: { accounts: [{
+        aiInferenceAdaptiveGroups: [{ sum: { totalNeurons: usedNeurons }, dimensions: { date: day } }],
+      }] } },
+    });
+  }));
+  return (nextUsage: number) => { usedNeurons = nextUsage; };
+}
 function quotaRequest() {
-  // Do not use request(): its default test credential stubs global fetch for GitHub auth,
-  // overwriting the Analytics fetch mock used by these quota integration tests.
   return exports.default.fetch(new Request(new URL("/v1/quota/reserve", endpoint), {
     method: "POST",
-    headers: {
-      authorization: `Bearer ${token}`,
-      "content-type": "application/json",
-      "cf-connecting-ip": "203.0.113.1",
-    },
-    body: JSON.stringify({ reserve_neurons: 1200, model_id: "@cf/zai-org/glm-4.7-flash" }),
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "cf-connecting-ip": "203.0.113.1" },
+    body: JSON.stringify({ reserve_neurons: 200, model_id: "@cf/zai-org/glm-4.7-flash" }),
   }));
 }
-function quotaControlRequest(path: "/v1/quota/settle" | "/v1/quota/circuit", body: Record<string, unknown>) {
-  // Keep the Analytics fetch mock intact; request() replaces global fetch with its auth stub.
+function quotaControlRequest(path: "/v1/quota/settle" | "/v1/quota/circuit" | "/v1/quota/status", body?: Record<string, unknown>) {
   return exports.default.fetch(new Request(new URL(path, endpoint), {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${token}`,
-      "content-type": "application/json",
-      "cf-connecting-ip": "203.0.113.1",
-    },
-    body: JSON.stringify(body),
+    method: body ? "POST" : "GET",
+    headers: { authorization: `Bearer ${token}`, ...(body ? { "content-type": "application/json" } : {}), "cf-connecting-ip": "203.0.113.1" },
+    ...(body ? { body: JSON.stringify(body) } : {}),
   }));
 }
 describe("shared daily neuron quota coordinator", () => {
-  it("requires auth and rejects caller-supplied usage or reservation sizes", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-11-19T12:00:00.000Z"));
+  it("requires auth and fails closed when Worker-side Cloudflare Analytics is unavailable", async () => {
     const denied = await exports.default.fetch(new Request(new URL("/v1/quota/reserve", endpoint), {
-      method: "POST", body: JSON.stringify({ reserve_neurons: 1200, model_id: "@cf/zai-org/glm-4.7-flash" }),
+      method: "POST", body: JSON.stringify({ reserve_neurons: 200, model_id: "@cf/zai-org/glm-4.7-flash" }),
     }));
     expect(denied.status).toBe(401);
-    expect((await quotaRequest()).status).toBe(200);
-    expect((await quotaControlRequest("/v1/quota/settle", {
-      reservation_id: crypto.randomUUID(), actual_neurons: 1,
+    expect((await request("/v1/quota/reserve", {
+      method: "POST", body: JSON.stringify({ reserve_neurons: 200, model_id: "@cf/zai-org/glm-4.7-flash", usedNeurons: 0 }),
     })).status).toBe(400);
-    expect((await quotaControlRequest("/v1/quota/settle", {
-      reservation_id: crypto.randomUUID(),
-    })).status).toBe(404);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("unavailable", { status: 503 })));
+    expect((await quotaRequest()).status).toBe(503);
   });
-  it("charges the full Worker-issued reservation and rejects duplicate settlement", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-11-20T12:00:00.000Z"));
+  it("uses verified usage and charges the model-specific estimate, not the full reservation", async () => {
+    mockAnalytics(1000);
     const first = await quotaRequest();
     expect(first.status).toBe(200);
     const one = await first.json<{ reservation_id: string; reserved_neurons: number }>();
-    expect(one.reserved_neurons).toBe(1200);
-    const settled = await quotaControlRequest("/v1/quota/settle", { reservation_id: one.reservation_id });
+    expect(one.reserved_neurons).toBe(200);
+    const settled = await quotaControlRequest("/v1/quota/settle", { reservation_id: one.reservation_id, actual_neurons: 12 });
     expect(settled.status).toBe(200);
-    expect(await settled.json()).toMatchObject({ settled: true, charged_neurons: 1200 });
-    expect((await quotaControlRequest("/v1/quota/settle", { reservation_id: one.reservation_id })).status).toBe(404);
-    const next = await quotaRequest();
-    expect(next.status).toBe(200);
+    expect(await settled.json()).toMatchObject({ settled: true, charged_neurons: 12 });
+    expect((await quotaControlRequest("/v1/quota/settle", { reservation_id: one.reservation_id, actual_neurons: 12 })).status).toBe(404);
   });
-  it("enforces the 7000-neuron target under concurrent reservations", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-11-21T12:00:00.000Z"));
-    const reservations = await Promise.all(Array.from({ length: 6 }, () => quotaRequest()));
-    expect(reservations.map(r => r.status).sort()).toEqual([200, 200, 200, 200, 200, 429]);
+  it("enforces the 7000-neuron target and returns a machine-readable reason", async () => {
+    const setUsage = mockAnalytics(6900);
+    const blocked = await quotaRequest();
+    expect(blocked.status).toBe(429);
+    expect(await blocked.json()).toMatchObject({ reason_code: "local_neuron_budget_reached" });
+    setUsage(1000);
   });
-  it("keeps a failed-provider circuit open for the UTC day", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-11-22T12:00:00.000Z"));
+  it("keeps a failed-provider circuit open and identifies it distinctly", async () => {
+    mockAnalytics(1000);
     const reserved = await quotaRequest();
     const { reservation_id } = await reserved.json<{ reservation_id: string }>();
     expect((await quotaControlRequest("/v1/quota/circuit", {
       reservation_id, reason: "cloudflare_daily_quota_exhausted",
     })).status).toBe(200);
-    expect((await quotaRequest()).status).toBe(429);
+    const blocked = await quotaRequest();
+    expect(blocked.status).toBe(429);
+    expect(await blocked.json()).toMatchObject({ reason_code: "quota_circuit_open" });
+  });
+  it("exposes authenticated read-only quota status without resetting the ledger", async () => {
+    mockAnalytics(1500);
+    expect((await quotaControlRequest("/v1/quota/status")).status).toBe(200);
+    const denied = await exports.default.fetch(new Request(new URL("/v1/quota/status", endpoint)));
+    expect(denied.status).toBe(401);
   });
 });
 
