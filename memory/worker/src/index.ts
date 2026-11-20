@@ -135,7 +135,7 @@ export class MemoryStore extends DurableObject<Env> {
     if (request.method === "POST" && url.pathname === "/v1/quota/reserve") {
       const body = await readBody(request), day = now.slice(0, 10);
       if (!body || Object.keys(body).some(k => !["reserve_neurons", "model_id"].includes(k)) ||
-          ![200, 1200].includes(Number(body.reserve_neurons)) || body.model_id !== "@cf/zai-org/glm-4.7-flash")
+          (body.reserve_neurons !== 200 && body.reserve_neurons !== 1200) || body.model_id !== "@cf/zai-org/glm-4.7-flash")
         return json({ error: "Invalid quota reservation request." }, 400);
 
       // The reservation is a small concurrency hold. Settlement uses the
