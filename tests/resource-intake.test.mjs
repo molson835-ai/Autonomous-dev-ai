@@ -58,9 +58,35 @@ test("rejects unknown fields, malformed identifiers, and invalid resource types"
   assert.throws(() => prepareResourceCandidate({ ...base, resource_type: "executable" }), /Invalid resource_type/);
 });
 
-test("rejects duplicate tags and invalid cost metadata", () => {
-  assert.throws(() => prepareResourceCandidate({ ...base, skill_tags: ["coding", "coding"] }), /Duplicate values/);
-  assert.throws(() => prepareResourceCandidate({ ...base, cost_model: "free probably" }), /Invalid cost_model/);
+test("rejects duplicate and blank list entries and invalid cost metadata", () => {
+  for (const candidate of [
+    { ...base, skill_tags: ["coding", "coding"] },
+    { ...base, skill_tags: ["  "] },
+    { ...base, permissions: [""] },
+    { ...base, dependencies: ["  "] },
+    { ...base, cost_model: "free probably" }
+  ]) assert.throws(() => prepareResourceCandidate(candidate));
+});
+
+test("deep-freezes the candidate and all nested arrays", () => {
+  const entry = prepareResourceCandidate(base);
+  assert.equal(Object.isFrozen(entry), true);
+  assert.equal(Object.isFrozen(entry.skill_tags), true);
+  assert.equal(Object.isFrozen(entry.permissions), true);
+  assert.throws(() => entry.skill_tags.push("execute"));
+});
+
+test("aligns intake bounds with the schema", () => {
+  assert.throws(() => prepareResourceCandidate({ ...base, skill_tags: ["x".repeat(101)] }));
+  assert.throws(() => prepareResourceCandidate({ ...base, freshness_policy: "x".repeat(1001) }));
+  assert.doesNotThrow(() => prepareResourceCandidate({ ...base, cost_notes: "x".repeat(2000) }));
+});
+
+test("rejects malformed, date-only, and impossible timestamps", () => {
+  for (const value of ["2026-11-13", "2026-02-30T00:00:00Z", "not-a-date", "2026-11-13T00:00:00"]) {
+    assert.throws(() => prepareResourceCandidate({ ...base, retrieved_at: value }));
+  }
+  assert.throws(() => prepareResourceCandidate(base, "not-a-date"));
 });
 
 test("does not allow callers to mark candidates approved", () => {

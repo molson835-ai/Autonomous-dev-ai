@@ -30,15 +30,40 @@ function requiredString(value, field, maxLength) {
   return value.trim();
 }
 
-function stringList(value, field, maxItems = 100) {
+function stringList(value, field, { maxItems = 100, maxLength = 300 } = {}) {
   if (!Array.isArray(value) || value.length > maxItems ||
-      value.some((item) => typeof item !== "string" || item.length > 300)) {
+      value.some((item) => typeof item !== "string" ||
+        item.trim().length === 0 || item.length > maxLength)) {
     throw new TypeError(`Invalid resource field: ${field}`);
   }
-  if (new Set(value).size !== value.length) {
+  const normalized = value.map((item) => item.trim());
+  if (new Set(normalized).size !== normalized.length) {
     throw new TypeError(`Duplicate values in resource field: ${field}`);
   }
-  return value.map((item) => item.trim());
+  return normalized;
+}
+
+function validDateTime(value) {
+  if (typeof value !== "string") return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|([+-])(\d{2}):(\d{2}))$/.exec(value);
+  if (!match) return false;
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, , , offsetHourText, offsetMinuteText] = match;
+  const year = Number(yearText), month = Number(monthText), day = Number(dayText);
+  const hour = Number(hourText), minute = Number(minuteText), second = Number(secondText);
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth ||
+      hour > 23 || minute > 59 || second > 59) return false;
+  if (offsetHourText !== undefined &&
+      (Number(offsetHourText) > 23 || Number(offsetMinuteText) > 59)) return false;
+  return Number.isFinite(Date.parse(value));
+}
+
+function deepFreeze(value) {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const child of Object.values(value)) deepFreeze(child);
+    Object.freeze(value);
+  }
+  return value;
 }
 
 /**
@@ -67,11 +92,13 @@ export function prepareResourceCandidate(candidate, now = new Date()) {
   const costModel = candidate.cost_model ?? "unknown";
   if (!COST_MODELS.has(costModel)) throw new TypeError("Invalid cost_model");
 
-  const timestamp = now instanceof Date ? now.toISOString() : new Date(now).toISOString();
+  let timestamp;
+  try { timestamp = now instanceof Date ? now.toISOString() : new Date(now).toISOString(); }
+  catch { throw new TypeError("Resource intake time must be a valid date-time"); }
   const retrievedAt = candidate.retrieved_at ?? timestamp;
   const lastVerifiedAt = candidate.last_verified_at ?? retrievedAt;
-  if (!Number.isFinite(Date.parse(retrievedAt)) || !Number.isFinite(Date.parse(lastVerifiedAt))) {
-    throw new TypeError("Resource timestamps must be valid date-time values");
+  if (!validDateTime(retrievedAt) || !validDateTime(lastVerifiedAt)) {
+    throw new TypeError("Resource timestamps must be RFC 3339 date-time values");
   }
 
   const id = requiredString(candidate.id, "id", 160);
@@ -82,7 +109,7 @@ export function prepareResourceCandidate(candidate, now = new Date()) {
     name: requiredString(candidate.name, "name", 240),
     summary: requiredString(candidate.summary, "summary", 2000),
     resource_type: resourceType,
-    skill_tags: stringList(candidate.skill_tags ?? [], "skill_tags", 50),
+    skill_tags: stringList(candidate.skill_tags ?? [], "skill_tags", { maxItems: 50, maxLength: 100 }),
     source_url: parsedUrl.toString(),
     maintainer: requiredString(candidate.maintainer ?? "unknown", "maintainer", 300),
     license: requiredString(candidate.license ?? "unknown", "license", 300),
@@ -97,9 +124,11 @@ export function prepareResourceCandidate(candidate, now = new Date()) {
     last_verified_at: lastVerifiedAt
   };
   for (const optional of ["cost_notes", "freshness_policy"]) {
-    if (candidate[optional] !== undefined) result[optional] = requiredString(candidate[optional], optional, 2000);
+    if (candidate[optional] !== undefined) {
+      result[optional] = requiredString(candidate[optional], optional, optional === "freshness_policy" ? 1000 : 2000);
+    }
   }
-  return Object.freeze(result);
+  return deepFreeze(result);
 }
 
 export function isResourceHostAllowed(url) {
