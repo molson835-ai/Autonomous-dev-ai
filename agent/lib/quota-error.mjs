@@ -10,7 +10,7 @@ export function memoryFailureMessage(status, payload) {
   if (status === 429 && typeof reason === "string" && Object.hasOwn(SAFE_QUOTA_MESSAGES, reason)) {
     return SAFE_QUOTA_MESSAGES[reason];
   }
-  if (status === 503 && typeof reason === "string" && SAFE_QUOTA_MESSAGES[reason]) {
+  if (status === 503 && typeof reason === "string" && Object.hasOwn(SAFE_QUOTA_MESSAGES, reason)) {
     return SAFE_QUOTA_MESSAGES[reason];
   }
   return `Persistent memory request failed (${status}).`;
