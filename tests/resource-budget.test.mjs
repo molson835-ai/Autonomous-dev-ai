@@ -110,6 +110,14 @@ test("Cloudflare Workers AI daily-allocation error 4006 is quota exhaustion, not
   }
 });
 
+test("Eve local neuron budget blocks are quota exhaustion and are not retried", () => {
+  const error = Object.assign(new Error("Eve's local neuron safety target has been reached."), { name: "EVEQuotaGuardError" });
+  assert.equal(classifyResourceFailure(error), "quota_exhausted");
+  assert.deepEqual(evaluateResourceBudget({ task: { status: "running" }, error }), {
+    action: "pause", status: "paused", reason: "quota_exhausted", providerFallbackAllowed: false, retryAllowed: false
+  });
+});
+
 test("ordinary HTTP 429 rate limiting remains bounded and retryable", () => {
   assert.equal(classifyResourceFailure({ status: 429, message: "Too many requests" }), "rate_limited");
 });
