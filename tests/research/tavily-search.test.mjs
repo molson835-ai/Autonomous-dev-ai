@@ -6,10 +6,13 @@ const response = (payload, status = 200) => new Response(JSON.stringify(payload)
 
 test("requires explicit verified-free-plan flag before making any request", async () => {
   let calls = 0;
-  await assert.rejects(searchTavily("seller inventory tools", {}, {
+  const result = await searchTavily("seller inventory tools", {}, {
     apiKey: "test-only-key", freePlanVerified: false,
     fetchImpl: async () => { calls++; return response({ results: [], usage: { credits: 1 } }); },
-  }), /no-cost plan and billing limits are verified/);
+  });
+  assert.equal(result.status, "disabled");
+  assert.equal(result.requestMade, false);
+  assert.match(result.reason, /no-cost plan and billing limits are verified/);
   assert.equal(calls, 0);
 });
 

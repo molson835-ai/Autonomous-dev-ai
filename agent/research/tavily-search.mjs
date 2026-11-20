@@ -33,7 +33,14 @@ export async function searchTavily(query, options = {}, dependencies = {}) {
   const freePlanVerified = dependencies.freePlanVerified ??
     process.env.EVE_TAVILY_FREE_PLAN_VERIFIED === "true";
   if (freePlanVerified !== true) {
-    throw new Error("Web research is disabled until Tavily's no-cost plan and billing limits are verified. No request was made.");
+    return {
+      query: input.query,
+      provider: "Tavily",
+      status: "disabled",
+      requestMade: false,
+      results: [],
+      reason: "Web research is disabled until the no-cost plan and billing limits are verified. Do not retry or use a fallback provider.",
+    };
   }
   const apiKey = dependencies.apiKey ?? process.env.TAVILY_API_KEY;
   if (!apiKey) throw new Error("Web research is disabled because TAVILY_API_KEY is not configured. Do not switch to a paid or unapproved provider.");
