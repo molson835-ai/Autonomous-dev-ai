@@ -18,12 +18,29 @@ export function validateExecutionCheckpoint(value) {
     return { valid: false, reason: "Checkpoint metadata is invalid." };
   }
   if (!value.payload || typeof value.payload !== "object" || Array.isArray(value.payload)) return { valid: false, reason: "Checkpoint payload must be a data object." };
-  const serialized = JSON.stringify(value.payload);
-  if (bytes(serialized) > MAX_CHECKPOINT_BYTES) return { valid: false, reason: "Checkpoint payload exceeds 32 KiB." };
-  if (/token|secret|password|credential|api[_-]?key|authorization/i.test(serialized)) {
+
+  // JSON is the portable checkpoint format. Reject values it cannot safely encode
+  // (including cycles and BigInt) rather than letting serialization throw upstream.
+  let serializedPayload;
+  let serializedCheckpoint;
+  try {
+    serializedPayload = JSON.stringify(value.payload);
+    serializedCheckpoint = JSON.stringify(value);
+  } catch {
+    return { valid: false, reason: "Checkpoint payload must contain only safely serializable data." };
+  }
+  if (typeof serializedPayload !== "string" || typeof serializedCheckpoint !== "string") {
+    return { valid: false, reason: "Checkpoint payload must contain only safely serializable data." };
+  }
+  if (bytes(serializedPayload) > MAX_CHECKPOINT_BYTES) return { valid: false, reason: "Checkpoint payload exceeds 32 KiB." };
+  if (/token|secret|password|credential|api[_-]?key|authorization/i.test(serializedPayload)) {
     return { valid: false, reason: "Checkpoint payload appears to contain credential-like data." };
   }
-  return { valid: true, checkpoint: JSON.parse(JSON.stringify(value)), maxPayloadBytes: MAX_CHECKPOINT_BYTES, status: "validated_not_persisted" };
+  try {
+    return { valid: true, checkpoint: JSON.parse(serializedCheckpoint), maxPayloadBytes: MAX_CHECKPOINT_BYTES, status: "validated_not_persisted" };
+  } catch {
+    return { valid: false, reason: "Checkpoint could not be safely copied." };
+  }
 }
 
 export function canResumeCheckpoint(checkpoint, expected) {
