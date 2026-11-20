@@ -22,7 +22,7 @@ test("rejects traversal, absolute paths, encoded paths, and backslashes", () => 
 });
 
 test("rejects protected roots and sensitive configuration files", () => {
-  for (const path of [".github/workflows/ci.yml", "memory/worker/index.ts", "apps/web/app/page.tsx", "agent/tools/.env", "agent/tools/package.json", "docs/../.env"]) {
+  for (const path of [".github/workflows/ci.yml", "memory/worker/index.ts", "apps/web/app/page.tsx", "agent/tools/.env", "agent/tools/package.json", "agent/tools/.github/workflows/pwn.yml", "docs/../.env"]) {
     assert.equal(validateWorkspaceProposal({ files: [file(path)] }).valid, false, path);
   }
 });
@@ -41,7 +41,7 @@ test("enforces file count, per-file size, and total size limits", () => {
 });
 
 test("rejects binary-like control characters and malformed proposals", () => {
-  assert.equal(validateWorkspaceProposal({ files: [file("docs/binary.txt", "ok\\0bad")] }).valid, false);
+  assert.equal(validateWorkspaceProposal({ files: [file("docs/binary.txt", "ok\0bad")] }).valid, false);
   assert.equal(validateWorkspaceProposal({ files: [] }).valid, false);
   assert.equal(validateWorkspaceProposal({ files: [file()], shell: true }).valid, false);
   assert.equal(validateWorkspaceProposal(null).valid, false);
