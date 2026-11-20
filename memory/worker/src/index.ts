@@ -261,6 +261,9 @@ export class MemoryStore extends DurableObject<Env> {
       catch { return json({ error: "Stored resource metadata is corrupt." }, 500); }
       resource.trust_state = status;
       const evidence = (body.review_evidence as string[]).map(item => item.trim());
+      resource.reviewer = "owner";
+      resource.reviewed_at = now;
+      resource.review_evidence = evidence;
       const updated = this.ctx.storage.sql.exec<{ id: string }>(
         "UPDATE resources SET resource_json=?,trust_state=?,updated_at=?,reviewer='owner',reviewed_at=?,review_evidence=? WHERE id=? AND trust_state=? RETURNING id",
         JSON.stringify(resource), status, now, now, JSON.stringify(evidence), row.id, row.trust_state
