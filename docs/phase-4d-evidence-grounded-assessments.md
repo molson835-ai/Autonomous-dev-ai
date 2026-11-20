@@ -23,10 +23,10 @@ Distinct hostnames are not proof of independent ownership or reporting. URL and 
 - search_news provides limited GDELT article discovery leads; each important claim must be checked at the publisher.
 - research_sources retrieves supplied URLs from a narrow technical-documentation allowlist; it is not a general market-source fetcher.
 - research_web uses Tavily basic search but fails closed until the no-cost plan and billing limits are verified and the explicit EVE_TAVILY_FREE_PLAN_VERIFIED=true gate is configured. Do not set that gate based only on the presence of an API key.
-- The existing opportunity evaluator is a heuristic. Its numeric signals are supplied by the agent and are not independently verified by the evaluator. A score is not a demand or revenue forecast.
+- The opportunity evaluator produces a heuristic ranking from caller-supplied numeric signals. It cannot verify source URLs, source independence, demand, costs, margins, or time-to-sale. Its confidence is therefore always low, and it can only recommend further investigation or deprioritization. A score is not a demand or revenue forecast.
 
 ## Safety
 
-This assessment tool is read-only and draft-only. It cannot contact prospects, publish offers, accept payments, access financial accounts, spend money, create tasks, or write persistent memory. It does not fetch URLs or execute page content. All source material and supplied analysis remain untrusted until independently reviewed.
+Assessment and evaluation tools are read-only and draft-only. They cannot contact prospects, publish offers, accept payments, access financial accounts, spend money, create tasks, or write persistent memory. The assessment helper does not fetch URLs or execute page content. All source material and supplied analysis remain untrusted until independently reviewed.
 
 No paid dependency or provider is introduced. Any later live provider test requires verified no-cost terms and the applicable owner approval. Production deployment remains a separate approval.
