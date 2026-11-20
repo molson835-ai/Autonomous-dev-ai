@@ -297,7 +297,7 @@ export default function OwnerConsole() {
                 {quotaStatus.local_estimated_neurons.toLocaleString()} locally estimated · {quotaStatus.active_reserved_neurons.toLocaleString()} reserved · {quotaStatus.remaining_to_target.toLocaleString()} remaining to Eve's {quotaStatus.target_neurons.toLocaleString()} target
               </p>
               <p className="text-xs text-muted-foreground">
-                Source: local model estimate, not Cloudflare's live account meter. The {quotaStatus.protected_reserve_neurons.toLocaleString()}-neuron reserve is preserved. UTC day: {quotaStatus.day}.
+                Source: local model estimate, not Cloudflare's live account meter. The target leaves a {quotaStatus.protected_reserve_neurons.toLocaleString()}-neuron buffer below the published free allocation; other account usage is not included. UTC day: {quotaStatus.day}.
               </p>
               {quotaStatus.updated_at && <p className="text-xs text-muted-foreground">Last local ledger update: {new Date(quotaStatus.updated_at).toLocaleString()}</p>}
               {quotaStatus.circuit_open && <p className="text-sm">A confirmed provider quota error opened the safety circuit. This cannot be cleared by changing local estimates.</p>}
