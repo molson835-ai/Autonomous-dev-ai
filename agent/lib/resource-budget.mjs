@@ -14,7 +14,7 @@ const DEFAULT_LIMITS = Object.freeze({
   maxQuotaObservationAgeMs: 15 * 60 * 1000
 });
 
-const QUOTA_TERMS = /quota exceeded|insufficient quota|usage limit|billing limit|resource exhausted|credits exhausted|daily free allocation|neurons? (?:allocation|limit|quota|exhausted)/i;
+const QUOTA_TERMS = /quota exceeded|insufficient quota|usage limit|billing limit|resource exhausted|credits exhausted|daily free allocation|neurons? (?:allocation|limit|quota|exhausted)|neuron safety target|provider quota circuit/i;
 const RATE_LIMIT_TERMS = /rate.?limit|too many requests|throttl/i;
 const TRANSIENT_TERMS = /timeout|timed out|temporar|network|connection reset|fetch failed|service unavailable/i;
 
@@ -41,6 +41,7 @@ export function classifyResourceFailure(error) {
     : [error?.code, error?.message, error?.name, error?.cause?.code, error?.cause?.message].filter(Boolean).join(" ");
   const status = Number(error?.status ?? error?.statusCode ?? error?.cause?.status ?? 0);
   const code = String(error?.code ?? error?.cause?.code ?? "");
+  if (error?.name === "EVEQuotaGuardError") return "quota_exhausted";
   // Cloudflare Workers AI uses error code 4006 for exhausted daily free neurons.
   // Check this before generic HTTP 429 handling: it is not a transient rate limit.
   if (code === "4006" || /\b4006\b/.test(message) || QUOTA_TERMS.test(message) || status === 402) {
