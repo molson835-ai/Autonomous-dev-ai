@@ -21,6 +21,18 @@ test("accepts only the bounded pure JavaScript test profile", () => {
   assert.equal(result.valid, true);
   assert.equal(result.status, "validated_not_executed");
   assert.equal(result.timeoutMs, 30000);
+  assert.equal(result.policy.timeout, 30000);
+});
+
+test("applies a validated custom timeout to the returned sandbox policy", () => {
+  const result = validateIsolatedExecutionRequest({
+    profile: "node-test-pure-js",
+    inputBytes: 1024,
+    timeoutMs: 45_000,
+  });
+  assert.equal(result.valid, true);
+  assert.equal(result.timeoutMs, 45_000);
+  assert.equal(result.policy.timeout, 45_000);
 });
 
 test("rejects arbitrary commands, shell requests, and network permissions", () => {
@@ -35,4 +47,5 @@ test("rejects missing, oversized, malformed, and over-time requests", () => {
   assert.equal(validateIsolatedExecutionRequest({ profile: "node-test-pure-js", inputBytes: 81921 }).valid, false);
   assert.equal(validateIsolatedExecutionRequest({ profile: "node-test-pure-js", inputBytes: 1, timeoutMs: 60001 }).valid, false);
   assert.equal(validateIsolatedExecutionRequest({ profile: "node-test-pure-js", inputBytes: 1, timeoutMs: 0 }).valid, false);
+  assert.throws(() => createIsolatedExecutionPolicy(60_001), RangeError);
 });
