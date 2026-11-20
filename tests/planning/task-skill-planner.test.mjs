@@ -56,16 +56,18 @@ test("planner excludes rejected and stale resources and flags unreviewed or unkn
     resources: [
       resource({ id: "quarantined", skill_tags: ["research"], trust_state: "quarantined", license: "unknown", cost_model: "unknown" }),
       resource({ id: "paid", skill_tags: ["research"], trust_state: "approved", cost_model: "paid" }),
+      resource({ id: "limited", skill_tags: ["research"], trust_state: "approved", cost_model: "free_tier_limited" }),
       resource({ id: "rejected", skill_tags: ["research"], trust_state: "rejected" }),
       resource({ id: "stale", skill_tags: ["research"], trust_state: "stale" }),
     ],
   });
   const matches = report.skills[0].matchingResources;
-  assert.deepEqual(matches.map((item) => item.id), ["quarantined", "paid"]);
+  assert.deepEqual(matches.map((item) => item.id), ["quarantined", "paid", "limited"]);
   assert.equal(matches[0].reviewRequired, true);
   assert.equal(matches[0].licenseKnown, false);
   assert.equal(matches[1].reviewRequired, true);
   assert.equal(matches[1].executionReady, false);
+  assert.equal(matches[2].reviewRequired, true);
 });
 
 test("planner rejects duplicate requirements and malformed acceptance criteria", () => {
