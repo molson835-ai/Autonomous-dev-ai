@@ -106,7 +106,8 @@ export function planTaskSkills(input: TaskSkillPlanInput) {
         reviewRequired: resource.trust_state !== "approved" ||
           resource.license.trim().toLowerCase() === "unknown" ||
           resource.cost_model === "unknown" ||
-          resource.cost_model === "paid",
+          resource.cost_model === "paid" ||
+          resource.cost_model === "free_tier_limited",
       }));
 
     return {
