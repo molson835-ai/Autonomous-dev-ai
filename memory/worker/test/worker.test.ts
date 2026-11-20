@@ -55,6 +55,8 @@ function quotaControlRequest(path: "/v1/quota/settle" | "/v1/quota/circuit" | "/
 }
 describe("shared daily neuron quota coordinator", () => {
   it("requires auth and rejects caller-supplied reservation sizes or usage", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-19T12:00:00.000Z"));
     const denied = await exports.default.fetch(new Request(new URL("/v1/quota/reserve", endpoint), {
       method: "POST", body: JSON.stringify({ reserve_neurons: 200, model_id: "@cf/zai-org/glm-4.7-flash" }),
     }));
@@ -68,6 +70,8 @@ describe("shared daily neuron quota coordinator", () => {
     expect((await quotaRequest()).status).toBe(200);
   });
   it("charges reported-token neuron estimates instead of the full 200-neuron hold", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-20T12:00:00.000Z"));
     const first = await quotaRequest();
     expect(first.status).toBe(200);
     const one = await first.json<{ reservation_id: string; reserved_neurons: number }>();
@@ -78,6 +82,8 @@ describe("shared daily neuron quota coordinator", () => {
     expect((await quotaControlRequest("/v1/quota/settle", { reservation_id: one.reservation_id, actual_neurons: 12 })).status).toBe(404);
   });
   it("enforces the 7000-neuron target and returns a machine-readable reason", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-21T12:00:00.000Z"));
     for (let i = 0; i < 6; i += 1) {
       const reserved = await quotaRequest();
       expect(reserved.status).toBe(200);
@@ -89,6 +95,8 @@ describe("shared daily neuron quota coordinator", () => {
     expect(await blocked.json()).toMatchObject({ reason_code: "local_neuron_budget_reached" });
   });
   it("keeps a failed-provider circuit open and identifies it distinctly", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-22T12:00:00.000Z"));
     const reserved = await quotaRequest();
     const { reservation_id } = await reserved.json<{ reservation_id: string }>();
     expect((await quotaControlRequest("/v1/quota/circuit", {
@@ -99,6 +107,8 @@ describe("shared daily neuron quota coordinator", () => {
     expect(await blocked.json()).toMatchObject({ reason_code: "quota_circuit_open" });
   });
   it("exposes authenticated read-only quota status and labels estimates accurately", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-23T12:00:00.000Z"));
     const reserved = await quotaRequest();
     const { reservation_id } = await reserved.json<{ reservation_id: string }>();
     const status = await quotaControlRequest("/v1/quota/status");
