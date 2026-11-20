@@ -104,7 +104,7 @@ export class MemoryStore extends DurableObject<Env> {
 
 
 
-    if (request.method === "GET" && url.pathname === "/v1/quota/status") {
+    if (request.method === "GET" && ["/v1/quota/status", "/v1/owner/quota/status"].includes(url.pathname)) {
       const day = now.slice(0, 10);
       const daily = this.ctx.storage.sql.exec<{
         day: string; baseline_neurons: number; observed_neurons: number;
@@ -656,7 +656,7 @@ export default {
     const ownerControlRoute = request.method === "POST" && /^\/v1\/tasks\/[0-9a-f-]{36}\/owner-control$/i.test(url.pathname);
     const ownerMemoryDecisionRoute = request.method === "POST" && /^\/v1\/proposals\/[0-9a-f-]{36}\/decision$/i.test(url.pathname);
     const ownerResourceDecisionRoute = request.method === "POST" && /^\/v1\/owner\/resources\/[a-z0-9][a-z0-9._:-]{0,159}\/decision$/.test(url.pathname);
-    const ownerReadRoute = request.method === "GET" && ["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status", "/v1/owner/resources"].includes(url.pathname);
+    const ownerReadRoute = request.method === "GET" && ["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status", "/v1/owner/resources", "/v1/owner/quota/status"].includes(url.pathname);
     const ownerQueueControlRoute = request.method === "POST" && url.pathname === "/v1/owner/control";
     const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute || ownerMemoryDecisionRoute || ownerResourceDecisionRoute || ownerReadRoute || ownerQueueControlRoute;
     const ownerOrigin = "https://autonomous-dev-ai.vercel.app";
