@@ -6,9 +6,12 @@ const DEFAULT_TIMEOUT_MS = 30_000;
  * execution job. This is configuration only; it does not create a sandbox.
  * Keep credentials, network access, persistence, and exposed ports absent.
  */
-export function createIsolatedExecutionPolicy() {
+export function createIsolatedExecutionPolicy(timeoutMs = DEFAULT_TIMEOUT_MS) {
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_TIMEOUT_MS) {
+    throw new RangeError("timeoutMs must be an integer from 1 to 60000.");
+  }
   return Object.freeze({
-    timeout: DEFAULT_TIMEOUT_MS,
+    timeout: timeoutMs,
     persistent: false,
     resources: Object.freeze({ vcpus: 1 }),
     networkPolicy: "deny-all",
@@ -59,7 +62,7 @@ export function validateIsolatedExecutionRequest(request) {
     valid: true,
     profile: "node-test-pure-js",
     timeoutMs,
-    policy: createIsolatedExecutionPolicy(),
+    policy: createIsolatedExecutionPolicy(timeoutMs),
     status: "validated_not_executed",
   };
 }
