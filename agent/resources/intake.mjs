@@ -44,9 +44,18 @@ function stringList(value, field, { maxItems = 100, maxLength = 300 } = {}) {
 }
 
 function validDateTime(value) {
-  return typeof value === "string" &&
-    /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(value) &&
-    Number.isFinite(Date.parse(value));
+  if (typeof value !== "string") return false;
+  const match = /^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.\\d+)?(Z|([+-])(\\d{2}):(\\d{2}))$/.exec(value);
+  if (!match) return false;
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, , , offsetHourText, offsetMinuteText] = match;
+  const year = Number(yearText), month = Number(monthText), day = Number(dayText);
+  const hour = Number(hourText), minute = Number(minuteText), second = Number(secondText);
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth ||
+      hour > 23 || minute > 59 || second > 59) return false;
+  if (offsetHourText !== undefined &&
+      (Number(offsetHourText) > 23 || Number(offsetMinuteText) > 59)) return false;
+  return Number.isFinite(Date.parse(value));
 }
 
 function deepFreeze(value) {
