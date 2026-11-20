@@ -1,0 +1,47 @@
+name: Temporary lockfile regeneration
+
+on:
+  push:
+    branches:
+      - chore/regen-lockfile-20261119
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temporary-lockfile-regeneration
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the approved repair branch
+        uses: actions/checkout@v4
+        with:
+          ref: chore/regen-lockfile-20261119
+          persist-credentials: true
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Regenerate lockfile from package.json
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Verify clean npm installation
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Commit lockfile and remove this temporary workflow
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "::error::npm did not produce a package-lock.json change; stopping without a commit."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/temp-regenerate-lockfile.yml
+          git add package-lock.json
+          git commit -m "fix: synchronize npm lockfile"
+          git push origin HEAD:chore/regen-lockfile-20261119
