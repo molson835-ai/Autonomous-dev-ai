@@ -135,7 +135,7 @@ export class MemoryStore extends DurableObject<Env> {
     if (request.method === "POST" && url.pathname === "/v1/quota/reserve") {
       const body = await readBody(request), day = now.slice(0, 10);
       if (!body || Object.keys(body).some(k => !["reserve_neurons", "model_id"].includes(k)) ||
-          body.reserve_neurons !== 200 || body.model_id !== "@cf/zai-org/glm-4.7-flash")
+          ![200, 1200].includes(Number(body.reserve_neurons)) || body.model_id !== "@cf/zai-org/glm-4.7-flash")
         return json({ error: "Invalid quota reservation request." }, 400);
 
       // The reservation is a small concurrency hold. Settlement uses the
@@ -159,22 +159,22 @@ export class MemoryStore extends DurableObject<Env> {
         "SELECT COALESCE(SUM(reserved_neurons),0) AS total FROM quota_reservations WHERE day=?", day
       ).one().total;
       const projected = Math.max(daily.observed_neurons, daily.baseline_neurons + daily.local_estimated_neurons) + active;
-      if (projected + 200 > 7000) return json({
+      if (projected + Number(body.reserve_neurons) > 7000) return json({
         error: "Eve's local neuron safety target is reached; the 3,000-neuron reserve is preserved.",
         reason_code: "local_neuron_budget_reached",
       }, 429);
       const id = crypto.randomUUID();
       this.ctx.storage.sql.exec(
-        "INSERT INTO quota_reservations (id,day,reserved_neurons,created_at) VALUES (?,?,200,?)", id, day, now
+        "INSERT INTO quota_reservations (id,day,reserved_neurons,created_at) VALUES (?,?,?,?)", id, day, Number(body.reserve_neurons), now
       );
-      return json({ reservation_id: id, projected_neurons: projected, reserved_neurons: 200, target_neurons: 7000 });
+      return json({ reservation_id: id, projected_neurons: projected, reserved_neurons: Number(body.reserve_neurons), target_neurons: 7000 });
     }
     if (request.method === "POST" && url.pathname === "/v1/quota/settle") {
       const body = await readBody(request);
       if (!body || Object.keys(body).some(k => !["reservation_id", "actual_neurons"].includes(k)) ||
           typeof body.reservation_id !== "string" || !/^[0-9a-f-]{36}$/i.test(body.reservation_id) ||
-          typeof body.actual_neurons !== "number" || !Number.isFinite(body.actual_neurons) ||
-          body.actual_neurons < 0 || body.actual_neurons > 100000)
+          (body.actual_neurons !== undefined && (typeof body.actual_neurons !== "number" || !Number.isFinite(body.actual_neurons) ||
+          body.actual_neurons < 0 || body.actual_neurons > 100000)))
         return json({ error: "Invalid quota settlement." }, 400);
       const row = this.ctx.storage.sql.exec<{id:string;day:string;reserved_neurons:number}>(
         "SELECT * FROM quota_reservations WHERE id=? LIMIT 1", body.reservation_id
@@ -183,7 +183,7 @@ export class MemoryStore extends DurableObject<Env> {
       // Provider-reported token usage is converted using the published model rates
       // plus a 50% margin in the trusted server-side middleware. Missing usage
       // settles to a conservative 200-neuron fallback.
-      const charged = body.actual_neurons;
+      const charged = body.actual_neurons === undefined ? row.reserved_neurons : body.actual_neurons;
       const updated = this.ctx.storage.sql.exec<{day:string}>(
         "UPDATE quota_daily SET local_estimated_neurons=local_estimated_neurons+?,updated_at=? WHERE day=? RETURNING day",
         charged, now, row.day
