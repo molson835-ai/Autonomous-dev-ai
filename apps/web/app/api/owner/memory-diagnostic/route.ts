@@ -8,5 +8,17 @@ export async function GET(request: Request) {
   const ownerLogin = await getVerifiedOwnerLogin();
   if (!ownerLogin) return NextResponse.json({ error: "Owner authentication required." }, { status: 401, headers: { "cache-control": "no-store" } });
   const result = await runOwnerMemoryProbe({ baseUrl: process.env.MEMORY_API_URL, token: process.env.MEMORY_API_TOKEN });
-  return NextResponse.json(result, { headers: { "cache-control": "no-store" } });
+  const configuration = result.checks.some(check => check.error_code === "configuration_missing")
+    ? "missing"
+    : result.checks.some(check => check.error_code === "configuration_invalid")
+      ? "invalid"
+      : result.checks.some(check => check.error_code === "worker_host_mismatch")
+        ? "host mismatch"
+        : "configured";
+  return NextResponse.json({
+    ...result,
+    checked_at: new Date().toISOString(),
+    environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "unknown",
+    configuration,
+  }, { headers: { "cache-control": "no-store" } });
 }
