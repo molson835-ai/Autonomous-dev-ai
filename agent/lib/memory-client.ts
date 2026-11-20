@@ -1,3 +1,4 @@
+import { memoryFailureMessage } from "./quota-error.mjs";
 import { env } from "node:process";
 
 type MemoryRequestInit = {
@@ -38,6 +39,13 @@ export async function memoryRequest<T>(
     cache: "no-store",
   });
 
-  if (!response.ok) throw new Error("Persistent memory request failed (" + response.status + ").");
+  if (!response.ok) {
+    let payload: unknown = null;
+    try { payload = await response.json(); } catch { /* Keep the safe generic status message. */ }
+    const message = memoryFailureMessage(response.status, payload);
+    const error = new Error(message);
+    if (path.startsWith("/v1/quota/") && response.status === 429) error.name = "EVEQuotaGuardError";
+    throw error;
+  }
   return (await response.json()) as T;
 }
