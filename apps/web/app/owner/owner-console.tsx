@@ -8,6 +8,7 @@ type Task = {
   title: string;
   goal: string;
   approved_scope: string;
+  scope_id: string;
   status: string;
   owner_approved: boolean;
   mission_authorized: boolean;
@@ -77,6 +78,7 @@ async function ownerRequest<T>(path: string, method = "GET", body?: unknown): Pr
 export default function OwnerConsole() {
   const [authenticated, setAuthenticated] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [selectedTaskScopes, setSelectedTaskScopes] = useState<Record<string, string>>({});
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
@@ -311,15 +313,33 @@ export default function OwnerConsole() {
                 <div className="rounded-lg bg-muted/60 p-3 text-sm">
                   <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Requested scope</p>
                   {task.approved_scope}
+                  <p className="mt-2 text-xs text-muted-foreground">Current classification: {task.scope_id || "owner_review_required"}</p>
                 </div>
                 {task.checkpoint_summary && <p className="text-sm text-muted-foreground">Checkpoint: {task.checkpoint_summary}</p>}
                 {task.result_summary && <p className="text-sm text-muted-foreground">Result: {task.result_summary}</p>}
                 <p className="text-xs text-muted-foreground">Attempts: {task.attempt_count}/{task.max_attempts} · {task.mission_authorized ? "Blocked: legacy authorization" : task.owner_approved ? "Owner approved" : "Awaiting owner approval"} · ID {task.id}</p>
                 <div className="flex flex-wrap gap-2">
                   {task.status === "proposed" && (
-                    <button type="button" disabled={busy !== null} onClick={() => void perform(task.id, "/v1/tasks/" + task.id + "/approve", "POST")} className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
-                      Approve task
-                    </button>
+                    <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-end">
+                      <label className="flex flex-1 flex-col gap-1 text-sm">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Owner-approved task scope</span>
+                        <select
+                          value={selectedTaskScopes[task.id] ?? "owner_review_required"}
+                          onChange={event => setSelectedTaskScopes(current => ({ ...current, [task.id]: event.target.value }))}
+                          disabled={busy !== null}
+                          className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
+                        >
+                          <option value="owner_review_required">General owner approval only (no provider scope)</option>
+                          <option value="product_development">Product development</option>
+                          <option value="testing">Testing</option>
+                          <option value="documentation">Documentation</option>
+                          <option value="market_research">Market research</option>
+                        </select>
+                      </label>
+                      <button type="button" disabled={busy !== null} onClick={() => void perform(task.id, "/v1/tasks/" + task.id + "/approve", "POST", { scope_id: selectedTaskScopes[task.id] ?? "owner_review_required" })} className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
+                        Approve with selected scope
+                      </button>
+                    </div>
                   )}
                   {["queued", "running", "waiting"].includes(task.status) && (
                     <button type="button" disabled={busy !== null} onClick={() => void perform(task.id, "/v1/tasks/" + task.id + "/owner-control", "POST", { action: "pause" })} className="rounded-lg border px-3 py-2 text-sm font-medium disabled:opacity-50">
