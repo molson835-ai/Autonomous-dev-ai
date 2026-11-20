@@ -52,7 +52,7 @@
 - Modify: `agent/lib/memory-client.ts`
 - Test: `tests/quota-error.test.mjs`
 
-- [x] Require a fixed 200-neuron temporary reservation.
+- [x] Require a fixed 200-neuron temporary reservation for the new client and preserve legacy 1,200-neuron requests during Worker-first rollout.
 - [x] Accept validated model-estimated settlement values.
 - [x] Return separate safe reason codes for local budget and provider circuit blocks.
 - [x] Add authenticated read-only quota status, with an explicit local-estimate source label.
@@ -78,7 +78,7 @@
 - The model-specific conversion is an estimate and does not replace Cloudflare's account-level usage meter.
 - The local ledger does not observe other Workers AI consumers in the account.
 - Existing fixed-charge ledger values remain for the current UTC day; new calls use the smaller reservation and usage-based settlement.
-- No Worker or Production deployment is included.
+- Deploy Worker first, then Vercel Production; no deployment is included in this PR.
 
 ## Acceptance criteria
 
