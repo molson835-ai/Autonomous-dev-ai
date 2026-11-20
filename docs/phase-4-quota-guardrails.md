@@ -14,7 +14,7 @@ Keep Eve productive within the existing no-cost Workers AI allowance by charging
 
 ## Reservation and settlement
 
-- Each model call temporarily reserves 200 neurons to coordinate concurrent calls.
+- New model calls temporarily reserve 200 neurons to coordinate concurrent calls. The Worker also accepts the legacy 1,200-neuron request and settlement format during a Worker-first rollout; legacy calls continue to be charged the full 1,200.
 - On successful generation or stream completion, middleware settles the estimate derived from provider-reported input/output token usage.
 - Valid low usage is not floored to 200. Missing or invalid usage settles conservatively at 200.
 - Interrupted streams settle conservatively at 200 rather than leaving the reservation stranded.
