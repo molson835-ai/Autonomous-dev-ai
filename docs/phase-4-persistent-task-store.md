@@ -8,7 +8,7 @@ The Cloudflare Worker owns a dedicated `tasks` SQL table, separate from `memorie
 
 - `POST /v1/tasks`: create a proposed task. An idempotency key is unique; repeat submissions return the original record.
 - `GET /v1/tasks` and `GET /v1/tasks/:id`: inspect task records using the Eve API credential.
-- `POST /v1/tasks/:id/approve`: owner-only transition from proposed to queued.
+- `POST /v1/tasks/:id/approve`: owner-only transition from proposed to queued. The owner may optionally assign one allowlisted provider-eligible scope (`product_development`, `testing`, `documentation`, or `market_research`) in the same approval request. Omitted scope remains `owner_review_required`; Eve cannot set or override this field in a task proposal.
 - `POST /v1/tasks/:id/owner-control`: owner-only `pause` or `resume` for an existing task. Resume reaffirms owner approval; ordinary Eve task transitions cannot resume a paused task.
 - `POST /v1/proposals/:id/decision`: owner-only approval or rejection of a pending memory proposal.
 - `POST /v1/tasks/claim-next`: claim at most one due owner-approved task. A running task blocks another claim. A waiting task is claimable only when it has a valid due `next_run_at` checkpoint.
@@ -23,6 +23,8 @@ Normal Eve API access uses `MEMORY_API_TOKEN`. Owner-only routes require a GitHu
 
 The Worker fails closed if any required binding is missing, invalid, or cannot be verified. The previous `TASK_OWNER_APPROVAL_TOKEN` fallback is not an owner-authentication path. The Next.js `/owner` console uses GitHub OAuth, stores the session token in an HttpOnly cookie, and proxies only allowlisted owner routes after checking the owner session. Owner OAuth credentials must be configured in Vercel Production and in the protected `cloudflare-production` GitHub Actions environment.
 
+
+A provider-eligible scope is only an owner-approved classification. It does not establish provider readiness, verified usage limits, activation approval, or execution permission. Provider preflight and the separate activation boundary remain mandatory.
 ## Eve task tools
 
 - `task_propose`: create an unapproved proposal; cannot approve or activate it.
