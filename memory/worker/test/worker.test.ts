@@ -93,6 +93,8 @@ describe("shared daily neuron quota coordinator", () => {
     const blocked = await quotaRequest();
     expect(blocked.status).toBe(429);
     expect(await blocked.json()).toMatchObject({ reason_code: "local_neuron_budget_reached" });
+    const status = await quotaControlRequest("/v1/quota/status");
+    expect(await status.json()).toMatchObject({ model_calls_allowed: false, circuit_open: false });
   });
   it("keeps a failed-provider circuit open and identifies it distinctly", async () => {
     vi.useFakeTimers();
@@ -118,6 +120,7 @@ describe("shared daily neuron quota coordinator", () => {
       target_neurons: 7000,
       protected_reserve_neurons: 3000,
       active_reserved_neurons: 200,
+      model_calls_allowed: true,
     });
     const denied = await exports.default.fetch(new Request(new URL("/v1/quota/status", endpoint)));
     expect(denied.status).toBe(401);
