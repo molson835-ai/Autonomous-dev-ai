@@ -1,8 +1,9 @@
 import type { LanguageModelV4Middleware } from "@ai-sdk/provider";
 import { memoryRequest } from "./memory-client";
+import { estimateGlm47FlashNeurons } from "./neuron-budget.mjs";
 const MODEL_ID = "@cf/zai-org/glm-4.7-flash";
 const MAX_OUTPUT_TOKENS = 1024;
-const RESERVATION_NEURONS = 1200;
+const RESERVATION_NEURONS = 200;
 function stop(reason: string): never { throw new Error("EVE quota guard paused model work: " + reason); }
 
 // Deliberately throw a plain Error for provider quota exhaustion. The AI SDK's
@@ -16,7 +17,8 @@ export function nonRetryableQuotaError(cause: unknown): Error {
 }
 
 async function reserve() {
-  // The Worker owns the UTC-day reservation ledger; caller-supplied usage is never trusted.
+  // The Worker fetches Cloudflare Analytics with its own read-only credential.
+  // Eve supplies no usage total or timestamp that it could underreport.
   const result = await memoryRequest<{ reservation_id: string }>("/v1/quota/reserve", {
     method: "POST",
     body: { reserve_neurons: RESERVATION_NEURONS, model_id: MODEL_ID },
@@ -24,8 +26,11 @@ async function reserve() {
   if (!result?.reservation_id) return stop("Shared quota reservation was not issued.");
   return result.reservation_id;
 }
-async function settle(id: string) {
-  await memoryRequest("/v1/quota/settle", { method: "POST", body: { reservation_id: id } });
+async function settle(id: string, usage?: { inputTokens?: { total?: number }; outputTokens?: { total?: number } }) {
+  await memoryRequest("/v1/quota/settle", { method: "POST", body: {
+    reservation_id: id,
+    actual_neurons: estimateGlm47FlashNeurons(usage?.inputTokens?.total, usage?.outputTokens?.total),
+  }});
 }
 async function circuit(id: string) {
   try { await memoryRequest("/v1/quota/circuit", { method: "POST", body: {
@@ -48,7 +53,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
       let result;
       try { result = await doGenerate(); }
       catch (error) { if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id); throw error; }
-      await settle(id);
+      await settle(id, result.usage);
       return result;
     },
     wrapStream: async ({ doStream }) => {
@@ -70,7 +75,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
             }
             if (next.value.type === "finish" && !settled) {
               settled = true;
-              await settle(id);
+              await settle(id, next.value.usage);
             }
             controller.enqueue(next.value);
           } catch (error) {
