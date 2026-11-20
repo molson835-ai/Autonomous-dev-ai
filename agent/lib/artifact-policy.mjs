@@ -31,7 +31,7 @@ export function validateHtmlArtifact(input) {
   return {
     valid: true,
     status: "artifact_validated_not_executed",
-    artifact: { name: input.name.trim(), filename: `${safeName}.html`, mediaType: "text/html", bytes, content: input.content, previewHtml },
+    artifact: { name: input.name.trim(), filename: `${safeName}.html`, mediaType: "text/html", bytes, content: previewHtml, previewHtml },
     limits: { maxBytes: MAX_ARTIFACT_BYTES, filesPerCall: 1, externalNetwork: false, serverFilesystem: false, codeExecutionByAgent: false, browserPreviewSandboxed: true, persistence: false },
   };
 }
