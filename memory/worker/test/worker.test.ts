@@ -66,6 +66,8 @@ function quotaControlRequest(path: "/v1/quota/settle" | "/v1/quota/circuit", bod
 }
 describe("shared daily neuron quota coordinator", () => {
   it("requires auth and rejects caller-supplied usage or reservation sizes", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-19T12:00:00.000Z"));
     const denied = await exports.default.fetch(new Request(new URL("/v1/quota/reserve", endpoint), {
       method: "POST", body: JSON.stringify({ reserve_neurons: 1200, model_id: "@cf/zai-org/glm-4.7-flash" }),
     }));
@@ -79,6 +81,8 @@ describe("shared daily neuron quota coordinator", () => {
     })).status).toBe(404);
   });
   it("charges the full Worker-issued reservation and rejects duplicate settlement", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-20T12:00:00.000Z"));
     const first = await quotaRequest();
     expect(first.status).toBe(200);
     const one = await first.json<{ reservation_id: string; reserved_neurons: number }>();
@@ -91,10 +95,14 @@ describe("shared daily neuron quota coordinator", () => {
     expect(next.status).toBe(200);
   });
   it("enforces the 7000-neuron target under concurrent reservations", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-21T12:00:00.000Z"));
     const reservations = await Promise.all(Array.from({ length: 6 }, () => quotaRequest()));
     expect(reservations.map(r => r.status).sort()).toEqual([200, 200, 200, 200, 200, 429]);
   });
   it("keeps a failed-provider circuit open for the UTC day", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-22T12:00:00.000Z"));
     const reserved = await quotaRequest();
     const { reservation_id } = await reserved.json<{ reservation_id: string }>();
     expect((await quotaControlRequest("/v1/quota/circuit", {
