@@ -61,6 +61,15 @@ test("checkpoint validation is bounded, portable, and data-only", () => {
   assert.equal(validateExecutionCheckpoint(checkpoint({ extra: "no" })).valid, false);
 });
 
+test("checkpoint validation rejects circular and BigInt payloads without throwing", () => {
+  const circular = {};
+  circular.self = circular;
+  assert.doesNotThrow(() => validateExecutionCheckpoint(checkpoint({ payload: circular })));
+  assert.equal(validateExecutionCheckpoint(checkpoint({ payload: circular })).valid, false);
+  assert.doesNotThrow(() => validateExecutionCheckpoint(checkpoint({ payload: { count: 1n } })));
+  assert.equal(validateExecutionCheckpoint(checkpoint({ payload: { count: 1n } })).valid, false);
+});
+
 test("resume requires owner approval and exact task sequence", () => {
   assert.equal(canResumeCheckpoint(checkpoint(), { taskId: "task-123", sequence: 2, ownerApproved: false }).resumable, false);
   assert.equal(canResumeCheckpoint(checkpoint(), { taskId: "task-123", sequence: 2, ownerApproved: true }).resumable, true);
