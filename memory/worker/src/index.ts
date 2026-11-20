@@ -128,6 +128,7 @@ export class MemoryStore extends DurableObject<Env> {
         projected_neurons: projected,
         remaining_to_target: Math.max(0, 7000 - projected),
         circuit_open: daily?.circuit_open === 1,
+        model_calls_allowed: daily?.circuit_open !== 1 && projected + 200 <= 7000,
         updated_at: daily?.updated_at ?? null,
       });
     }
