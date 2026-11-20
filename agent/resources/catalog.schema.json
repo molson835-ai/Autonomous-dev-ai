@@ -20,7 +20,7 @@
       "type": "array", "maxItems": 50, "uniqueItems": true,
       "items": { "type": "string", "minLength": 1, "maxLength": 100, "pattern": "\\S" }
     },
-    "source_url": { "type": "string", "format": "uri" },
+    "source_url": { "type": "string", "format": "uri", "pattern": "^https://" },
     "maintainer": { "type": "string", "minLength": 1, "maxLength": 300 },
     "license": { "type": "string", "minLength": 1, "maxLength": 300 },
     "version_or_revision": { "type": "string", "minLength": 1, "maxLength": 300 },
