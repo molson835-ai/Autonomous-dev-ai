@@ -97,6 +97,9 @@ export default function OwnerConsole() {
   const [busy, setBusy] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [memoryDiagnostic, setMemoryDiagnostic] = useState<MemoryDiagnostic | null>(null);
+  const [newTaskTitle, setNewTaskTitle] = useState("Verify Eve Runtime Memory and Research");
+  const [newTaskGoal, setNewTaskGoal] = useState("Verify live Eve memory recall, enumerate actual runtime tools, and research one evidence-backed zero-cost revenue opportunity. Prepare a controlled memory write/read-back test plan but do not write to Production.");
+  const [newTaskScope, setNewTaskScope] = useState("Read-only runtime verification and public research only. Do not write Production memory or proposals, deploy, merge, spend, contact anyone, publish, purchase, or change queue controls. Stop and request separate owner approval before any memory write.");
 
   const load = useCallback(async (): Promise<boolean> => {
     if (!authenticated) return false;
@@ -200,6 +203,28 @@ export default function OwnerConsole() {
       setMessage("Memory endpoint checks completed. Review each HTTP result below.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Memory diagnostic failed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function createTaskProposal() {
+    setBusy("create-task");
+    setMessage("");
+    try {
+      const result = await ownerRequest<{ task: Task; created: boolean }>("/v1/owner/tasks", "POST", {
+        idempotency_key: "owner-console:" + crypto.randomUUID(),
+        task_type: "verification",
+        title: newTaskTitle.trim(),
+        goal: newTaskGoal.trim(),
+        approved_scope: newTaskScope.trim(),
+      });
+      await load();
+      setMessage(result.created
+        ? "Task proposal created. It remains unapproved and cannot run until you separately approve it."
+        : "An existing task proposal with this idempotency key was returned. No duplicate was created.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not create the task proposal.");
     } finally {
       setBusy(null);
     }
@@ -326,6 +351,27 @@ export default function OwnerConsole() {
               </button>
             </section>
           )}
+          <section className="space-y-3 rounded-xl border bg-card p-4">
+            <div className="space-y-1">
+              <h2 className="font-semibold">Propose a new task</h2>
+              <p className="text-sm text-muted-foreground">Creates a proposed record only. New tasks are always unapproved, not queued, and cannot run until you review and approve them separately.</p>
+            </div>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Task title</span>
+              <input value={newTaskTitle} onChange={event => setNewTaskTitle(event.target.value)} maxLength={200} disabled={busy !== null} className="min-h-10 rounded-lg border bg-background px-3 py-2" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Goal</span>
+              <textarea value={newTaskGoal} onChange={event => setNewTaskGoal(event.target.value)} maxLength={1000} rows={3} disabled={busy !== null} className="rounded-lg border bg-background px-3 py-2" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Requested scope and safety limits</span>
+              <textarea value={newTaskScope} onChange={event => setNewTaskScope(event.target.value)} maxLength={2000} rows={4} disabled={busy !== null} className="rounded-lg border bg-background px-3 py-2" />
+            </label>
+            <button type="button" disabled={busy !== null || !newTaskTitle.trim() || !newTaskGoal.trim() || !newTaskScope.trim()} onClick={() => void createTaskProposal()} className="rounded-lg border px-3 py-2 text-sm font-medium disabled:opacity-50">
+              {busy === "create-task" ? "Creating proposal…" : "Create unapproved task proposal"}
+            </button>
+          </section>
           <section className="space-y-3">
             <div className="flex items-baseline justify-between gap-3">
               <h2 className="text-xl font-semibold">Task queue & approvals</h2>
