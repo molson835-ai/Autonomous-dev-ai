@@ -95,6 +95,37 @@ describe("durable monthly Tavily credit budget", () => {
     expect(finalReservation).toMatch(/[0-9a-f-]{36}/i);
   });
 
+  it("exposes read-only monthly ledger totals to the verified owner", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-12-03T12:00:00.000Z"));
+    const denied = await request("/v1/owner/research/credits/status");
+    expect(denied.status).toBe(401);
+
+    const reserved = await tavilyCreditRequest("/v1/research/credits/reserve", { credits: 1 });
+    const { reservation_id } = await reserved.json<{ reservation_id: string }>();
+    const pending = await request("/v1/owner/research/credits/status", {}, ownerToken);
+    expect(pending.status).toBe(200);
+    expect(await pending.json()).toMatchObject({
+      month: "2026-12",
+      source: "eve_durable_object_ledger_not_provider_account_telemetry",
+      monthly_limit: 800,
+      used_credits: 0,
+      reserved_credits: 1,
+      outstanding_reservations: 1,
+      remaining_budget: 799,
+    });
+
+    const settled = await tavilyCreditRequest("/v1/research/credits/settle", { reservation_id, actual_credits: 1 });
+    expect(settled.status).toBe(200);
+    const finalStatus = await request("/v1/owner/research/credits/status", {}, ownerToken);
+    expect(await finalStatus.json()).toMatchObject({
+      used_credits: 1,
+      reserved_credits: 0,
+      outstanding_reservations: 0,
+      remaining_budget: 799,
+    });
+  });
+
   it("requires the shared Worker credential for reserve and settlement", async () => {
     const denied = await exports.default.fetch(new Request(new URL("/v1/research/credits/reserve", endpoint), {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ credits: 1 }),
