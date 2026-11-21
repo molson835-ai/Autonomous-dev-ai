@@ -1,4 +1,4 @@
-import { memoryFailureMessage } from "./quota-error.mjs";
+import { memoryFailureDiagnostic } from "./quota-error.mjs";
 import { env } from "node:process";
 
 type MemoryRequestInit = {
@@ -19,7 +19,7 @@ export async function memoryRequest<T>(
 
   let endpoint: URL;
   try {
-    endpoint = new URL(path.replace(/^\/+/, ""), baseUrl.endsWith("/") ? baseUrl : baseUrl + "/");
+    endpoint = new URL(path.replace(/^\\/+/, ""), baseUrl.endsWith("/") ? baseUrl : baseUrl + "/");
   } catch {
     throw new Error("Persistent memory URL is invalid.");
   }
@@ -42,9 +42,14 @@ export async function memoryRequest<T>(
   if (!response.ok) {
     let payload: unknown = null;
     try { payload = await response.json(); } catch { /* Keep the safe generic status message. */ }
-    const message = memoryFailureMessage(response.status, payload);
-    const error = new Error(message);
-    if (path.startsWith("/v1/quota/") && response.status === 429) error.name = "EVEQuotaGuardError";
+    const diagnostic = memoryFailureDiagnostic(response.status, payload, path);
+    const error = new Error(diagnostic.message);
+    error.name = diagnostic.name;
+    Object.assign(error, {
+      status: diagnostic.status,
+      category: diagnostic.category,
+      reason_code: diagnostic.reason_code,
+    });
     throw error;
   }
   return (await response.json()) as T;
