@@ -109,3 +109,30 @@ test("rejects unauthorized credentials without exposing the key", async () => {
     return true;
   });
 });
+
+
+test("requires a successful durable reservation before sending a Tavily request", async () => {
+  let searchCalls = 0;
+  await assert.rejects(runSearch("seller inventory tools", {}, {
+    creditLedgerRequest: async () => { throw new Error("monthly budget reached"); },
+    apiKey: "test-key", freePlanVerified: true,
+    fetchImpl: async () => { searchCalls++; return response({ results: [], usage: { credits: 1 } }); },
+  }), /monthly budget reached/);
+  assert.equal(searchCalls, 0);
+});
+
+test("settles the exact reported usage and conservatively charges ambiguous requests", async () => {
+  const ledgerCalls = [];
+  await runSearch("seller inventory tools", {}, {
+    apiKey: "test-key", freePlanVerified: true,
+    creditLedgerRequest: async (path, body) => {
+      ledgerCalls.push({ path, body });
+      return path.endsWith("/reserve") ? { reservation_id: "00000000-0000-4000-8000-000000000001" } : { settled: true };
+    },
+    fetchImpl: async () => response({ results: [], usage: { credits: 2 } }),
+  });
+  assert.deepEqual(ledgerCalls, [
+    { path: "/v1/research/credits/reserve", body: { credits: 1 } },
+    { path: "/v1/research/credits/settle", body: { reservation_id: "00000000-0000-4000-8000-000000000001", actual_credits: 2 } },
+  ]);
+});
