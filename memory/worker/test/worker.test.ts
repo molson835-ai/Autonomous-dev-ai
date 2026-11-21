@@ -204,6 +204,33 @@ describe("persistent memory Worker HTTP contract", () => {
     expect(ownerTasks.status).toBe(200);
     expect(Array.isArray((await ownerTasks.json<{ tasks: unknown[] }>()).tasks)).toBe(true);
 
+    const proposedTask = await request("/v1/owner/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        idempotency_key: `OWNER-CONSOLE-PROPOSAL-${crypto.randomUUID()}`,
+        task_type: "verification",
+        title: "Owner-authenticated proposal test",
+        goal: "Verify that owner task proposals remain unapproved.",
+        approved_scope: "Read-only test scope; no external side effects."
+      })
+    }, ownerToken);
+    expect(proposedTask.status).toBe(201);
+    const proposal = await proposedTask.json<{ task: { status: string; owner_approved: boolean; mission_authorized: boolean }; created: boolean }>();
+    expect(proposal.created).toBe(true);
+    expect(proposal.task).toMatchObject({ status: "proposed", owner_approved: false, mission_authorized: false });
+
+    const nonOwnerProposal = await request("/v1/owner/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        idempotency_key: `NONOWNER-PROPOSAL-${crypto.randomUUID()}`,
+        task_type: "verification",
+        title: "Must be rejected",
+        goal: "Non-owner cannot create tasks.",
+        approved_scope: "Test only."
+      })
+    });
+    expect(nonOwnerProposal.status).toBe(401);
+
     const normalProposalList = await request("/v1/owner/proposals");
     expect(normalProposalList.status).toBe(401);
     const ownerProposals = await request("/v1/owner/proposals?limit=5", {}, ownerToken);
