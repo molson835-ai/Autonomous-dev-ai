@@ -48,20 +48,15 @@ type QuotaStatus = {
 type MemoryProbe = {
   name: string;
   status: number | null;
-  ok: boolean;
-  duration_ms: number;
-  result: "ok" | "http_error" | "timeout" | "network_error";
-  content_type?: string;
-  body_kind?: "json" | "non_json" | "empty";
-  response_bytes?: number;
-  response_keys?: string[];
+  elapsed_ms: number;
+  cf_ray: string | null;
+  error_code: string | null;
 };
 type MemoryDiagnostic = {
   checked_at: string;
   environment: string;
-  configured: boolean;
   configuration: string;
-  host_matches_expected: boolean | null;
+  host_matches_expected: boolean;
   checks: MemoryProbe[];
 };
 
@@ -273,12 +268,11 @@ export default function OwnerConsole() {
                 <article key={check.name} className="rounded-lg border p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <strong className="text-sm">{check.name}</strong>
-                    <span className="text-sm font-medium">{check.status === null ? check.result : "HTTP " + check.status + " · " + check.result}</span>
+                    <span className="text-sm font-medium">{check.status === null ? (check.error_code ?? "No response") : "HTTP " + check.status + (check.error_code ? " · " + check.error_code : check.status >= 200 && check.status < 300 ? " · OK" : " · HTTP error")}</span>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {check.duration_ms} ms{check.content_type ? " · " + check.content_type : ""}{check.response_bytes !== undefined ? " · " + check.response_bytes + " response bytes" : ""}
+                    {check.elapsed_ms} ms{check.cf_ray ? " · Cloudflare trace " + check.cf_ray : ""}
                   </p>
-                  {check.response_keys && <p className="mt-1 break-words text-xs text-muted-foreground">Response fields: {check.response_keys.join(", ")}</p>}
                 </article>
               ))}
             </div>
