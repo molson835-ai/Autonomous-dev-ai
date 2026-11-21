@@ -49,7 +49,7 @@ function summarize(records) {
           count: numeric.length,
           min: Math.min(...numeric),
           max: Math.max(...numeric),
-          mean: numeric.reduce((sum, value) => sum + value, 0) / numeric.length
+          mean: numeric.reduce((sum, value) => sum + value / numeric.length, 0)
         }
       } : {})
     };
