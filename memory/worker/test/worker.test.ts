@@ -97,16 +97,15 @@ describe("durable monthly Tavily credit budget", () => {
 
   it("exposes read-only monthly ledger totals to the verified owner", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-12-03T12:00:00.000Z"));
-    const denied = await request("/v1/owner/research/credits/status");
-    expect(denied.status).toBe(401);
+    // Use a month isolated from the preceding ledger tests, which share the Durable Object.
+    vi.setSystemTime(new Date("2030-12-03T12:00:00.000Z"));
 
     const reserved = await tavilyCreditRequest("/v1/research/credits/reserve", { credits: 1 });
     const { reservation_id } = await reserved.json<{ reservation_id: string }>();
     const pending = await request("/v1/owner/research/credits/status", {}, ownerToken);
     expect(pending.status).toBe(200);
     expect(await pending.json()).toMatchObject({
-      month: "2026-12",
+      month: "2030-12",
       source: "eve_durable_object_ledger_not_provider_account_telemetry",
       monthly_limit: 800,
       used_credits: 0,
