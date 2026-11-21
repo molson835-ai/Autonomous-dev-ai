@@ -15,6 +15,10 @@ Eve's Tavily adapter uses basic search only. Tavily's Researcher free plan curre
 - The ledger is authenticated with the existing Worker shared credential and fails closed if unavailable.
 - No automatic retry, paid fallback, plan change, or billing action is performed.
 
+## Owner ledger status
+
+The authenticated read-only endpoint `GET /v1/owner/research/credits/status` reports the current UTC month, Eve-ledger credits settled, outstanding reservations, remaining room under Eve's 800-credit cap, and the oldest outstanding reservation timestamp. It does not mutate or clean up reservations. The response explicitly labels its source as Eve's Durable Object ledger, not Tavily account-wide telemetry. It is owner-authenticated through the Worker and proxied through the Owner Console API.
+
 ## Boundaries and limitations
 
 The ledger accounts for Eve's calls through this adapter only. It cannot see searches made manually in the Tavily dashboard, by other API keys, or by other applications. The 200-credit headroom is therefore a buffer, not a provider-enforced account-wide limit. Tavily's own free-plan hard stop and the owner's setting that pay-as-you-go is disabled remain the external billing safeguards.

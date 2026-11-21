@@ -13,7 +13,7 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
 
   const { path } = await context.params;
   const workerPath = "/" + path.join("/");
-  const allowedGet = ["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status", "/v1/owner/resources", "/v1/owner/quota/status"];
+  const allowedGet = ["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status", "/v1/owner/resources", "/v1/owner/quota/status", "/v1/owner/research/credits/status"];
   const allowedPost = ["/v1/owner/control", "/v1/owner/tasks"];
   const taskAction = /^\/v1\/tasks\/[0-9a-f-]{36}\/(approve|owner-control)$/i.test(workerPath);
   const proposalAction = /^\/v1\/proposals\/[0-9a-f-]{36}\/decision$/i.test(workerPath);
