@@ -127,6 +127,26 @@ export class MemoryStore extends DurableObject<Env> {
       this.ctx.storage.sql.exec("INSERT INTO tavily_credit_reservations (id,month,reserved_credits,created_at) VALUES (?,?,1,?)", id, month, now);
       return json({ reservation_id: id, month, reserved_credits: 1, used_credits: used, monthly_limit: limit });
     }
+    if (request.method === "GET" && url.pathname === "/v1/owner/research/credits/status") {
+      const month = now.slice(0, 7);
+      const monthly = this.ctx.storage.sql.exec<{ used_credits: number; updated_at: string }>(
+        "SELECT used_credits,updated_at FROM tavily_credit_monthly WHERE month=? LIMIT 1", month
+      ).toArray()[0];
+      const pending = this.ctx.storage.sql.exec<{ total: number; count: number; oldest_created_at: string | null }>(
+        "SELECT COALESCE(SUM(reserved_credits),0) AS total,COUNT(*) AS count,MIN(created_at) AS oldest_created_at FROM tavily_credit_reservations WHERE month=?", month
+      ).one();
+      return json({
+        month,
+        source: "eve_durable_object_ledger_not_provider_account_telemetry",
+        monthly_limit: 800,
+        used_credits: monthly?.used_credits ?? 0,
+        reserved_credits: pending.total,
+        outstanding_reservations: pending.count,
+        oldest_outstanding_reservation_at: pending.oldest_created_at,
+        remaining_budget: Math.max(0, 800 - (monthly?.used_credits ?? 0) - pending.total),
+        updated_at: monthly?.updated_at ?? null,
+      });
+    }
     if (request.method === "POST" && url.pathname === "/v1/research/credits/settle") {
       const body = await readBody(request);
       if (!body || Object.keys(body).some(key => !["reservation_id","actual_credits"].includes(key)) ||
@@ -692,7 +712,7 @@ export default {
     const ownerControlRoute = request.method === "POST" && /^\/v1\/tasks\/[0-9a-f-]{36}\/owner-control$/i.test(url.pathname);
     const ownerMemoryDecisionRoute = request.method === "POST" && /^\/v1\/proposals\/[0-9a-f-]{36}\/decision$/i.test(url.pathname);
     const ownerResourceDecisionRoute = request.method === "POST" && /^\/v1\/owner\/resources\/[a-z0-9][a-z0-9._:-]{0,159}\/decision$/.test(url.pathname);
-    const ownerReadRoute = request.method === "GET" && ["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status", "/v1/owner/resources", "/v1/owner/quota/status"].includes(url.pathname);
+    const ownerReadRoute = request.method === "GET" && ["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status", "/v1/owner/resources", "/v1/owner/quota/status", "/v1/owner/research/credits/status"].includes(url.pathname);
     const ownerQueueControlRoute = request.method === "POST" && url.pathname === "/v1/owner/control";
     const ownerTaskCreateRoute = request.method === "POST" && url.pathname === "/v1/owner/tasks";
     const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute || ownerMemoryDecisionRoute || ownerResourceDecisionRoute || ownerReadRoute || ownerQueueControlRoute || ownerTaskCreateRoute;
