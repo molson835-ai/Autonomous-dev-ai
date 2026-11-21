@@ -22,7 +22,7 @@ async function requestCreditLedger(path, body, dependencies) {
   try {
     const base = new URL(baseUrl);
     if (base.protocol !== "https:") throw new Error("HTTPS required");
-    endpoint = new URL(path.replace(/^\\/+/, ""), base.toString().endsWith("/") ? base : base.toString() + "/");
+    endpoint = new URL(path.startsWith("/") ? path.slice(1) : path, base.toString().endsWith("/") ? base : base.toString() + "/");
   } catch {
     throw new Error("The durable Tavily credit ledger URL is invalid or not HTTPS.");
   }
