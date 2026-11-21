@@ -219,7 +219,7 @@ export class MemoryStore extends DurableObject<Env> {
       return json({ id: candidate.id, trust_state: "quarantined", created: true }, 201);
     }
 
-    if (request.method === "POST" && url.pathname === "/v1/tasks") {
+    if (request.method === "POST" && ["/v1/tasks", "/v1/owner/tasks"].includes(url.pathname)) {
       const body = await readBody(request);
       const allowed = new Set(["idempotency_key", "task_type", "title", "goal", "approved_scope"]);
       if (!body || Object.keys(body).some(key => !allowed.has(key)) ||
@@ -659,7 +659,8 @@ export default {
     const ownerResourceDecisionRoute = request.method === "POST" && /^\/v1\/owner\/resources\/[a-z0-9][a-z0-9._:-]{0,159}\/decision$/.test(url.pathname);
     const ownerReadRoute = request.method === "GET" && ["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status", "/v1/owner/resources", "/v1/owner/quota/status"].includes(url.pathname);
     const ownerQueueControlRoute = request.method === "POST" && url.pathname === "/v1/owner/control";
-    const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute || ownerMemoryDecisionRoute || ownerResourceDecisionRoute || ownerReadRoute || ownerQueueControlRoute;
+    const ownerTaskCreateRoute = request.method === "POST" && url.pathname === "/v1/owner/tasks";
+    const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute || ownerMemoryDecisionRoute || ownerResourceDecisionRoute || ownerReadRoute || ownerQueueControlRoute || ownerTaskCreateRoute;
     const ownerOrigin = "https://autonomous-dev-ai.vercel.app";
     const origin = request.headers.get("origin");
     const withOwnerCors = (response: Response) => {
