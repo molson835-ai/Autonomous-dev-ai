@@ -92,6 +92,9 @@ export class MemoryStore extends DurableObject<Env> {
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS quota_daily (day TEXT PRIMARY KEY, baseline_neurons REAL NOT NULL, observed_neurons REAL NOT NULL, observed_at TEXT NOT NULL, local_estimated_neurons REAL NOT NULL DEFAULT 0, circuit_open INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS quota_reservations (id TEXT PRIMARY KEY, day TEXT NOT NULL, reserved_neurons REAL NOT NULL, created_at TEXT NOT NULL)");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS quota_reservations_day ON quota_reservations(day)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS tavily_credit_monthly (month TEXT PRIMARY KEY, used_credits REAL NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS tavily_credit_reservations (id TEXT PRIMARY KEY, month TEXT NOT NULL, reserved_credits REAL NOT NULL, created_at TEXT NOT NULL)");
+      ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS tavily_credit_reservations_month ON tavily_credit_reservations(month)");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS tasks_status_created ON tasks(status, created_at)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS resources (id TEXT PRIMARY KEY, resource_json TEXT NOT NULL, trust_state TEXT NOT NULL CHECK (trust_state IN ('quarantined','reviewed','approved','rejected','stale')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, reviewer TEXT, reviewed_at TEXT, review_evidence TEXT NOT NULL DEFAULT '[]')");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS resources_state_updated ON resources(trust_state, updated_at DESC)");
@@ -104,6 +107,38 @@ export class MemoryStore extends DurableObject<Env> {
 
 
 
+    if (request.method === "POST" && url.pathname === "/v1/research/credits/reserve") {
+      const body = await readBody(request);
+      const month = now.slice(0, 7);
+      if (!body || Object.keys(body).some(key => key !== "credits") || body.credits !== 1) return json({ error: "A single basic-search credit reservation is required." }, 400);
+      const stale = this.ctx.storage.sql.exec<{ id: string; month: string; reserved_credits: number }>(
+        "SELECT id,month,reserved_credits FROM tavily_credit_reservations WHERE created_at < ?",
+        new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+      ).toArray();
+      for (const item of stale) {
+        this.ctx.storage.sql.exec("INSERT INTO tavily_credit_monthly (month,used_credits,updated_at) VALUES (?,?,?) ON CONFLICT(month) DO UPDATE SET used_credits=used_credits+excluded.used_credits,updated_at=excluded.updated_at", item.month, item.reserved_credits, now);
+        this.ctx.storage.sql.exec("DELETE FROM tavily_credit_reservations WHERE id=?", item.id);
+      }
+      const used = this.ctx.storage.sql.exec<{ used_credits: number }>("SELECT used_credits FROM tavily_credit_monthly WHERE month=? LIMIT 1", month).toArray()[0]?.used_credits ?? 0;
+      const reserved = this.ctx.storage.sql.exec<{ total: number }>("SELECT COALESCE(SUM(reserved_credits),0) AS total FROM tavily_credit_reservations WHERE month=?", month).one().total;
+      const limit = 800;
+      if (used + reserved + 1 > limit) return json({ error: "Eve's monthly Tavily safety budget is exhausted. No search request was sent.", reason_code: "tavily_monthly_credit_budget_reached", month, used_credits: used, reserved_credits: reserved, monthly_limit: limit }, 429);
+      const id = crypto.randomUUID();
+      this.ctx.storage.sql.exec("INSERT INTO tavily_credit_reservations (id,month,reserved_credits,created_at) VALUES (?,?,1,?)", id, month, now);
+      return json({ reservation_id: id, month, reserved_credits: 1, used_credits: used, monthly_limit: limit });
+    }
+    if (request.method === "POST" && url.pathname === "/v1/research/credits/settle") {
+      const body = await readBody(request);
+      if (!body || Object.keys(body).some(key => !["reservation_id","actual_credits"].includes(key)) ||
+          typeof body.reservation_id !== "string" || !/^[0-9a-f-]{36}$/i.test(body.reservation_id) ||
+          (body.actual_credits !== undefined && (typeof body.actual_credits !== "number" || !Number.isFinite(body.actual_credits) || body.actual_credits < 0 || body.actual_credits > 10))) return json({ error: "Invalid Tavily credit settlement." }, 400);
+      const reservation = this.ctx.storage.sql.exec<{ id: string; month: string; reserved_credits: number }>("SELECT * FROM tavily_credit_reservations WHERE id=? LIMIT 1", body.reservation_id).toArray()[0];
+      if (!reservation) return json({ error: "Tavily credit reservation not found or already settled." }, 404);
+      const charged = body.actual_credits === undefined ? reservation.reserved_credits : body.actual_credits;
+      this.ctx.storage.sql.exec("INSERT INTO tavily_credit_monthly (month,used_credits,updated_at) VALUES (?,?,?) ON CONFLICT(month) DO UPDATE SET used_credits=used_credits+excluded.used_credits,updated_at=excluded.updated_at", reservation.month, charged, now);
+      this.ctx.storage.sql.exec("DELETE FROM tavily_credit_reservations WHERE id=?", reservation.id);
+      return json({ settled: true, month: reservation.month, charged_credits: charged });
+    }
     if (request.method === "GET" && ["/v1/quota/status", "/v1/owner/quota/status"].includes(url.pathname)) {
       const day = now.slice(0, 10);
       const daily = this.ctx.storage.sql.exec<{
