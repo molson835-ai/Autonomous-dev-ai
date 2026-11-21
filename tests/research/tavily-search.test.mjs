@@ -2,11 +2,21 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { searchTavily } from "../../agent/research/tavily-search.mjs";
 
+let reservationSequence = 0;
+function runSearch(query, options, dependencies = {}) {
+  return searchTavily(query, options, {
+    creditLedgerRequest: async path => path.endsWith("/reserve")
+      ? { reservation_id: `00000000-0000-4000-8000-${String(++reservationSequence).padStart(12, "0")}` }
+      : { settled: true },
+    ...dependencies,
+  });
+}
+
 const response = (payload, status = 200) => new Response(JSON.stringify(payload), { status, headers: { "content-type": "application/json" } });
 
 test("requires explicit verified-free-plan flag before making any request", async () => {
   let calls = 0;
-  await assert.rejects(searchTavily("seller inventory tools", {}, {
+  await assert.rejects(runSearch("seller inventory tools", {}, {
     apiKey: "test-only-key", freePlanVerified: false,
     fetchImpl: async () => { calls++; return response({ results: [], usage: { credits: 1 } }); },
   }), /no-cost plan and billing limits are verified/);
@@ -15,7 +25,7 @@ test("requires explicit verified-free-plan flag before making any request", asyn
 
 test("requires an API key after free-plan verification", async () => {
   let calls = 0;
-  await assert.rejects(searchTavily("seller inventory tools", {}, {
+  await assert.rejects(runSearch("seller inventory tools", {}, {
     apiKey: "", freePlanVerified: true,
     fetchImpl: async () => { calls++; return response({ results: [], usage: { credits: 1 } }); },
   }), /TAVILY_API_KEY is not configured/);
@@ -24,7 +34,7 @@ test("requires an API key after free-plan verification", async () => {
 
 test("uses bounded basic safe search and returns only sanitized HTTPS results", async () => {
   let captured;
-  const result = await searchTavily("seller inventory tools", { maxResults: 2, topic: "general", timeRange: "month" }, {
+  const result = await runSearch("seller inventory tools", { maxResults: 2, topic: "general", timeRange: "month" }, {
     apiKey: "test-only-key", freePlanVerified: true,
     fetchImpl: async (url, init) => {
       captured = { url, init, body: JSON.parse(init.body) };
@@ -52,7 +62,7 @@ test("uses bounded basic safe search and returns only sanitized HTTPS results", 
 });
 
 test("rejects missing usage accounting before accepting results", async () => {
-  await assert.rejects(searchTavily("seller inventory tools", {}, {
+  await assert.rejects(runSearch("seller inventory tools", {}, {
     apiKey: "test-key", freePlanVerified: true,
     fetchImpl: async () => response({ results: [{ url: "https://example.com" }] }),
   }), /usage was not reported/);
@@ -62,14 +72,14 @@ test("rejects invalid inputs before network access", async () => {
   let calls = 0;
   const fetchImpl = async () => { calls++; return response({ results: [], usage: { credits: 1 } }); };
   for (const [query, options] of [["x", {}], ["valid query", { maxResults: 6 }], ["valid query", { maxResults: 0 }], ["valid query", { topic: "finance" }], ["valid query", { timeRange: "decade" }]]) {
-    await assert.rejects(searchTavily(query, options, { apiKey: "test-key", freePlanVerified: true, fetchImpl }));
+    await assert.rejects(runSearch(query, options, { apiKey: "test-key", freePlanVerified: true, fetchImpl }));
   }
   assert.equal(calls, 0);
 });
 
 test("stops on exhausted quota without retry or paid fallback", async () => {
   let calls = 0;
-  await assert.rejects(searchTavily("seller inventory tools", {}, {
+  await assert.rejects(runSearch("seller inventory tools", {}, {
     apiKey: "test-key", freePlanVerified: true,
     fetchImpl: async () => { calls++; return response({ detail: "quota" }, 432); },
   }), /quota or plan limit reached/);
@@ -78,7 +88,7 @@ test("stops on exhausted quota without retry or paid fallback", async () => {
 
 test("does not retry rate limits or disclose provider response details", async () => {
   let calls = 0;
-  await assert.rejects(searchTavily("seller inventory tools", {}, {
+  await assert.rejects(runSearch("seller inventory tools", {}, {
     apiKey: "test-key", freePlanVerified: true,
     fetchImpl: async () => { calls++; return response({ detail: "secret provider text" }, 429); },
   }), error => {
@@ -90,7 +100,7 @@ test("does not retry rate limits or disclose provider response details", async (
 });
 
 test("rejects unauthorized credentials without exposing the key", async () => {
-  await assert.rejects(searchTavily("seller inventory tools", {}, {
+  await assert.rejects(runSearch("seller inventory tools", {}, {
     apiKey: "never-print-this", freePlanVerified: true,
     fetchImpl: async () => response({ detail: "unauthorized" }, 401),
   }), error => {
@@ -98,4 +108,31 @@ test("rejects unauthorized credentials without exposing the key", async () => {
     assert.doesNotMatch(error.message, /never-print-this/);
     return true;
   });
+});
+
+
+test("requires a successful durable reservation before sending a Tavily request", async () => {
+  let searchCalls = 0;
+  await assert.rejects(runSearch("seller inventory tools", {}, {
+    creditLedgerRequest: async () => { throw new Error("monthly budget reached"); },
+    apiKey: "test-key", freePlanVerified: true,
+    fetchImpl: async () => { searchCalls++; return response({ results: [], usage: { credits: 1 } }); },
+  }), /monthly budget reached/);
+  assert.equal(searchCalls, 0);
+});
+
+test("settles the exact reported usage and conservatively charges ambiguous requests", async () => {
+  const ledgerCalls = [];
+  await runSearch("seller inventory tools", {}, {
+    apiKey: "test-key", freePlanVerified: true,
+    creditLedgerRequest: async (path, body) => {
+      ledgerCalls.push({ path, body });
+      return path.endsWith("/reserve") ? { reservation_id: "00000000-0000-4000-8000-000000000001" } : { settled: true };
+    },
+    fetchImpl: async () => response({ results: [], usage: { credits: 2 } }),
+  });
+  assert.deepEqual(ledgerCalls, [
+    { path: "/v1/research/credits/reserve", body: { credits: 1 } },
+    { path: "/v1/research/credits/settle", body: { reservation_id: "00000000-0000-4000-8000-000000000001", actual_credits: 2 } },
+  ]);
 });

@@ -39,6 +39,14 @@ function request(path: string, init: RequestInit = {}, credential = token) {
   );
 }
 
+function tavilyCreditRequest(path: "/v1/research/credits/reserve" | "/v1/research/credits/settle", body: Record<string, unknown>) {
+  return exports.default.fetch(new Request(new URL(path, endpoint), {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "cf-connecting-ip": "203.0.113.1" },
+    body: JSON.stringify(body),
+  }));
+}
+
 function quotaRequest(reserveNeurons = 200) {
   return exports.default.fetch(new Request(new URL("/v1/quota/reserve", endpoint), {
     method: "POST",
@@ -53,6 +61,48 @@ function quotaControlRequest(path: "/v1/quota/settle" | "/v1/quota/circuit" | "/
     ...(body ? { body: JSON.stringify(body) } : {}),
   }));
 }
+describe("durable monthly Tavily credit budget", () => {
+  it("requires a one-credit reservation and charges reported usage exactly once", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-12-03T12:00:00.000Z"));
+    const invalid = await tavilyCreditRequest("/v1/research/credits/reserve", { credits: 2 });
+    expect(invalid.status).toBe(400);
+    const reserved = await tavilyCreditRequest("/v1/research/credits/reserve", { credits: 1 });
+    expect(reserved.status).toBe(200);
+    const { reservation_id } = await reserved.json<{ reservation_id: string; monthly_limit: number }>();
+    const settled = await tavilyCreditRequest("/v1/research/credits/settle", { reservation_id, actual_credits: 2 });
+    expect(settled.status).toBe(200);
+    expect(await settled.json()).toMatchObject({ settled: true, charged_credits: 2, month: "2026-12" });
+    expect((await tavilyCreditRequest("/v1/research/credits/settle", { reservation_id, actual_credits: 2 })).status).toBe(404);
+  });
+
+  it("blocks reservations at 800 credits and keeps abandoned reservations charged", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2027-01-03T12:00:00.000Z"));
+    let finalReservation = "";
+    for (let i = 0; i < 800; i += 1) {
+      const response = await tavilyCreditRequest("/v1/research/credits/reserve", { credits: 1 });
+      expect(response.status).toBe(200);
+      const body = await response.json<{ reservation_id: string }>();
+      finalReservation = body.reservation_id;
+    }
+    const blocked = await tavilyCreditRequest("/v1/research/credits/reserve", { credits: 1 });
+    expect(blocked.status).toBe(429);
+    expect(await blocked.json()).toMatchObject({ reason_code: "tavily_monthly_credit_budget_reached", monthly_limit: 800 });
+    vi.setSystemTime(new Date("2027-01-05T13:00:01.000Z"));
+    const stillBlocked = await tavilyCreditRequest("/v1/research/credits/reserve", { credits: 1 });
+    expect(stillBlocked.status).toBe(429);
+    expect(finalReservation).toMatch(/[0-9a-f-]{36}/i);
+  });
+
+  it("requires the shared Worker credential for reserve and settlement", async () => {
+    const denied = await exports.default.fetch(new Request(new URL("/v1/research/credits/reserve", endpoint), {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ credits: 1 }),
+    }));
+    expect(denied.status).toBe(401);
+  });
+});
+
 describe("shared daily neuron quota coordinator", () => {
   it("requires auth and rejects caller-supplied reservation sizes or usage", async () => {
     vi.useFakeTimers();
