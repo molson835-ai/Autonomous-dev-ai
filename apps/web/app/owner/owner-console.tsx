@@ -30,6 +30,17 @@ type Proposal = {
 
 type Resource = { id: string; resource: Record<string, unknown> | null; trust_state: string; created_at: string; reviewer: string | null; reviewed_at: string | null; review_evidence: string[] };
 type QueueStatus = { queue_paused: boolean; reason: string | null; running_tasks: number; queued_tasks: number; updated_at: string };
+type TavilyCreditStatus = {
+  month: string;
+  source: string;
+  monthly_limit: number;
+  used_credits: number;
+  reserved_credits: number;
+  outstanding_reservations: number;
+  oldest_outstanding_reservation_at: string | null;
+  remaining_budget: number;
+  updated_at: string | null;
+};
 type QuotaStatus = {
   day: string;
   source: string;
@@ -93,6 +104,7 @@ export default function OwnerConsole() {
   const [resources, setResources] = useState<Resource[]>([]);
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const [quotaStatus, setQuotaStatus] = useState<QuotaStatus | null>(null);
+  const [tavilyCreditStatus, setTavilyCreditStatus] = useState<TavilyCreditStatus | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -106,18 +118,20 @@ export default function OwnerConsole() {
     setBusy("load");
     setMessage("");
     try {
-      const [taskData, proposalData, statusData, resourceData, quotaData] = await Promise.all([
+      const [taskData, proposalData, statusData, resourceData, quotaData, tavilyData] = await Promise.all([
         ownerRequest<{ tasks: Task[] }>("/v1/owner/tasks?limit=30"),
         ownerRequest<{ proposals: Proposal[] }>("/v1/owner/proposals?limit=30"),
         ownerRequest<QueueStatus>("/v1/owner/status"),
         ownerRequest<{ resources: Resource[] }>("/v1/owner/resources?limit=50"),
         ownerRequest<QuotaStatus>("/v1/owner/quota/status").catch(() => null),
+        ownerRequest<TavilyCreditStatus>("/v1/owner/research/credits/status").catch(() => null),
       ]);
       setTasks(taskData.tasks);
       setProposals(proposalData.proposals);
       setResources(resourceData.resources);
       setQueueStatus(statusData);
       setQuotaStatus(quotaData);
+      setTavilyCreditStatus(tavilyData);
       setLoaded(true);
       setMessage("Owner review data loaded. Your GitHub identity is verified server-side.");
       return true;
@@ -238,6 +252,7 @@ export default function OwnerConsole() {
     setResources([]);
     setQueueStatus(null);
     setQuotaStatus(null);
+    setTavilyCreditStatus(null);
     setLoaded(false);
     setMessage("Signed out of the owner console.");
     setBusy(null);
@@ -323,6 +338,27 @@ export default function OwnerConsole() {
               {quotaStatus.circuit_open && <p className="text-sm">A confirmed provider quota error opened the safety circuit. This cannot be cleared by changing local estimates.</p>}
             </section>
           )}
+          <section className="space-y-2 rounded-xl border bg-card p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-semibold">Tavily monthly research credits</h2>
+              <span className="text-xs font-medium">{tavilyCreditStatus ? tavilyCreditStatus.month : "Status unavailable"}</span>
+            </div>
+            {tavilyCreditStatus ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  {tavilyCreditStatus.used_credits.toLocaleString()} settled · {tavilyCreditStatus.reserved_credits.toLocaleString()} reserved · {tavilyCreditStatus.remaining_budget.toLocaleString()} remaining of {tavilyCreditStatus.monthly_limit.toLocaleString()} Eve-budget credits
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {tavilyCreditStatus.outstanding_reservations.toLocaleString()} outstanding reservation(s)
+                  {tavilyCreditStatus.oldest_outstanding_reservation_at ? " · Oldest: " + new Date(tavilyCreditStatus.oldest_outstanding_reservation_at).toLocaleString() : ""}
+                </p>
+                {tavilyCreditStatus.updated_at && <p className="text-xs text-muted-foreground">Last settlement update: {new Date(tavilyCreditStatus.updated_at).toLocaleString()}</p>}
+                <p className="text-xs text-muted-foreground">Source: Eve's Cloudflare Durable Object ledger ({tavilyCreditStatus.source}). This is not Tavily account-wide usage; manual searches and other API keys/apps are excluded. The 200-credit headroom below the advertised 1,000-credit free allowance is a buffer, not an account-wide provider limit.</p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Could not load the owner-only Tavily ledger status. Use Refresh reviews to retry. No search or ledger mutation is performed by this panel.</p>
+            )}
+          </section>
           {queueStatus && (
             <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4">
               <div className="space-y-1">
