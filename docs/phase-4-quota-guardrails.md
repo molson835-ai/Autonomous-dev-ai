@@ -28,6 +28,8 @@ Keep Eve productive within the existing no-cost Workers AI allowance by charging
 - It explicitly identifies its source as `local_model_estimate_not_provider_telemetry`.
 - The endpoint does not reset, clear, or rewrite the ledger.
 - Quota errors expose only a small allowlist of reason codes; raw Worker response text is not passed into Eve's prompt or UI.
+- Model middleware reservation failures now include a safe low-cardinality error name, endpoint category, and allowlisted reason code in runtime error telemetry. Unknown response bodies, URLs, credentials, and task content are never copied into the diagnostic.
+- This distinction is important because a scheduled run may successfully complete one model/tool step and fail before its next model call when the next reservation is rejected.
 
 ## Reduce model calls
 
