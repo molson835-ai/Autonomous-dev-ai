@@ -4,7 +4,7 @@ import { searchTavily } from "../../agent/research/tavily-search.mjs";
 
 let reservationSequence = 0;
 function runSearch(query, options, dependencies = {}) {
-  return runSearch(query, options, {
+  return searchTavily(query, options, {
     creditLedgerRequest: async path => path.endsWith("/reserve")
       ? { reservation_id: `00000000-0000-4000-8000-${String(++reservationSequence).padStart(12, "0")}` }
       : { settled: true },
