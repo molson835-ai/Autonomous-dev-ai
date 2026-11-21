@@ -82,13 +82,11 @@ export async function searchTavily(query, options = {}, dependencies = {}) {
   if (typeof reservation?.reservation_id !== "string") throw new Error("The durable Tavily credit ledger returned an invalid reservation.");
   let response;
   let payload = null;
-  let settled = false;
   const settle = async actualCredits => {
     await requestCreditLedger("/v1/research/credits/settle", {
       reservation_id: reservation.reservation_id,
       ...(actualCredits === undefined ? {} : { actual_credits: actualCredits }),
     }, dependencies);
-    settled = true;
   };
   try {
     response = await fetchImpl(TAVILY_SEARCH_ENDPOINT, {
