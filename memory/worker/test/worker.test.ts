@@ -199,6 +199,74 @@ describe("shared daily neuron quota coordinator", () => {
     expect(blocked.status).toBe(429);
     expect(await blocked.json()).toMatchObject({ reason_code: "quota_circuit_open" });
   });
+  it("does not claim approved work when the local neuron target is already reached", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-27T12:00:00.000Z"));
+    const create = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
+      idempotency_key: `TASK-QUOTA-PREFLIGHT-LOCAL-${crypto.randomUUID()}`,
+      task_type: "verification", title: "Quota preflight local-budget test",
+      goal: "Verify a blocked model call does not consume an attempt",
+      approved_scope: "Isolated regression test only"
+    }) });
+    const { task } = await create.json<{ task: { id: string } }>();
+    await request(`/v1/tasks/${task.id}/approve`, { method: "POST", body: JSON.stringify({ scope_id: "testing" }) }, ownerToken);
+
+    for (let i = 0; i < 5; i += 1) {
+      const reservation = await quotaRequest(1200);
+      expect(reservation.status).toBe(200);
+      const { reservation_id } = await reservation.json<{ reservation_id: string }>();
+      expect((await quotaControlRequest("/v1/quota/settle", { reservation_id, actual_neurons: 1200 })).status).toBe(200);
+    }
+    for (let i = 0; i < 5; i += 1) {
+      const reservation = await quotaRequest(200);
+      expect(reservation.status).toBe(200);
+      const { reservation_id } = await reservation.json<{ reservation_id: string }>();
+      expect((await quotaControlRequest("/v1/quota/settle", { reservation_id, actual_neurons: 200 })).status).toBe(200);
+    }
+
+    const blocked = await request("/v1/tasks/claim-next", { method: "POST" });
+    expect(await blocked.json()).toMatchObject({
+      task: null, quota_blocked: true, reason_code: "local_neuron_budget_reached"
+    });
+    const unchanged = await request(`/v1/tasks/${task.id}`);
+    expect((await unchanged.json<{ task: { status: string; attempt_count: number } }>()).task)
+      .toMatchObject({ status: "queued", attempt_count: 0 });
+    await request(`/v1/tasks/${task.id}/owner-control`, {
+      method: "POST", body: JSON.stringify({ action: "pause" })
+    }, ownerToken);
+  });
+
+  it("does not claim approved work when the provider quota circuit is already open", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-28T12:00:00.000Z"));
+    const create = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
+      idempotency_key: `TASK-QUOTA-PREFLIGHT-CIRCUIT-${crypto.randomUUID()}`,
+      task_type: "verification", title: "Quota preflight circuit test",
+      goal: "Verify a provider quota block does not consume an attempt",
+      approved_scope: "Isolated regression test only"
+    }) });
+    const { task } = await create.json<{ task: { id: string } }>();
+    await request(`/v1/tasks/${task.id}/approve`, { method: "POST", body: JSON.stringify({ scope_id: "testing" }) }, ownerToken);
+
+    const reservation = await quotaRequest();
+    expect(reservation.status).toBe(200);
+    const { reservation_id } = await reservation.json<{ reservation_id: string }>();
+    expect((await quotaControlRequest("/v1/quota/circuit", {
+      reservation_id, reason: "cloudflare_daily_quota_exhausted"
+    })).status).toBe(200);
+
+    const blocked = await request("/v1/tasks/claim-next", { method: "POST" });
+    expect(await blocked.json()).toMatchObject({
+      task: null, quota_blocked: true, reason_code: "quota_circuit_open"
+    });
+    const unchanged = await request(`/v1/tasks/${task.id}`);
+    expect((await unchanged.json<{ task: { status: string; attempt_count: number } }>()).task)
+      .toMatchObject({ status: "queued", attempt_count: 0 });
+    await request(`/v1/tasks/${task.id}/owner-control`, {
+      method: "POST", body: JSON.stringify({ action: "pause" })
+    }, ownerToken);
+  });
+
   it("exposes authenticated read-only quota status and labels estimates accurately", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-11-23T12:00:00.000Z"));
