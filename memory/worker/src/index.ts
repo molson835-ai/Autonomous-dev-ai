@@ -401,6 +401,25 @@ export class MemoryStore extends DurableObject<Env> {
     }
 
     if (request.method === "POST" && url.pathname === "/v1/tasks/claim-next") {
+      // Do not consume a task attempt when the next model call is already blocked.
+      // This is a best-effort preflight; quota can still change after this check.
+      const quotaDay = now.slice(0, 10);
+      const quotaDaily = this.ctx.storage.sql.exec<{
+        day: string; baseline_neurons: number; observed_neurons: number;
+        local_estimated_neurons: number; circuit_open: number;
+      }>("SELECT * FROM quota_daily WHERE day=? LIMIT 1", quotaDay).toArray()[0];
+      const quotaActive = this.ctx.storage.sql.exec<{ total: number }>(
+        "SELECT COALESCE(SUM(reserved_neurons),0) AS total FROM quota_reservations WHERE day=?", quotaDay
+      ).one().total;
+      const quotaProjected = quotaDaily
+        ? Math.max(quotaDaily.observed_neurons, quotaDaily.baseline_neurons + quotaDaily.local_estimated_neurons) + quotaActive
+        : quotaActive;
+      if (quotaDaily?.circuit_open === 1) {
+        return json({ task: null, quota_blocked: true, reason_code: "quota_circuit_open" });
+      }
+      if (quotaProjected + 200 > 7000) {
+        return json({ task: null, quota_blocked: true, reason_code: "local_neuron_budget_reached" });
+      }
       const control = this.ctx.storage.sql.exec<{ queue_paused: number; reason: string | null }>("SELECT queue_paused,reason FROM task_control WHERE id=1").one();
       if (control.queue_paused === 1) return json({ task: null, paused: true, reason: control.reason });
       const runningRow = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE status='running' ORDER BY updated_at ASC LIMIT 1").toArray()[0];
