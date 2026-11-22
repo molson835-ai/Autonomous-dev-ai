@@ -189,7 +189,9 @@ describe("shared daily neuron quota coordinator", () => {
   });
   it("keeps a failed-provider circuit open and identifies it distinctly", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-11-22T12:00:00.000Z"));
+    // Keep this simulated circuit date away from the runner's real UTC date,
+    // because the task-claim preflight reads the same daily quota ledger.
+    vi.setSystemTime(new Date("2026-11-29T12:00:00.000Z"));
     const reserved = await quotaRequest();
     const { reservation_id } = await reserved.json<{ reservation_id: string }>();
     expect((await quotaControlRequest("/v1/quota/circuit", {
