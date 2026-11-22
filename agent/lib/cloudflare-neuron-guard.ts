@@ -1,6 +1,7 @@
 import type { LanguageModelV4Middleware } from "@ai-sdk/provider";
 import { memoryRequest } from "./memory-client";
 import { estimateGlm47FlashNeurons } from "./neuron-budget.mjs";
+import { handleStreamReadFailure } from "./stream-quota-error.mjs";
 const MODEL_ID = "@cf/zai-org/glm-4.7-flash";
 const MAX_OUTPUT_TOKENS = 1024;
 const RESERVATION_NEURONS = 200;
@@ -81,7 +82,18 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
           } catch (error) {
             if (!settled) {
               settled = true;
-              try { await settle(id); } catch { /* Keep the reservation fail-closed. */ }
+              try {
+                await handleStreamReadFailure({
+                  error,
+                  reservationId: id,
+                  settle: async (reservationId) => settle(reservationId),
+                  circuit: async (reservationId) => circuit(reservationId),
+                  isQuotaError,
+                  nonRetryableQuotaError,
+                });
+              } catch (handledError) {
+                error = handledError;
+              }
             }
             try { reader.releaseLock(); } catch { /* Reader may already be released. */ }
             controller.error(error);
