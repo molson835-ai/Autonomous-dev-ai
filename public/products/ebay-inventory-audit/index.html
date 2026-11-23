@@ -82,7 +82,7 @@
     latest = null;
     results.hidden = true;
     document.querySelector("#export").disabled = true;
-    status.textContent = "";
+    status.textContent = [activeInput.files?.[0], inventoryInput.files?.[0]].filter(Boolean).length === 2 ? "Both CSV files selected. Tap Run reconciliation." : "Select both CSV files to enable reconciliation.";
     status.className = "";
   };
   activeInput.addEventListener("change", onFilesChanged);
@@ -95,7 +95,7 @@
       status.textContent = `${oversized.name} is larger than 10 MB. Split the CSV into smaller files and try again.`;
       return;
     }
-    if (selected.some(file => file && !/\\.csv$/i.test(file.name) && file.type !== "text/csv")) {
+    if (selected.some(file => file && !file.name.toLowerCase().endsWith(".csv"))) {
       status.className = "error";
       status.textContent = "Please select CSV files only.";
       return;
@@ -139,7 +139,7 @@
   });
   document.querySelector("#export").addEventListener("click", () => {
     if (!latest?.issues.length) return;
-    const blob = new Blob(["\\uFEFF", issuesToCsv(latest.issues)], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob(["\uFEFF", issuesToCsv(latest.issues)], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url; link.download = "listing-stock-issues.csv"; link.click();

@@ -126,6 +126,14 @@ test("rejects CSV input above the bounded row count", () => {
 });
 
 
+test("seller audit UI accepts CSV filenames independent of Android MIME types and gives selection feedback", () => {
+  const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const html = readFileSync(resolve(root, "products/ebay-inventory-audit/index.html"), "utf8");
+  assert.match(html, /file\.name\.toLowerCase\(\)\.endsWith\("\.csv"\)/);
+  assert.match(html, /Both CSV files selected\. Tap Run reconciliation\./);
+  assert.doesNotMatch(html, /\\\\\.csv\$\/i\.test/);
+});
+
 test("deployed seller audit copies stay byte-for-byte aligned with the canonical product", () => {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
   for (const file of ["index.html", "reconcile.mjs"]) {
