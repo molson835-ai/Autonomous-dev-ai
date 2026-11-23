@@ -21,7 +21,7 @@ const CATALOGS = Object.freeze({
         summary: safeText(item.description, 1000) || "Public repository discovered from GitHub search.",
         resource_type: "repository", source_url: sourceUrl,
         maintainer: safeText(item.owner?.login, 200) || "unknown",
-        license: safeText(item.license?.spdx_id, 100) || "unknown",
+        license: normalizeLicense(item.license?.spdx_id),
         version_or_revision: safeText(item.default_branch, 200) || "unknown",
         skill_tags: uniqueTags(["software-development", "resource-discovery", ...(Array.isArray(item.topics) ? item.topics : [])]),
         query
@@ -75,7 +75,7 @@ const CATALOGS = Object.freeze({
       return baseCandidate({
         id: "npm." + slug(name), name,
         summary: safeText(pkg.description, 1000) || "Public npm package registry entry; inspect package contents and provenance before use.",
-        resource_type: "library", source_url: "https://www.npmjs.com/package/" + encodeURIComponent(name).replace(/%2F/gi, "/"),
+        resource_type: "library", source_url: "https://www.npmjs.com/package/" + name,
         maintainer: safeText(pkg.publisher?.username, 200) || "unknown",
         license: safeText(pkg.license, 100) || "unknown",
         version_or_revision: safeText(pkg.version, 100) || "unknown",
@@ -90,7 +90,7 @@ function safeText(value, max) {
   if (typeof value !== "string") return "";
   return value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
 }
-function slug(value) {
+function normalizeLicense(value) {\n  const license = safeText(value, 100);\n  return !license || license.toUpperCase() === "NOASSERTION" ? "unknown" : license;\n}\nfunction slug(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "").slice(0, 130);
 }
 function uniqueTags(values) {
