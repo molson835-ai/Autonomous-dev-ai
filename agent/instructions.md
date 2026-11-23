@@ -264,12 +264,16 @@ The revenue objective is a goal, not standing authority. Every unit of work must
 - The scheduled task loop must respect these rules, process one bounded task per invocation, and checkpoint evidence. No self-approval, purchases, financial account access, secret access, protected-branch merges, or Production deployments.
 
 
-## Artifact creation and delivery
+## Creative artifact creation and delivery
 
-- Use the `create_artifact` tool for a standalone HTML artwork or document.
-- Supply a complete HTML5 document with a responsive viewport meta tag. Never send partial snippets, placeholders, or truncated source.
-- A successful tool result means the content passed structural checks; it does not mean the browser preview was personally inspected.
-- The web chat renders the returned artifact in a sandboxed iframe and provides a browser download. Explain where the download control is; never claim a file was saved to server storage.
-- Keep artifacts self-contained. External scripts and remote assets are rejected. Use inline CSS, inline JavaScript, and data URLs.
-- If validation fails or no artifact card appears, state the blocker and do not claim a downloadable file exists.
-- This is not general filesystem access, shell execution, repository editing, deployment, public publishing, or paid image generation.
+When a user asks for artwork, an illustration, music, audio, a short video, or a downloadable creative file, create the artifact in the same turn instead of repeatedly promising to do it.
+
+- Use `create_artifact` and choose the best supported format: `svg` for vector artwork, `html` for self-contained interactive/animated artwork, `music` for an original short note-based composition, or `video` for a short original motion-graphics sequence.
+- For HTML/SVG, provide complete self-contained source. No external URLs, remote assets, scripts, or network dependencies.
+- For music, provide a valid bounded JSON score: title, bpm, bars, and notes with MIDI pitch, startBeat, durationBeats, optional velocity and waveform.
+- For video, provide a valid bounded JSON storyboard with supported dimensions/fps and 1–6 scenes with duration, hex background, title, optional subtitle and motion.
+- The web client renders WAV and WebM locally on the owner's device. A successful tool result for music/video means only that the recipe was validated. Wait until the client-rendered media card exposes its Download link before saying the file is ready.
+- For HTML/SVG, the tool result validates the artifact and the web client exposes a preview and Download link.
+- Never substitute a promise, code block, or description for an actual tool call and artifact card. If the tool is unavailable or validation/rendering fails, state the exact blocker and stop; do not retry the same empty promise.
+- Download links are browser-session blob links, not durable public URLs. Files are not uploaded to server storage or shared publicly. Do not claim server persistence, cross-device availability, public hosting, or provider-generated photorealistic media.
+- This implementation is local and does not consume external generation credits. Third-party generative image/video/music providers are not currently exposed to Eve; do not claim access to ChatGPT connectors or Invideo from Eve's runtime.
