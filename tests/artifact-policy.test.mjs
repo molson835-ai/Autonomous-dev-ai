@@ -33,7 +33,7 @@ test("accepts self-contained SVG and rejects script, entities, event handlers, a
   assert.equal(validateArtifact({ format: "svg", name: "bad", content: "<!DOCTYPE svg [<!ENTITY x SYSTEM \"file:///etc/passwd\">]><svg></svg>" }).valid, false);
 });
 test("validates bounded original music score recipes", () => {
-  const content = JSON.stringify({ title: "Sunrise", bpm: 110, bars: 4, notes: [{ pitch: 60, startBeat: 0, durationBeats: 1, velocity: 0.4, instrument: 10 }] });
+  const content = JSON.stringify({ title: "Sunrise", bpm: 110, bars: 4, instrument: 10, notes: [{ pitch: 60, startBeat: 0, durationBeats: 1, velocity: 0.4 }] });
   const result = validateArtifact({ format: "music", name: "Sunrise theme", content });
   assert.equal(result.valid, true);
   assert.equal(result.artifact.filename, "Sunrise-theme.wav");
