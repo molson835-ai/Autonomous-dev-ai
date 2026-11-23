@@ -43,7 +43,7 @@ function validateSvg(input, errors) {
   if (byteLength(input.content) > MAX_ARTIFACT_BYTES) errors.push("SVG artifact exceeds the 64 KiB limit.");
   if (!/^\s*<svg\b/i.test(input.content) || !/<\/svg\s*>\s*$/i.test(input.content)) errors.push("Provide one complete SVG root element.");
   if (/<\!DOCTYPE|<\!ENTITY|<script\b|\bon[a-z]+\s*=|javascript:|<foreignObject\b|(?:href|xlink:href)\s*=\s*["']\s*(?:https?:|\/\/|file:|data:text\/html)/i.test(input.content)) errors.push("SVG DTDs, entities, scripts, event handlers, foreignObject, and remote links are prohibited.");
-  if (/url\s*\(|@import/i.test(input.content)) errors.push("SVG CSS imports and URL references are prohibited.");
+  if (/url\s*\(\s*["']?\s*(?:https?:|\/\/|file:|data:text\/html)|@import/i.test(input.content)) errors.push("SVG CSS imports and external URL references are prohibited.");
   if (errors.length) return invalid(errors);
   const previewHtml = "<!doctype html><html><head><meta http-equiv=" + JSON.stringify("Content-Security-Policy") + " content=" + JSON.stringify(CSP) + "></head><body style=" + JSON.stringify("margin:0") + ">" + input.content + "</body></html>";
   return result(input.name, "svg", "image/svg+xml;charset=utf-8", "svg", input.content, previewHtml);
@@ -59,19 +59,19 @@ function parseDescriptor(input, errors) {
 function validateMusic(input, errors) {
   const score = parseDescriptor(input, errors);
   if (!score) return invalid(errors);
-  if (Object.keys(score).some((key) => !["title", "bpm", "bars", "notes"].includes(key))) errors.push("Music score contains unsupported fields.");
+  if (Object.keys(score).some((key) => !["title", "bpm", "bars", "instrument", "notes"].includes(key))) errors.push("Music score contains unsupported fields.");
   if (typeof score.title !== "string" || score.title.trim().length < 1 || score.title.length > 100) errors.push("Music title is required and must be at most 100 characters.");
   if (!Number.isInteger(score.bpm) || score.bpm < 40 || score.bpm > 200) errors.push("bpm must be an integer from 40 to 200.");
   if (!Number.isInteger(score.bars) || score.bars < 1 || score.bars > 16) errors.push("bars must be an integer from 1 to 16.");
+  if (score.instrument !== undefined && (!Number.isInteger(score.instrument) || score.instrument < 0 || score.instrument > 127)) errors.push("instrument must be a General MIDI program from 0 to 127.");
   if (!Array.isArray(score.notes) || score.notes.length < 1 || score.notes.length > 128) errors.push("notes must contain 1–128 notes.");
   if (Array.isArray(score.notes)) for (const [i, note] of score.notes.entries()) {
     if (!note || typeof note !== "object" || Array.isArray(note)) { errors.push(`notes[${i}] must be an object.`); continue; }
-    if (Object.keys(note).some((key) => !["pitch", "startBeat", "durationBeats", "velocity", "waveform"].includes(key))) errors.push("A music note contains unsupported fields.");
+    if (Object.keys(note).some((key) => !["pitch", "startBeat", "durationBeats", "velocity"].includes(key))) errors.push("A music note contains unsupported fields.");
     if (!Number.isInteger(note.pitch) || note.pitch < 36 || note.pitch > 96) errors.push(`notes[${i}].pitch must be MIDI 36–96.`);
     if (!Number.isFinite(note.startBeat) || note.startBeat < 0 || note.startBeat >= score.bars * 4) errors.push("A note startBeat is out of range.");
     if (!Number.isFinite(note.durationBeats) || note.durationBeats <= 0 || note.durationBeats > 8) errors.push(`notes[${i}].durationBeats is out of range.`);
     if (note.velocity !== undefined && (!Number.isFinite(note.velocity) || note.velocity < 0 || note.velocity > 1)) errors.push(`notes[${i}].velocity must be 0–1.`);
-    if (note.waveform !== undefined && !["sine", "triangle", "square", "sawtooth"].includes(note.waveform)) errors.push(`notes[${i}].waveform is unsupported.`);
   }
   if (errors.length) return invalid(errors);
   return { valid: true, status: "media_recipe_validated", artifact: { name: input.name.trim(), filename: safeFilename(input.name, "wav"), format: "music", mediaType: "audio/wav", composition: score }, limits: { generation: "isolated-fluidsynth-rendering", network: false, serverPersistence: true, externalCredits: false } };
