@@ -167,3 +167,29 @@ test("keeps new metadata deeply immutable and refuses caller-supplied trust prom
   assert.equal(Object.isFrozen(entry.data_classes_allowed), true);
   assert.throws(() => prepareResourceCandidate({ ...base, trust_state: "approved" }), /Unsupported resource field/);
 });
+
+
+test("allows only the curated public resource catalog hosts", () => {
+  for (const url of [
+    "https://catalog.data.gov/",
+    "https://api.census.gov/data/",
+    "https://api.openalex.org/",
+    "https://api.crossref.org/",
+    "https://export.arxiv.org/",
+    "https://query.wikidata.org/",
+    "https://archive.org/metadata/",
+    "https://api.gdeltproject.org/",
+    "https://github.com/example/project",
+    "https://pypi.org/project/example/",
+    "https://huggingface.co/datasets/example/data",
+    "https://polyhaven.com/"
+  ]) assert.equal(isResourceHostAllowed(url), true, url);
+
+  for (const url of [
+    "https://api.census.gov.evil.example/",
+    "https://notgithub.com/",
+    "https://huggingface.co.evil.example/",
+    "https://freesound.org:443/",
+    "http://catalog.data.gov/"
+  ]) assert.equal(isResourceHostAllowed(url), false, url);
+});
