@@ -43,7 +43,8 @@ function validateSvg(input, errors) {
   if (!/^\s*<svg\b/i.test(input.content) || !/<\/svg\s*>\s*$/i.test(input.content)) errors.push("Provide one complete SVG root element.");
   if (/<script\b|\bon[a-z]+\s*=|javascript:|<foreignObject\b|(?:href|xlink:href)\s*=\s*["']\s*(?:https?:|\/\/|data:text\/html)/i.test(input.content)) errors.push("SVG scripts, event handlers, foreignObject, and remote or executable links are prohibited.");
   if (errors.length) return invalid(errors);
-  return result(input.name, "svg", "image/svg+xml;charset=utf-8", "svg", input.content, input.content);
+  const previewHtml = "<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="" + CSP + ""></head><body style="margin:0">" + input.content + "</body></html>";
+  return result(input.name, "svg", "image/svg+xml;charset=utf-8", "svg", input.content, previewHtml);
 }
 
 function parseDescriptor(input, errors) {
