@@ -82,7 +82,7 @@
     latest = null;
     results.hidden = true;
     document.querySelector("#export").disabled = true;
-    status.textContent = "";
+    status.textContent = [activeInput.files?.[0], inventoryInput.files?.[0]].filter(Boolean).length === 2 ? "Both CSV files selected. Tap Run reconciliation." : "Select both CSV files to enable reconciliation.";
     status.className = "";
   };
   activeInput.addEventListener("change", onFilesChanged);
