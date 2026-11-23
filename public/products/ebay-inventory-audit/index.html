@@ -18,8 +18,8 @@
     .files { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
     label { display: block; font-weight: 650; margin-bottom: 7px; }
     input[type=file] { display: block; width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 10px; background: #f8fafc; }
-    button { border: 0; border-radius: 10px; padding: 12px 16px; font-weight: 700; cursor: pointer; background: #155e75; color: white; margin: 14px 8px 0 0; }
-    button.secondary { background: #e2e8f0; color: #17212b; }
+    button, a.button { display: inline-block; border: 0; border-radius: 10px; padding: 12px 16px; font: inherit; font-weight: 700; cursor: pointer; background: #155e75; color: white; margin: 14px 8px 0 0; text-decoration: none; }
+    button.secondary, a.button.secondary { background: #e2e8f0; color: #17212b; }
     button:disabled { opacity: .5; cursor: not-allowed; }
     .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 16px 0; }
     .stat { background: #f1f5f9; padding: 13px; border-radius: 10px; }
@@ -49,8 +49,8 @@
       <div><label for="inventory">Physical inventory CSV</label><input id="inventory" type="file" accept=".csv,text/csv"><p class="muted">Required columns: SKU and Quantity. Title and Location are optional. Maximum file size: 10 MB.</p></div>
     </div>
     <button id="run" disabled>Run reconciliation</button>
-    <button id="sampleActive" class="secondary" type="button">Download active listings sample</button>
-    <button id="sampleInventory" class="secondary" type="button">Download physical inventory sample</button>
+    <a class="button secondary" href="./samples/sample-active-listings.csv" download="sample-active-listings.csv">Download active listings sample</a>
+    <a class="button secondary" href="./samples/sample-physical-inventory.csv" download="sample-physical-inventory.csv">Download physical inventory sample</a>
     <p id="status" role="status" aria-live="polite"></p>
   </section>
   <section id="results" hidden>
@@ -146,31 +146,7 @@
     link.href = url; link.download = "listing-stock-issues.csv"; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
-  const samples = {
-    active: {
-      name: "sample-active-listings.csv",
-      csv: "SKU,Title,Quantity\nA-100,Camping lantern,3\nB-200,Storage tote,2\nC-300,Water bottle,1\n"
-    },
-    inventory: {
-      name: "sample-physical-inventory.csv",
-      csv: "SKU,Title,Quantity,Location\nA-100,Camping lantern,2,Bin A1\nB-200,Storage tote,2,Bin B2\nD-400,Work gloves,5,Bin C3\n"
-    }
-  };
-  const downloadSample = sample => {
-    const url = URL.createObjectURL(new Blob(["\uFEFF", sample.csv], { type: "text/csv;charset=utf-8" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = sample.name;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    status.className = "";
-    status.textContent = `Download requested: ${sample.name}. If it does not appear, check your browser's Downloads folder and download permission.`;
-    // Keep the object URL alive long enough for mobile browsers to finish starting the download.
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  };
-  document.querySelector("#sampleActive").addEventListener("click", () => downloadSample(samples.active));
-  document.querySelector("#sampleInventory").addEventListener("click", () => downloadSample(samples.inventory));
+
 </script>
 </body>
 </html>
