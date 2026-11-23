@@ -1,0 +1,50 @@
+name: Build Eve creative worker image
+
+on:
+  push:
+    branches:
+      - feat/multimedia-artifact-creation
+    paths:
+      - "worker/creative/**"
+      - ".github/workflows/build-creative-worker.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eve-creative-worker-preview
+  cancel-in-progress: true
+
+jobs:
+  build-and-push-preview:
+    name: Build and push Preview worker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_SCOPE: molson835-3446
+      VERCEL_PROJECT: autonomous-dev-ai
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Verify token and authenticate Vercel Container Registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${VERCEL_TOKEN}" ]]; then
+            echo "::error::Repository secret VERCEL_TOKEN is missing or empty."
+            exit 1
+          fi
+          vercel whoami --token "$VERCEL_TOKEN" --scope "$VERCEL_SCOPE"
+          vercel vcr login docker --token "$VERCEL_TOKEN" --scope "$VERCEL_SCOPE" --project "$VERCEL_PROJECT"
+
+      - name: Build and push Preview worker image
+        run: vercel vcr build docker worker/creative eve-creative-worker:preview --push --token "$VERCEL_TOKEN" --scope "$VERCEL_SCOPE" --project "$VERCEL_PROJECT"
