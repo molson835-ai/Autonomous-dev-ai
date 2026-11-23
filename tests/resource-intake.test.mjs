@@ -100,7 +100,7 @@ test("accepts curated public resource hosts but rejects lookalikes and unlisted 
     "https://api.census.gov/data/",
     "https://huggingface.co/models",
     "https://github.com/org/repo",
-    "https://pypi.org/project/example/",
+    "https://pypi.org/project/example/",\n    "https://www.npmjs.com/package/@scope/sample-lib",
     "https://commons.wikimedia.org/wiki/Main_Page"
   ]) assert.equal(isResourceHostAllowed(url), true, url);
   for (const url of [
