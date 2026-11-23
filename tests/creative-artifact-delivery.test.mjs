@@ -7,6 +7,7 @@ const read = (path) => readFile(new URL("../" + path, import.meta.url), "utf8");
 test("creative renderer uses a fresh network-denied sandbox and private Blob storage", async () => {
   const source = await read("agent/lib/creative-renderer.ts");
   assert.match(source, /Sandbox\.create/);
+  assert.match(source, /if \(!WORKER_IMAGE\)/);
   assert.match(source, /networkPolicy:\s*"deny-all"/);
   assert.match(source, /persistent:\s*false/);
   assert.match(source, /resources:\s*\{\s*vcpus:\s*2\s*\}/);
