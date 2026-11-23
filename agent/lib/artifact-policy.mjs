@@ -32,7 +32,7 @@ function validateHtml(input, errors) {
   if (!/<head\b[\s>]/i.test(input.content) || !/<\/head\s*>/i.test(input.content)) errors.push("The HTML document must have a complete head element.");
   if (!/<body\b[\s>]/i.test(input.content) || !/<\/body\s*>/i.test(input.content)) errors.push("The HTML document must have a complete body element.");
   if (!/<meta\s+name=["']viewport["']/i.test(input.content)) errors.push("Include a responsive viewport meta tag for mobile preview.");
-  if (/<script\b[^>]*\bsrc\s*=/i.test(input.content) || /\s(?:src|href)\s*=\s*["']https?:\/\//i.test(input.content)) errors.push("External scripts and external asset URLs are not allowed in standalone artifacts.");
+  if (/<script\b[^>]*\bsrc\s*=|\s(?:src|href)\s*=\s*["'](?:https?:|\/\/|file:|javascript:)/i.test(input.content)) errors.push("External scripts and external asset URLs are not allowed in standalone artifacts.");
   if (errors.length) return invalid(errors);
   const previewHtml = input.content.replace(/<head\b[^>]*>/i, (head) => head + "\n<meta http-equiv=" + JSON.stringify("Content-Security-Policy") + " content=" + JSON.stringify(CSP) + ">\n");
   return result(input.name, "html", "text/html;charset=utf-8", "html", input.content, previewHtml);
@@ -95,7 +95,8 @@ function validateVideo(input, errors) {
   }
   if (errors.length) return invalid(errors);
   if (storyboard.scenes.reduce((sum, scene) => sum + (Number.isFinite(scene?.durationSeconds) ? scene.durationSeconds : 0), 0) > 30) errors.push("Video storyboard cannot exceed 30 seconds.");
-  return { valid: true, status: "media_recipe_validated", artifact: { name: input.name.trim(), filename: safeFilename(input.name, "mp4"), format: "video", mediaType: "video/mp4", storyboard }, limits: { generation: "browser-local-canvas-recording", network: false, serverPersistence: true, externalCredits: false } };
+  if (errors.length) return invalid(errors);
+  return { valid: true, status: "media_recipe_validated", artifact: { name: input.name.trim(), filename: safeFilename(input.name, "mp4"), format: "video", mediaType: "video/mp4", storyboard }, limits: { generation: "isolated-ffmpeg-rendering", network: false, serverPersistence: true, externalCredits: false } };
 }
 function result(name, format, mediaType, extension, content, previewHtml) {
   return { valid: true, status: "artifact_validated_not_executed", artifact: { name: name.trim(), filename: safeFilename(name, extension), format, mediaType, bytes: byteLength(content), content, previewHtml }, limits: { maxBytes: MAX_ARTIFACT_BYTES, filesPerCall: 1, externalNetwork: false, serverFilesystem: false, codeExecutionByAgent: false, browserPreviewSandboxed: true, persistence: false } };
