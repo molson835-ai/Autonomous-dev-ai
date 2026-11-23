@@ -52,8 +52,10 @@ test("validates bounded motion-graphics storyboards for MP4", () => {
   assert.equal(result.limits.generation, "isolated-ffmpeg-rendering");
   assert.equal(validateArtifact({ format: "video", name: "bad", content: JSON.stringify({ width: 1920, height: 1080, fps: 60, scenes: [] }) }).valid, false);
   assert.equal(validateArtifact({ format: "video", name: "bad", content: JSON.stringify({ width: 640, height: 360, fps: 24, scenes: [null] }) }).valid, false);
-  const longScenes = Array.from({ length: 6 }, (_, i) => ({ durationSeconds: 5, background: "#112233", title: "Scene " + i }));
-  assert.equal(validateArtifact({ format: "video", name: "too long", content: JSON.stringify({ width: 640, height: 360, fps: 24, scenes: longScenes }) }).valid, false);
+  const maximumScenes = Array.from({ length: 6 }, (_, i) => ({ durationSeconds: 5, background: "#112233", title: "Scene " + i }));
+  assert.equal(validateArtifact({ format: "video", name: "maximum length", content: JSON.stringify({ width: 640, height: 360, fps: 24, scenes: maximumScenes }) }).valid, true);
+  maximumScenes[0].durationSeconds = 5.1;
+  assert.equal(validateArtifact({ format: "video", name: "over limit", content: JSON.stringify({ width: 640, height: 360, fps: 24, scenes: maximumScenes }) }).valid, false);
 });
 test("rejects unknown formats, extra fields, and malformed descriptors", () => {
   assert.equal(validateArtifact({ format: "mp4", name: "x", content: "{}" }).valid, false);
