@@ -149,7 +149,7 @@ test("sample CSV downloads use separate mobile-friendly buttons, a real BOM, and
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
   const html = readFileSync(resolve(root, "products/ebay-inventory-audit/index.html"), "utf8");
   assert.ok(html.includes(String.raw`new Blob(["\\uFEFF", csv]`) === false, "sample download must not emit a literal \\uFEFF prefix");
-  assert.ok(html.includes(String.raw`new Blob(["\uFEFF", csv]`), "sample download must prepend the actual BOM character at runtime");
+  assert.ok(html.includes(String.raw`new Blob(["\uFEFF", sample.csv]`), "sample download must prepend the actual BOM character at runtime");
   assert.match(html, /id="sampleActive"/);
   assert.match(html, /id="sampleInventory"/);
   assert.match(html, /sample-active-listings\.csv/);
