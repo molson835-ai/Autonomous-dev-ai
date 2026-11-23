@@ -151,7 +151,7 @@
       "sample-physical-inventory.csv": "SKU,Title,Quantity,Location\nA-100,Camping lantern,2,Bin A1\nB-200,Storage tote,2,Bin B2\nD-400,Work gloves,5,Bin C3\n"
     };
     for (const [name, csv] of Object.entries(samples)) {
-      const url = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+      const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
       const link = document.createElement("a"); link.href = url; link.download = name; link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
