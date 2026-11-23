@@ -46,7 +46,7 @@ export function ArtifactToolContent({ output }: { readonly output: unknown }) {
       ) : null}
       {isMusic && artifact.previewUrl ? <audio controls preload="metadata" src={artifact.previewUrl} className="w-full" /> : null}
       {isVideo && artifact.previewUrl ? <video controls preload="metadata" src={artifact.previewUrl} className="w-full rounded-md" /> : null}
-      <p className="text-xs text-muted-foreground">Saved in private artifact storage. This download link expires after seven days.</p>
+      <p className="text-xs text-muted-foreground">Saved in private artifact storage. This download link and stored file expire after 30 days.</p>
     </section>
   );
 }
