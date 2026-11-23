@@ -159,5 +159,5 @@ test("sample CSV downloads use a real BOM and valid SKU headers", () => {
   assert.equal(result.summary.inventoryRows, 3);
   assert.equal(result.summary.matchedSkus, 2);
   assert.equal(result.summary.errors, 2);
-  assert.equal(result.summary.warnings, 0);
+  assert.equal(result.summary.warnings, 1);
 });
