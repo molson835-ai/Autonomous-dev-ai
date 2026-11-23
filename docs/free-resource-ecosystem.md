@@ -126,3 +126,10 @@ Any change to license, maintainer, version, permissions, dependencies, cost, quo
 - No customer outreach, public publishing, purchases, or financial actions.
 - No Production deployment or Worker deployment without separate approval.
 - No claim that a candidate is free, commercially usable, or reliable until official terms and the actual account/runtime are verified.
+
+
+## Current implementation baseline (verified in repository)
+
+The resource system is not starting from zero. The Cloudflare Durable Object already stores resource candidates; POST /v1/resources passes them through agent/resources/intake.mjs and forces trust_state to quarantined. Owner-only GET /v1/owner/resources and POST /v1/owner/resources/:id/decision routes provide listing and review. The intake currently allows only a small technical-documentation host list and a limited metadata schema. No public resource is enabled by this catalog document.
+
+Next implementation should extend this existing schema and lifecycle additively, preserve all existing records, and add tests before enabling additional domains or agent-side proposal tools.
