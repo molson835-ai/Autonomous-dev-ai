@@ -22,7 +22,7 @@ Blender is installed in the worker image for a later declarative 3D-scene adapte
 3. A fresh, network-isolated Vercel Sandbox runs the fixed renderer. The renderer receives a JSON input file, never a user-provided shell command.
 4. The server reads the expected output file and verifies it is non-empty and within the 100 MiB limit.
 5. The finished file is uploaded to private Vercel Blob storage. SVG previews are uploaded separately.
-6. Eve returns a signed download link served by `/api/artifacts/download`. Links expire after seven days. The private Blob object is not made public.
+6. Eve returns a signed download link served by `/api/artifacts/download`. Links and stored files expire after 30 days. The private Blob object is not made public.
 7. The web chat renders the preview and provides the actual Download link. Eve may only claim completion when the tool returns `status: artifact_created_and_stored` with a download URL.
 
 ## Current bounds
@@ -33,7 +33,7 @@ Blender is installed in the worker image for a later declarative 3D-scene adapte
 - Video: 640×360 or 1280×720, 24 or 30 fps, 1–6 scenes, 1–5 seconds per scene, 30 seconds maximum.
 - Rendered output: 100 MiB maximum; SVG preview: 12 MiB maximum.
 - Per-render sandbox: 2 vCPU, 4 GiB memory, five-minute timeout, deny-all network, non-persistent workspace.
-- Private download links expire after seven days. Files remain private in Blob until retention/cleanup is configured; link expiry does not delete the stored file.
+- Private download links expire after seven days. Private Blob objects use a 30-day TTL and are automatically deleted after that retention period.
 
 ## Required one-time project setup
 
