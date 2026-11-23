@@ -17,6 +17,7 @@ test("rejects incomplete HTML, remote assets, and oversized content", () => {
   assert.equal(validateHtmlArtifact({ name: "x", content: html.replace("</body>", "<img src=\"https://example.com/a.png\"></body>") }).valid, false);
   assert.equal(validateHtmlArtifact({ name: "x", content: html + "x".repeat(65536) }).valid, false);
   assert.equal(validateHtmlArtifact({ name: "x", content: html.replace("</body>", "<img src=\"file:///etc/passwd\"></body>") }).valid, false);
+  assert.equal(validateHtmlArtifact({ name: "x", content: html.replace("</head>", "<style>body{background:url(https://example.com/x)}</style></head>") }).valid, false);
 });
 test("accepts self-contained SVG and rejects script, entities, event handlers, and external references", () => {
   const svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"40\" fill=\"#f00\"/></svg>";
