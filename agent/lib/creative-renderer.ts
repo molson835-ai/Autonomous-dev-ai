@@ -43,25 +43,21 @@ function signedDownloadUrl(pathname: string, filename: string, contentType: stri
 }
 
 async function verifyPrivateUpload(pathname: string, expectedBytes: number, expectedContentType: string) {
-  const options = env.BLOB_READ_WRITE_TOKEN
-    ? { token: env.BLOB_READ_WRITE_TOKEN }
-    : { storeId: env.BLOB_STORE_ID };
-  const metadata = await head(pathname, options);
-  if (metadata.size !== expectedBytes || metadata.contentType !== expectedContentType) {
+  // The Blob SDK automatically uses BLOB_READ_WRITE_TOKEN or Vercel OIDC + BLOB_STORE_ID.
+  const metadata = await head(pathname);
+  if (!metadata || metadata.size !== expectedBytes || metadata.contentType !== expectedContentType) {
     throw new Error("Stored artifact metadata did not match the rendered file.");
   }
   return metadata;
 }
 
 async function uploadPrivate(pathname: string, bytes: Buffer, contentType: string) {
-  const options = {
-    access: "private" as const,
+  return put(pathname, bytes, {
+    access: "private",
     addRandomSuffix: true,
     ttlDays: 30,
     contentType,
-    ...(env.BLOB_READ_WRITE_TOKEN ? { token: env.BLOB_READ_WRITE_TOKEN } : { storeId: env.BLOB_STORE_ID }),
-  };
-  return put(pathname, bytes, options);
+  });
 }
 
 export async function renderCreativeArtifact(input: CreativeInput) {
