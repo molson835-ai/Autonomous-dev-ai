@@ -5,7 +5,7 @@ import { env } from "node:process";
 import { validateArtifact } from "./artifact-policy.mjs";
 
 const MAX_OUTPUT_BYTES = 100 * 1024 * 1024;
-const LINK_TTL_SECONDS = 7 * 24 * 60 * 60;
+const LINK_TTL_SECONDS = 30 * 24 * 60 * 60;
 const WORKER_IMAGE = env.EVE_CREATIVE_WORKER_IMAGE ?? "eve-creative-worker:latest";
 const OUTPUTS = {
   html: { filename: "artifact.html", contentType: "text/html; charset=utf-8" },
@@ -57,6 +57,7 @@ async function uploadPrivate(pathname: string, bytes: Buffer, contentType: strin
   const options = {
     access: "private" as const,
     addRandomSuffix: true,
+    ttlDays: 30,
     contentType,
     ...(env.BLOB_READ_WRITE_TOKEN ? { token: env.BLOB_READ_WRITE_TOKEN } : { storeId: env.BLOB_STORE_ID }),
   };
