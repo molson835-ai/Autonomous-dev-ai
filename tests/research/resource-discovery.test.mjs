@@ -103,3 +103,13 @@ test("keeps storage failures distinct from successful quarantine submissions", a
   assert.equal(result.stored_quarantined_count, 0);
   assert.equal(result.results[0].candidates[0].storage_result, "storage_failed");
 });
+
+test("does not mistake GitHub NOASSERTION for a known license", async () => {
+  const result = await discoverPublicResources({
+    query: "resource search",
+    catalogs: ["github"],
+    fetchImpl: async () => response({ items: [{ full_name: "owner/unlicensed", license: { spdx_id: "NOASSERTION" } }] })
+  });
+  assert.equal(result.results[0].candidates[0].license, "unknown");
+  assert.equal(result.results[0].candidates[0].commercial_use, "unknown");
+});
