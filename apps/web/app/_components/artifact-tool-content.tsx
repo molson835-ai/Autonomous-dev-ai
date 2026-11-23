@@ -1,3 +1,5 @@
+"use client";
+
 import { FileIcon } from "lucide-react";
 
 type Artifact = {
