@@ -45,8 +45,8 @@
   <section>
     <h2>1. Choose your CSV files</h2>
     <div class="files">
-      <div><label for="active">Active listings CSV</label><input id="active" type="file" accept=".csv,text/csv"><p class="muted">Required columns: SKU (or Custom label) and Quantity. Title is optional.</p></div>
-      <div><label for="inventory">Physical inventory CSV</label><input id="inventory" type="file" accept=".csv,text/csv"><p class="muted">Required columns: SKU and Quantity. Title and Location are optional.</p></div>
+      <div><label for="active">Active listings CSV</label><input id="active" type="file" accept=".csv,text/csv"><p class="muted">Required columns: SKU (or Custom label) and Quantity. Title is optional. Maximum file size: 10 MB.</p></div>
+      <div><label for="inventory">Physical inventory CSV</label><input id="inventory" type="file" accept=".csv,text/csv"><p class="muted">Required columns: SKU and Quantity. Title and Location are optional. Maximum file size: 10 MB.</p></div>
     </div>
     <button id="run" disabled>Run reconciliation</button>
     <button id="sample" class="secondary" type="button">Download sample CSVs</button>
@@ -88,6 +88,18 @@
   activeInput.addEventListener("change", onFilesChanged);
   inventoryInput.addEventListener("change", onFilesChanged);
   runButton.addEventListener("click", async () => {
+    const selected = [activeInput.files?.[0], inventoryInput.files?.[0]];
+    const oversized = selected.find(file => file && file.size > 10 * 1024 * 1024);
+    if (oversized) {
+      status.className = "error";
+      status.textContent = `${oversized.name} is larger than 10 MB. Split the CSV into smaller files and try again.`;
+      return;
+    }
+    if (selected.some(file => file && !/\\.csv$/i.test(file.name) && file.type !== "text/csv")) {
+      status.className = "error";
+      status.textContent = "Please select CSV files only.";
+      return;
+    }
     runButton.disabled = true;
     latest = null;
     results.hidden = true;
@@ -127,11 +139,11 @@
   });
   document.querySelector("#export").addEventListener("click", () => {
     if (!latest?.issues.length) return;
-    const blob = new Blob([issuesToCsv(latest.issues)], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob(["\\uFEFF", issuesToCsv(latest.issues)], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url; link.download = "listing-stock-issues.csv"; link.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
   document.querySelector("#sample").addEventListener("click", () => {
     const samples = {
@@ -139,8 +151,9 @@
       "sample-physical-inventory.csv": "SKU,Title,Quantity,Location\nA-100,Camping lantern,2,Bin A1\nB-200,Storage tote,2,Bin B2\nD-400,Work gloves,5,Bin C3\n"
     };
     for (const [name, csv] of Object.entries(samples)) {
-      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-      const link = document.createElement("a"); link.href = url; link.download = name; link.click(); URL.revokeObjectURL(url);
+      const url = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+      const link = document.createElement("a"); link.href = url; link.download = name; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
   });
 </script>
