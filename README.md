@@ -109,4 +109,4 @@ MIT. See [LICENSE](LICENSE).
 
 ## Creative artifact creation
 
-Eve's `create_artifact` tool uses an isolated Vercel Sandbox worker and open-source renderers (Inkscape, FluidSynth, FFmpeg) to create HTML/SVG, WAV music, and MP4 motion graphics. Finished files are stored privately in Vercel Blob and delivered in chat through signed, expiring download links. The feature requires a private Blob store, Vercel Sandbox OIDC, and a prebuilt worker image; it fails closed until configured. It does not yet integrate generative media providers or expose arbitrary Blender scripts. See `docs/artifact-creation.md`.
+Eve's `create_artifact` tool uses an isolated Vercel Sandbox worker and open-source renderers (Inkscape, FluidSynth, FFmpeg) to create HTML/SVG, WAV music, and MP4 motion graphics. Finished files are stored privately in Vercel Blob and delivered in chat through signed 30-day download links. The feature requires a private Blob store, Vercel Sandbox OIDC, and a prebuilt worker image; it fails closed until configured. It does not yet integrate generative media providers or expose arbitrary Blender scripts. See `docs/artifact-creation.md`.
