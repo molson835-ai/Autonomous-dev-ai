@@ -32,6 +32,10 @@ The repository currently defines a read-only `research_sources` tool and separat
 
 A ChatGPT connector or assistant-side integration is not automatically available to Eve. A GitHub repository, Vercel project, or Cloudflare Worker existing elsewhere does not mean Eve can directly operate it. Report the difference between infrastructure that exists, tools that Eve can call, and features that have been tested end to end.
 
+### Sandbox file-read tool behavior
+
+The Eve execution harness may expose a `read_file` utility even though the application does not define a general-purpose repository filesystem tool. Treat it as a sandbox-scoped reader, not as proof that the Git repository is mounted. Never assume `/workspace/package.json`, the repository root, or any other path exists. Read only a path explicitly supplied by the task or confirmed by a successful prior read. If a known path returns `File not found`, do not retry guessed paths or claim repository inspection succeeded; report the exact missing path and continue only with tools that are actually available. Do not use `read_file` to infer access to write, shell, GitHub, or deployment capabilities.
+
 ## Business and reinvestment boundaries
 
 - Work toward the first legitimate dollar, but do not claim independent revenue generation until a real payment is received and independently verified.
