@@ -27,7 +27,10 @@ function safeFilename(name: string, extension: string): string {
 }
 
 function publicBaseUrl(): string | undefined {
-  const configured = env.EVE_PUBLIC_BASE_URL ?? env.VERCEL_PROJECT_PRODUCTION_URL ?? env.VERCEL_URL;
+  // VERCEL_URL is deployment-specific, so Preview links stay on the Preview
+  // deployment where the Preview signing secret and Blob configuration exist.
+  // An explicit base URL may override it; the project production URL is last.
+  const configured = env.EVE_PUBLIC_BASE_URL ?? env.VERCEL_URL ?? env.VERCEL_PROJECT_PRODUCTION_URL;
   if (!configured) return undefined;
   return configured.startsWith("http://") || configured.startsWith("https://") ? configured.replace(/\/$/, "") : `https://${configured.replace(/\/$/, "")}`;
 }
