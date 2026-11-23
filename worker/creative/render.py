@@ -128,8 +128,16 @@ def render_video(data, out):
         still = make_scene(scene, width, height, index, out)
         clip = out / f"clip-{index:02d}.mp4"
         frames = max(1, round(scene["durationSeconds"] * fps))
-        zoom = "min(zoom+0.0007,1.06)" if scene.get("motion", "drift") in ("drift", "orbit", "pulse") else "1"
-        vf = f"zoompan=z='{zoom}':d=1:s={width}x{height}:fps={fps},format=yuv420p"
+        motion = scene.get("motion", "drift")
+        if motion == "rise":
+            motion_args = "z='1.06':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)-min(on*0.6,ih*0.04)'"
+        elif motion == "pulse":
+            motion_args = "z='1.03+0.025*sin(on/8)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+        elif motion == "orbit":
+            motion_args = "z='1.06':x='iw/2-(iw/zoom/2)+sin(on/14)*iw*0.03':y='ih/2-(ih/zoom/2)+cos(on/14)*ih*0.03'"
+        else:
+            motion_args = "z='min(zoom+0.0007,1.06)':x='iw/2-(iw/zoom/2)+sin(on/18)*iw*0.025':y='ih/2-(ih/zoom/2)'"
+        vf = "zoompan=" + motion_args + ":d=1:s=" + str(width) + "x" + str(height) + ":fps=" + str(fps) + ",format=yuv420p"
         run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-loop", "1", "-framerate", str(fps), "-i", str(still), "-frames:v", str(frames), "-vf", vf, "-an", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(clip)])
         clips.append(clip)
     concat = out / "concat.txt"
