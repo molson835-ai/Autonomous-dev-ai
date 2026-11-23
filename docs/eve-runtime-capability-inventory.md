@@ -86,3 +86,14 @@ The following remain important blockers from the verified repository inventory:
 - Public free services and community compute must not be combined to evade quotas or access controls. Personal cloud accounts are not Eve's backend.
 
 The next implementation slice is intentionally small: a typed resource-registry contract and documentation-backed catalog, followed by one keyless public discovery adapter and browser-local CSV/JSON processing. Keep each slice isolated, testable, and non-production until separately reviewed.
+
+
+### Existing resource registry baseline correction
+
+A repository inspection on 2026-11-23 confirmed that resource intake and owner review already exist:
+- agent/resources/intake.mjs validates a narrow HTTPS host allowlist and creates inert metadata with trust_state=quarantined.
+- The Cloudflare Durable Object stores resource rows and exposes owner-authenticated listing and decision routes.
+- agent/tools/plan_task_skills.ts can consume resource metadata supplied to it.
+- No verified general-purpose Eve resource-discovery/proposal tool was found in the inspected runtime inventory.
+
+Do not build a second resource registry. Extend the current schema and intake with additive capability, access, persistence, data-classification, commercial-use, quota, and adapter-state fields. Keep arbitrary domains blocked, imported resources inert, and owner decisions owner-only. The new catalog is a discovery map, not evidence that any candidate has been activated.
