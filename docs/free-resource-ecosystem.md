@@ -133,3 +133,10 @@ Any change to license, maintainer, version, permissions, dependencies, cost, quo
 The resource system is not starting from zero. The Cloudflare Durable Object already stores resource candidates; POST /v1/resources passes them through agent/resources/intake.mjs and forces trust_state to quarantined. Owner-only GET /v1/owner/resources and POST /v1/owner/resources/:id/decision routes provide listing and review. The intake currently allows only a small technical-documentation host list and a limited metadata schema. No public resource is enabled by this catalog document.
 
 Next implementation should extend this existing schema and lifecycle additively, preserve all existing records, and add tests before enabling additional domains or agent-side proposal tools.
+
+
+## First keyless discovery adapter
+
+The proposed `discover_resources` tool queries GitHub repository search, Hugging Face model search, and npm package search. It uses no API keys, makes at most one HTTPS request per selected catalog, returns no more than three entries per catalog, applies a six-second timeout, and does not retry. It stores only inert metadata in the existing resource quarantine. It does not download repository contents, package tarballs, model weights, or assets.
+
+Catalog results are untrusted leads. Preserve unknown licensing, cost, commercial-use rights, quotas, and data handling. Never equate a public listing or a recognized license identifier with owner approval or verified commercial suitability. Verify the live Eve runtime and the authenticated Production memory write path separately before claiming end-to-end capability.

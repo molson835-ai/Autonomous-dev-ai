@@ -120,3 +120,17 @@ The intake host allowlist includes a curated set of public-data, package, code, 
 Initial resource families to investigate include government and scientific data catalogs; RSS and public research indexes; GitHub and package registries; model/dataset hubs; local browser storage and deterministic data libraries; open document/media tooling; individual-license asset catalogs; and community compute for interactive experiments only. Every candidate remains quarantined until owner review. No public candidate is automatically fetched, installed, executed, mirrored, or used for private data.
 
 Storage placement is local-first: browser-local working files; Git for source, tests, and small manifests; the existing Cloudflare Durable Object for approved memory, task checkpoints, and compact resource metadata; and object storage only after account-specific free quota, egress, retention, commercial terms, access controls, and deletion are verified. Do not split usage across accounts or combine services to evade limits.
+
+
+## Keyless catalog discovery
+
+The proposed `discover_resources` tool can search three public indexes:
+- GitHub repositories
+- Hugging Face models
+- npm packages
+
+Bounds: 1–3 results per selected catalog, at most three catalogs per invocation, one HTTPS request per catalog, six-second timeout, no retries, and no API keys. Search terms are sent to the selected providers, so never include private data, credentials, or personal information.
+
+The tool submits only compact metadata to the existing `/v1/resources` endpoint. The Worker forces every new candidate into quarantine. Upstream descriptions, tags, maintainers, license labels, and version data are untrusted. A license identifier is a starting point for review, not a commercial-use determination. Cost and commercial use remain unknown by default. The tool does not fetch repository files, package archives, model weights, linked content, or execute anything.
+
+A successful CI build verifies code and tests, not live Eve tool discovery or Production persistence. Do not claim the runtime integration is operational until a controlled invocation and exact owner-console readback have been separately authorized and verified.

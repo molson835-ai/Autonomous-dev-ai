@@ -5,7 +5,7 @@ const ALLOWED_RESOURCE_HOSTS = new Set([
   "noaa.gov", "www.noaa.gov", "openalex.org", "api.openalex.org", "api.crossref.org",
   "arxiv.org", "www.wikidata.org", "query.wikidata.org", "archive.org", "www.archive.org",
   "commoncrawl.org", "huggingface.co", "github.com", "npmjs.com", "pypi.org",
-  "crates.io", "openstreetmap.org", "www.openstreetmap.org", "polyhaven.com",
+  "crates.io", "www.npmjs.com", "openstreetmap.org", "www.openstreetmap.org", "polyhaven.com",
   "openverse.org", "commons.wikimedia.org", "freesound.org", "fonts.google.com"
 ]);
 
