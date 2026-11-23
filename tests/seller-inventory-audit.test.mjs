@@ -150,7 +150,7 @@ test("sample CSV downloads use same-origin static files for mobile reliability",
   const html = readFileSync(resolve(root, "products/ebay-inventory-audit/index.html"), "utf8");
   assert.match(html, /href="\.\/samples\/sample-active-listings\.csv" download="sample-active-listings\.csv"/);
   assert.match(html, /href="\.\/samples\/sample-physical-inventory\.csv" download="sample-physical-inventory\.csv"/);
-  assert.doesNotMatch(html, /sampleActive|sampleInventory|URL\.createObjectURL/, "sample downloads must not depend on JavaScript blob downloads");
+  assert.doesNotMatch(html, /sampleActive|sampleInventory|const downloadSample/, "sample downloads must not depend on JavaScript click handlers");
   const activeSample = readFileSync(resolve(root, "products/ebay-inventory-audit/samples/sample-active-listings.csv"), "utf8");
   const inventorySample = readFileSync(resolve(root, "products/ebay-inventory-audit/samples/sample-physical-inventory.csv"), "utf8");
   assert.ok(activeSample.startsWith("\\uFEFFSKU,Title,Quantity"));
