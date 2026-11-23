@@ -30,6 +30,7 @@ function verifyToken(token: string, secret: string): DownloadPayload | null {
       typeof payload.n !== "string" ||
       typeof payload.t !== "string" ||
       !CONTENT_TYPES.has(payload.t) ||
+      !["attachment", "inline"].includes(payload.d) ||
       !Number.isInteger(payload.e) ||
       payload.e <= Math.floor(Date.now() / 1000)
     ) return null;
@@ -52,7 +53,7 @@ export async function GET(request: Request): Promise<Response> {
       status: 200,
       headers: {
         "Content-Type": payload.t,
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Disposition": `${payload.d}; filename="${filename}"`,
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "private, no-store, max-age=0",
       },
