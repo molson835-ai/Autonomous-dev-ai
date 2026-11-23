@@ -6,7 +6,7 @@ import { validateArtifact } from "./artifact-policy.mjs";
 
 const MAX_OUTPUT_BYTES = 100 * 1024 * 1024;
 const LINK_TTL_SECONDS = 30 * 24 * 60 * 60;
-const WORKER_IMAGE = env.EVE_CREATIVE_WORKER_IMAGE ?? "eve-creative-worker:latest";
+const WORKER_IMAGE = env.EVE_CREATIVE_WORKER_IMAGE;
 const OUTPUTS = {
   html: { filename: "artifact.html", contentType: "text/html; charset=utf-8" },
   svg: { filename: "artifact.svg", contentType: "image/svg+xml" },
@@ -66,6 +66,9 @@ export async function renderCreativeArtifact(input: CreativeInput) {
 
   if (!env.BLOB_READ_WRITE_TOKEN && !(env.VERCEL_OIDC_TOKEN && env.BLOB_STORE_ID)) {
     return { valid: false, errors: ["Private artifact storage is not connected. Connect a private Vercel Blob store to the Eve project."] };
+  }
+  if (!WORKER_IMAGE) {
+    return { valid: false, errors: ["Creative worker image is not configured. Build and push it with npm run build:creative-worker-image, then set EVE_CREATIVE_WORKER_IMAGE."] };
   }
   if (!env.ARTIFACT_LINK_SECRET || !publicBaseUrl()) {
     return { valid: false, errors: ["Download-link signing is not configured. Set ARTIFACT_LINK_SECRET and EVE_PUBLIC_BASE_URL in the Eve project environment."] };
