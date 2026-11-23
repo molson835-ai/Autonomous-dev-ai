@@ -153,8 +153,8 @@ test("sample CSV downloads use same-origin static files for mobile reliability",
   assert.doesNotMatch(html, /sampleActive|sampleInventory|const downloadSample/, "sample downloads must not depend on JavaScript click handlers");
   const activeSample = readFileSync(resolve(root, "products/ebay-inventory-audit/samples/sample-active-listings.csv"), "utf8");
   const inventorySample = readFileSync(resolve(root, "products/ebay-inventory-audit/samples/sample-physical-inventory.csv"), "utf8");
-  assert.ok(activeSample.startsWith("\\uFEFFSKU,Title,Quantity"));
-  assert.ok(inventorySample.startsWith("\\uFEFFSKU,Title,Quantity,Location"));
+  assert.ok(activeSample.startsWith("\uFEFFSKU,Title,Quantity"));
+  assert.ok(inventorySample.startsWith("\uFEFFSKU,Title,Quantity,Location"));
   const result = reconcileCsv(activeSample, inventorySample);
   assert.equal(result.summary.activeRows, 3);
   assert.equal(result.summary.inventoryRows, 3);
