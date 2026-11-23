@@ -30,6 +30,14 @@ test("fails closed on provider rate limits without retrying", async () => {
   let calls = 0; await assert.rejects(searchGdeltNews("test", {}, async () => { calls += 1; return new Response("rate limited", { status: 429 }); }), /rate limit/); assert.equal(calls, 1);
 });
 
+test("returns an explicit non-retryable result when the request times out", async () => {
+  let calls = 0;
+  const result = await searchGdeltNews("test", {}, async () => { calls += 1; const error = new Error("request timed out"); error.name = "TimeoutError"; throw error; });
+  assert.equal(calls, 1);
+  assert.deepEqual(result.unavailable, { reason: "timeout", retryable: false });
+  assert.deepEqual(result.articles, []);
+});
+
 test("rejects unexpected content types and malformed response shapes", async () => {
   await assert.rejects(searchGdeltNews("test", {}, async () => new Response("<html>error</html>", { headers: { "content-type": "text/html" } })), /content type/);
   await assert.rejects(searchGdeltNews("test", {}, async () => jsonResponse({ results: [] })), /article list/);
