@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "dev:web": "next dev apps/web",
     "build:web": "next build apps/web",
-    "test": "node --test tests/*.test.mjs tests/research/*.test.mjs"
+    "test": "node --test tests/*.test.mjs tests/research/*.test.mjs",
+    "build:creative-worker-image": "npx vercel vcr build docker worker/creative eve-creative-worker:latest --push"
   },
   "dependencies": {
     "@shadcn/react": "^0.3.1",
