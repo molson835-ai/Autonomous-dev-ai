@@ -12,7 +12,7 @@ test("creative renderer uses a fresh network-denied sandbox and private Blob sto
   assert.match(source, /resources:\s*\{\s*vcpus:\s*2\s*\}/);
   assert.match(source, /sandbox\.readFileToBuffer/);
   assert.match(source, /access:\s*"private"/);
-  assert.match(source, /head\(pathname, options\)/);
+  assert.match(source, /head\(pathname\)/);
   assert.match(source, /metadata\.size !== expectedBytes/);
   assert.match(source, /artifact_created_and_stored/);
   assert.match(source, /signedDownloadUrl/);
