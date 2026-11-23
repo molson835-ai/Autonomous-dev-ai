@@ -30,7 +30,7 @@ The research capability is read-only. It does not write to the repository, execu
 - Web interface: official Eve Web Chat scaffold using Next.js and React, located in `apps/web/`.
 - Sessions: Eve client wiring with URL-addressed session routes under `/s/` and `/s/[sessionId]/`.
 - Model provider: Cloudflare Workers AI direct API using `@cf/zai-org/glm-4.7-flash`.
-- Research tools: `agent/tools/research_sources.ts` retrieves supplied approved documentation URLs; `agent/tools/search_news.ts` discovers limited recent news leads via the free GDELT DOC 2.0 API. Both are read-only and discovered by Eve from the filesystem.
+- Research tools: `agent/tools/research_sources.ts` retrieves supplied approved documentation URLs; `agent/tools/search_news.ts` discovers limited recent news leads via the free GDELT DOC 2.0 API; the proposed `agent/tools/discover_resources.ts` searches GitHub, Hugging Face, and npm and submits inert metadata to the existing quarantined resource registry. Live invocation and Production persistence of the new resource tool still require verification.
 - Research implementation: `agent/research/sources.ts`.
 - Opportunity evaluator: `agent/research/opportunity-evaluator.ts`; Eve tool: `agent/tools/evaluate_opportunity.ts`; scoring policy and limitations: `docs/opportunity-evaluation.md`.
 - Approved source hosts: `developer.mozilla.org`, `tc39.es`, `owasp.org`, `developers.cloudflare.com`, and `vercel.com`.
@@ -110,3 +110,8 @@ MIT. See [LICENSE](LICENSE).
 ## Standalone artifact creation
 
 Eve supports one standalone HTML artifact per `create_artifact` call. The web chat displays a sandboxed preview with mobile/desktop sizing and a browser-side download. Artifacts are returned to the browser and are not persisted on the server. The validator enforces a 64 KiB limit, complete HTML structure, a responsive viewport, no external scripts/assets, and a restrictive preview Content Security Policy. This is not a general filesystem, shell, image-generation, repository-write, or deployment capability. See `docs/artifact-creation.md`.
+
+
+## Keyless resource discovery
+
+The proposed `discover_resources` tool uses public GitHub, Hugging Face, and npm search endpoints without API keys. It is bounded to three results per catalog, one request per catalog, six-second timeouts, and no retries. It stores metadata only in the existing owner-review quarantine. It does not download, install, execute, approve, or enable anything. Public visibility does not establish a resource's license, commercial rights, or free-tier terms.
