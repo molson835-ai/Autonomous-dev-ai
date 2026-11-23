@@ -1,4 +1,4 @@
-import { put } from "@vercel/blob";
+import { head, put } from "@vercel/blob";
 import { Sandbox } from "@vercel/sandbox";
 import { createHmac, randomUUID } from "node:crypto";
 import { env } from "node:process";
@@ -40,6 +40,17 @@ function signedDownloadUrl(pathname: string, filename: string, contentType: stri
   const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const signature = createHmac("sha256", secret).update(encoded).digest("base64url");
   return `${base}/api/artifacts/download?token=${encoded}.${signature}`;
+}
+
+async function verifyPrivateUpload(pathname: string, expectedBytes: number, expectedContentType: string) {
+  const options = env.BLOB_READ_WRITE_TOKEN
+    ? { token: env.BLOB_READ_WRITE_TOKEN }
+    : { storeId: env.BLOB_STORE_ID };
+  const metadata = await head(pathname, options);
+  if (metadata.size !== expectedBytes || metadata.contentType !== expectedContentType) {
+    throw new Error("Stored artifact metadata did not match the rendered file.");
+  }
+  return metadata;
 }
 
 async function uploadPrivate(pathname: string, bytes: Buffer, contentType: string) {
@@ -98,6 +109,7 @@ export async function renderCreativeArtifact(input: CreativeInput) {
     const filename = safeFilename(input.name, primary.filename.split(".").pop()!);
     const storagePath = `eve-artifacts/${new Date().toISOString().slice(0, 10)}/${randomUUID()}/${filename}`;
     const stored = await uploadPrivate(storagePath, bytes, primary.contentType);
+    await verifyPrivateUpload(stored.pathname, bytes.byteLength, primary.contentType);
     const downloadUrl = signedDownloadUrl(stored.pathname, filename, primary.contentType, "attachment");
     let previewUrl = input.format === "music" || input.format === "video" ? signedDownloadUrl(stored.pathname, filename, primary.contentType, "inline") : undefined;
 
@@ -108,6 +120,7 @@ export async function renderCreativeArtifact(input: CreativeInput) {
     if (previewBytes?.byteLength) {
       if (previewBytes.byteLength > 12 * 1024 * 1024) throw new Error("SVG preview exceeds the 12 MiB limit.");
       const preview = await uploadPrivate(`eve-artifacts/${new Date().toISOString().slice(0, 10)}/${randomUUID()}/preview.png`, previewBytes, "image/png");
+      await verifyPrivateUpload(preview.pathname, previewBytes.byteLength, "image/png");
       previewUrl = signedDownloadUrl(preview.pathname, "preview.png", "image/png", "inline");
     }
 
