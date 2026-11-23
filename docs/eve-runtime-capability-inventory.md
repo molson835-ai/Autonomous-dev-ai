@@ -70,3 +70,30 @@ Track separately:
 - Hardware bottlenecks measured and proposed
 
 Never count hypothetical prices, unpaid commitments, forecasts, or user interest as revenue.
+
+
+## Capability roadmap review — 2026-11-23
+
+The owner approved a capability-independence roadmap covering web research, coding, file processing, memory, document creation, images/media, scheduling, local inference, and discovery/use of lawful free resources.
+
+The current main-branch code has moved beyond the older production snapshot above: PR #96 merged on 2026-11-23 (merge commit 97f5bb410ac56acb9ab990ee4a3a97d2b9cf38d2) and adds bounded GDELT timeout retry, Google News RSS fallback, and improved bounded documentation retrieval. This is a repository merge, not evidence of Production deployment. Refresh the Production snapshot from live telemetry before claiming current deployment status.
+
+The following remain important blockers from the verified repository inventory:
+- Tavily general search remains fail-closed until the owner verifies the current free plan and disables pay-as-you-go; do not set the human-attestation flag automatically.
+- Eve's application still lacks direct GitHub branch/PR operations and a general local file workspace; ChatGPT's GitHub connector is not automatically an Eve runtime tool.
+- Cloudflare memory diagnostics and the Eve memory_recall tool are separate paths. The scheduled failures noted in the historical snapshot must be re-tested against the current deployed commit before declaring memory healthy.
+- The resource catalog is not an install queue. Every discovered item must be reviewed for license, commercial use, cost, privacy, security, freshness, and persistence before enabling it.
+- Public free services and community compute must not be combined to evade quotas or access controls. Personal cloud accounts are not Eve's backend.
+
+The next implementation slice is intentionally small: a typed resource-registry contract and documentation-backed catalog, followed by one keyless public discovery adapter and browser-local CSV/JSON processing. Keep each slice isolated, testable, and non-production until separately reviewed.
+
+
+### Existing resource registry baseline correction
+
+A repository inspection on 2026-11-23 confirmed that resource intake and owner review already exist:
+- agent/resources/intake.mjs validates a narrow HTTPS host allowlist and creates inert metadata with trust_state=quarantined.
+- The Cloudflare Durable Object stores resource rows and exposes owner-authenticated listing and decision routes.
+- agent/tools/plan_task_skills.ts can consume resource metadata supplied to it.
+- No verified general-purpose Eve resource-discovery/proposal tool was found in the inspected runtime inventory.
+
+Do not build a second resource registry. Extend the current schema and intake with additive capability, access, persistence, data-classification, commercial-use, quota, and adapter-state fields. Keep arbitrary domains blocked, imported resources inert, and owner decisions owner-only. The new catalog is a discovery map, not evidence that any candidate has been activated.

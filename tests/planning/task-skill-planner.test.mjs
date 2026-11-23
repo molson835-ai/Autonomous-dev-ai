@@ -31,7 +31,9 @@ test("planner matches normalized tags and accepts evidence only from non-agent r
   assert.equal(report.skills[0].gap, true);
   assert.deepEqual(report.gaps, ["typescript"]);
   assert.equal(report.skills[0].matchingResources[0].executionReady, false);
-  assert.equal(report.skills[0].matchingResources[0].reviewRequired, false);
+  assert.equal(report.skills[0].matchingResources[0].reviewRequired, true);
+  assert.equal(report.skills[0].matchingResources[0].commercialUse, "unknown");
+  assert.equal(report.skills[0].matchingResources[0].adapterStatus, "candidate");
 });
 
 test("planner treats absent or agent-only evidence as untested", () => {
@@ -97,4 +99,63 @@ test("planner never promotes skills or executes resource actions", () => {
   assert.equal(report.skills[0].currentStatus, "demonstrated");
   assert.equal("promoted" in report.skills[0], false);
   assert.ok(report.limitations.some((item) => item.includes("does not run tests")));
+});
+
+
+test("planner requires current commercial, quota, and adapter evidence before marking a resource review-complete", () => {
+  const reviewedResource = resource({
+    access_mode: "public_read",
+    persistence: "durable",
+    execution: "none",
+    data_classes_allowed: ["public"],
+    commercial_use: "allowed",
+    quota_evidence: {
+      source_url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript",
+      checked_at: "2026-11-23T00:00:00.000Z",
+      limits: "No account quota applies to this open-source documentation.",
+      confidence: "high",
+    },
+    adapter_status: "tested",
+    failure_policy: "manual_review",
+    deletion_and_export: "No user data stored by the reference site.",
+  });
+  const report = planTaskSkills({
+    task: "Use a verified research reference",
+    requirements: [{ skill: "typescript", requiredStatus: "untested", acceptanceCriteria: criteria }],
+    skillEvidence: [],
+    resources: [reviewedResource],
+  });
+  const selected = report.skills[0].matchingResources[0];
+  assert.equal(selected.reviewRequired, false);
+  assert.equal(selected.executionReady, false);
+  assert.equal(selected.commercialUse, "allowed");
+  assert.equal(selected.adapterStatus, "tested");
+  assert.equal(selected.accessMode, "public_read");
+});
+
+test("planner flags conditional commercial use, stale quota confidence, and non-public access", () => {
+  const report = planTaskSkills({
+    task: "Choose a resource",
+    requirements: [{ skill: "typescript", requiredStatus: "untested", acceptanceCriteria: criteria }],
+    skillEvidence: [],
+    resources: [resource({
+      access_mode: "authenticated_read",
+      commercial_use: "conditional",
+      quota_evidence: {
+        source_url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript",
+        checked_at: "2026-11-23T00:00:00.000Z",
+        limits: "Unknown",
+        confidence: "low",
+      },
+      adapter_status: "enabled",
+    })],
+  });
+  assert.equal(report.skills[0].matchingResources[0].reviewRequired, true);
+});
+
+test("intake does not accept high-confidence quota claims without dated official evidence", () => {
+  assert.throws(() => prepareResourceCandidate({
+    ...base,
+    quota_evidence: { source_url: "unknown", checked_at: "unknown", limits: "unknown", confidence: "high" }
+  }), /High-confidence quota evidence/);
 });

@@ -101,3 +101,22 @@ Never claim access, installation, execution, or successful learning unless the c
 - No customer contact, offer publication, payment acceptance, or financial-account access without separate explicit owner approval.
 - No purchase can use anything except cleared revenue in a separately designated business account, and each purchase requires approval of exact item, seller, landed cost, purpose, shipping destination, and cap.
 - No Production deployment or protected-branch merge without separate explicit approval.
+
+
+## Resource ecosystem extension
+
+The resource registry also records capability and operational metadata:
+- Access mode: public read, authenticated read, local only, or owner action required.
+- Persistence: durable, ephemeral, or unknown.
+- Execution: none, browser-local, server runtime, interactive remote, or unknown.
+- Data classes: public, owner-selected local, or approved private. Default to public; metadata never grants permission to transfer private data.
+- Commercial-use status: allowed, prohibited, conditional, or unknown. Check the specific license/terms; never infer commercial rights from public availability.
+- Quota evidence: official source, check timestamp, limits, and confidence. Unknown or stale quotas do not qualify for unattended use.
+- Adapter state: candidate, implemented, tested, enabled, paused, or retired.
+- Failure policy and deletion/export behavior.
+
+The intake host allowlist includes a curated set of public-data, package, code, model, asset, and research catalog hosts. It is an exact-host allowlist for inert metadata intake, not permission for arbitrary crawling. Quota evidence links must also use an exact allowlisted HTTPS host.
+
+Initial resource families to investigate include government and scientific data catalogs; RSS and public research indexes; GitHub and package registries; model/dataset hubs; local browser storage and deterministic data libraries; open document/media tooling; individual-license asset catalogs; and community compute for interactive experiments only. Every candidate remains quarantined until owner review. No public candidate is automatically fetched, installed, executed, mirrored, or used for private data.
+
+Storage placement is local-first: browser-local working files; Git for source, tests, and small manifests; the existing Cloudflare Durable Object for approved memory, task checkpoints, and compact resource metadata; and object storage only after account-specific free quota, egress, retention, commercial terms, access controls, and deletion are verified. Do not split usage across accounts or combine services to evade limits.

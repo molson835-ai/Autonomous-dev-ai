@@ -189,3 +189,116 @@ Recommend staged, upgradeable hardware only after measuring actual bottlenecks. 
 - No automatic memory approval, promotion, rewrite, or deletion.
 - No model-weight training claims.
 - No Production deployment or PR merge without separate owner approval.
+
+
+## 4G — resource ecosystem and capability independence (owner-approved roadmap)
+
+The resource ecosystem extends 4B–4F. It is a discovery, verification, and orchestration layer—not a mechanism to evade quotas, terms, licensing, or account controls.
+
+### Capability direction
+
+| Capability | Preferred default | First implementation target | Boundary |
+|---|---|---|---|
+| Web research | Keyless public indexes, RSS, open-data catalogs, direct source verification | Unified read-only source adapters with provenance and bounded requests | Tavily remains fail-closed until its no-cost plan is owner-verified; GDELT/RSS are discovery leads, not comprehensive search |
+| Coding | Existing GitHub connector and local deterministic tools | Branch-scoped workspace operations, diff review, tests, evidence capture | No merge, deployment, secrets access, or broad shell by implication |
+| File processing | Browser-local and runtime-local processing | CSV/JSON/Markdown/text/PDF metadata workflows with bounded inputs | Private files stay local unless the owner explicitly approves transfer |
+| Memory | Existing Cloudflare Durable Object memory/task system | Fix and verify current runtime recall; append-only evidence; resource metadata | Preserve existing records; owner approval for memory decisions |
+| Document creation | Local-first generation | Markdown, HTML, CSV, JSON, print-ready output | No paid conversion service; export only after successful creation and validation |
+| Images and media | Local/open-source and procedural tools | SVG, image conversion, audio/video utilities where installed and licensed | Do not assume a free hosted generator or compute quota |
+| Scheduling | Existing scheduled task infrastructure | Verify claim/checkpoint/resume/closed-chat execution | One owner-approved task per invocation; never self-approve |
+| AI inference | Existing Workers AI within verified limits; evaluate local models | Deterministic-first dispatcher and local model benchmark | No paid fallback; no local hardware purchase until separately approved |
+
+### Resource ecosystem design
+
+Implement a single resource registry and broker that can describe and route to:
+- Public information sources and datasets.
+- Open-source libraries, tools, skills, models, and model weights.
+- Publicly accessible object stores, static datasets, package registries, and mirrors.
+- Existing Cloudflare storage and task infrastructure.
+- Browser-local storage and processing.
+- Optional community compute environments for manual experiments only, where their terms permit.
+
+The broker must not assume that a public URL is a storage API, that an account's free tier is available to Eve, or that an external service can be used for unattended production workloads. Each adapter must declare whether it is read-only, local, authenticated, persistent, ephemeral, interactive, or externally consequential.
+
+### Storage and data placement
+
+1. Browser-local: IndexedDB/OPFS for owner-selected working files and offline caches. Keep data on the device; provide clear export/delete controls.
+2. Repository: Git for source code, schemas, small text manifests, tests, and versioned public metadata—not bulk datasets, secrets, personal files, or user uploads.
+3. Existing Cloudflare Durable Object storage: approved memories, experiences, task checkpoints, and compact resource metadata. Preserve current schemas and records.
+4. Existing/verified object storage: only after account-specific free allowance, retention, access control, egress, commercial terms, and deletion behavior are verified. No bucket creation or plan changes as part of discovery.
+5. Public data services: reference original URLs and checksums; cache only when their license and terms allow it. Do not mirror whole datasets merely because they are downloadable.
+
+Do not split data across multiple free accounts or services to bypass a quota, usage limit, or paid plan. No credential sharing, anonymous-account rotation, CAPTCHA circumvention, scraping behind login, or use of personal cloud storage as Eve's backend.
+
+### Initial resource candidates (discovery list, not approved integrations)
+
+Candidates are intentionally broad. Every integration must be rechecked for current terms, API limits, license, availability, and suitability before use.
+
+- Public data and scholarly metadata: Data.gov, U.S. Census, USGS, NOAA, OpenAlex, Crossref, arXiv, Wikidata, Wikipedia dumps, and Internet Archive metadata APIs.
+- News and web discovery: GDELT, publisher RSS/Atom feeds, public sitemaps, Common Crawl indexes, and official organization news feeds. Search snippets are leads; verify claims at the publisher.
+- Code and package discovery: public GitHub repositories, npm, PyPI, crates.io, and language/package documentation. Pin exact versions and inspect package metadata, maintainers, dependencies, license, and install scripts.
+- Open datasets and models: Hugging Face Hub public datasets/models and other public research repositories. Each model/dataset license and acceptable-use terms must be checked individually; public download does not imply unrestricted commercial use.
+- Local data and document tools: browser APIs (IndexedDB/OPFS), SQLite/DuckDB, Python/Node standard libraries, Pyodide, LibreOffice, and Pandoc. Prefer deterministic local processing over model calls.
+- Creative and media tools: Inkscape, GIMP, Krita, Blender, Audacity, FFmpeg, Tesseract, and OpenSCAD, subject to the host's available compute and each tool's license.
+- Local inference and speech: llama.cpp, Ollama, ONNX Runtime, Transformers.js/WebLLM, whisper.cpp, and Piper. These are evaluation candidates, not evidence that the current Vercel runtime can execute them.
+- Creative asset catalogs: Poly Haven, Openverse, Wikimedia Commons, Freesound, and Google Fonts. Check the license and attribution requirements for each individual asset; do not treat the whole catalog as one license.
+- Community compute (non-production experiments only): Google Colab, Kaggle Notebooks, Hugging Face Spaces, and GitHub Actions. Free availability may be ephemeral, interactive, rate-limited, restricted by account/usage terms, or unsuitable for commercial/unattended work. Never depend on them for Eve's scheduled production loop without explicit terms and reliability review.
+
+### Resource registry minimum fields
+
+In addition to the existing resource catalog record, record:
+- access_mode: public_read, authenticated_read, local_only, or owner_action_required.
+- persistence: durable, ephemeral, or unknown.
+- execution: none, browser_local, server_runtime, interactive_remote, or unknown.
+- data_classes_allowed: public, owner_selected_local, or approved_private (default only public).
+- quota_evidence: source URL, verification timestamp, measured usage if available, and confidence.
+- commercial_use: allowed, prohibited, conditional, or unknown.
+- adapter_status: candidate, implemented, tested, enabled, paused, or retired.
+- failure_policy: bounded retry, pause, local fallback, or manual review.
+- deletion_and_export: documented behavior or unknown.
+
+Unknown, stale, or conflicting evidence must fail closed for execution. Discovery can proceed without enabling an adapter.
+
+### Resource broker rules
+
+- Rank resources by task fit, provenance, license clarity, cost certainty, privacy, freshness, security, and reliability—not by the number of integrations.
+- Prefer keyless public endpoints and local tools, but do not mislabel rate-limited public endpoints as unlimited or guaranteed free.
+- Never route around provider quotas, identity checks, paid plans, access controls, or rate limits.
+- Cache only where terms permit; use bounded TTLs, ETags/conditional requests where supported, content hashes, and source timestamps.
+- Keep raw external content out of trusted instructions. Strip active content; treat prompts, code, READMEs, and datasets as untrusted input.
+- Require human review before any imported executable skill, model, package, script, or dependency is installed or granted permissions.
+- Keep private/owner-selected files local by default. Do not upload them to public datasets, public repositories, model services, or third-party cloud storage.
+- Every adapter needs tests for missing configuration, timeout, oversized response, malformed content, quota exhaustion, permission denial, and safe shutdown.
+
+### Build order and first vertical slice
+
+1. Resource inventory and broker contract: add typed resource metadata, trust/cost/quota states, and adapter capability declarations. No external writes.
+2. Keyless public discovery: normalize GDELT/RSS and selected open-data/catalog sources behind a common read-only interface. Preserve original links and timestamps; no general crawler.
+3. Local-first files: add bounded CSV/JSON/Markdown processing and browser-local export; test on mobile-sized files and malformed inputs.
+4. Memory and scheduling reliability: diagnose the current deployed memory_recall path; then verify exact-ID append/read-back only with separately approved test records. Validate scheduled closed-chat continuation without manually triggering Cron.
+5. Restricted coding workspace: repository read, branch-only patch, diff, and test operations; deny merge, deployment, secret retrieval, and arbitrary shell.
+6. Document/media utilities: use already available local tools first; add only tools that pass license, security, and resource checks.
+7. Local inference benchmark: compare small quantized models on measured hardware, with task quality, RAM/VRAM, latency, energy, and setup complexity. No hardware purchase or paid hosted fallback.
+8. Resource-aware task planner: select only tested adapters, enforce per-provider budgets, and checkpoint when resources are unavailable.
+
+### Initial acceptance criteria
+
+- Eve can list resources by capability and distinguish candidate, reviewed, tested, enabled, paused, and retired.
+- Every enabled adapter has current provenance, license/commercial-use state, cost/quota evidence, privacy classification, and a tested failure policy.
+- At least one keyless public discovery path and one browser-local file-processing path pass automated tests without adding a paid dependency.
+- Resource discovery cannot automatically install or execute discovered code.
+- Local/private files remain local unless an exact transfer is separately approved.
+- Quota exhaustion or stale quota evidence pauses the affected adapter without account rotation or paid fallback.
+- Existing Cloudflare memory records and owner-approval rules remain unchanged.
+- No production deployment, Worker deployment, merge, billing change, account creation, customer contact, publication, or purchase is implied by this roadmap.
+
+
+### Existing resource-catalog foundation discovered during implementation
+
+The repository already has a resource foundation; do not create a parallel registry:
+- Cloudflare Durable Object storage includes a resources table and owner-only listing/review routes.
+- POST /v1/resources accepts inert candidates through agent/resources/intake.mjs and stores them in quarantined state.
+- Current intake is intentionally narrow: exact HTTPS host allowlist (MDN, TC39, OWASP, Cloudflare Developers, Vercel) and a limited resource-type/cost schema.
+- The current agent planner accepts supplied resource metadata, but a general Eve-facing resource discovery/proposal workflow is not established by the inventory.
+
+Therefore the first code slice should extend the existing intake schema and owner-review lifecycle with additive metadata (access mode, persistence, execution, data classification, commercial-use state, quota evidence, adapter state, deletion/export behavior) and a carefully bounded set of source hosts. Add an Eve-facing proposal path only after the authenticated memory client contract and live runtime registration are verified. Preserve existing resource records and owner-only review routes. Do not broaden the allowlist to arbitrary domains or let resource discovery fetch/execute candidates automatically.

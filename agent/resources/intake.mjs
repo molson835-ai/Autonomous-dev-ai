@@ -1,26 +1,42 @@
+// Exact hosts only. This allowlist governs metadata intake, not arbitrary crawling.
 const ALLOWED_RESOURCE_HOSTS = new Set([
-  "developer.mozilla.org",
-  "tc39.es",
-  "owasp.org",
-  "developers.cloudflare.com",
-  "vercel.com"
+  "developer.mozilla.org", "tc39.es", "owasp.org", "developers.cloudflare.com", "vercel.com",
+  "data.gov", "api.census.gov", "www.census.gov", "usgs.gov", "www.usgs.gov",
+  "noaa.gov", "www.noaa.gov", "openalex.org", "api.openalex.org", "api.crossref.org",
+  "arxiv.org", "www.wikidata.org", "query.wikidata.org", "archive.org", "www.archive.org",
+  "commoncrawl.org", "huggingface.co", "github.com", "npmjs.com", "pypi.org",
+  "crates.io", "openstreetmap.org", "www.openstreetmap.org", "polyhaven.com",
+  "openverse.org", "commons.wikimedia.org", "freesound.org", "fonts.google.com"
 ]);
 
 const RESOURCE_TYPES = new Set([
   "documentation", "tutorial", "skill", "repository", "tool",
-  "model", "dataset", "benchmark", "hardware_reference"
+  "model", "dataset", "benchmark", "hardware_reference",
+  "api", "library", "storage", "compute", "asset"
 ]);
 
 const COST_MODELS = new Set([
   "free_open_source", "free_tier_limited", "paid", "unknown"
 ]);
 
+const ACCESS_MODES = new Set(["public_read", "authenticated_read", "local_only", "owner_action_required"]);
+const PERSISTENCE_MODES = new Set(["durable", "ephemeral", "unknown"]);
+const EXECUTION_MODES = new Set(["none", "browser_local", "server_runtime", "interactive_remote", "unknown"]);
+const DATA_CLASSES = new Set(["public", "owner_selected_local", "approved_private"]);
+const COMMERCIAL_USE = new Set(["allowed", "prohibited", "conditional", "unknown"]);
+const ADAPTER_STATUSES = new Set(["candidate", "implemented", "tested", "enabled", "paused", "retired"]);
+const FAILURE_POLICIES = new Set(["bounded_retry", "pause", "local_fallback", "manual_review"]);
+const QUOTA_CONFIDENCE = new Set(["high", "medium", "low", "unknown"]);
+
 const INPUT_FIELDS = new Set([
   "id", "name", "summary", "resource_type", "skill_tags", "source_url",
   "maintainer", "license", "version_or_revision", "cost_model",
   "cost_notes", "dependencies", "permissions",
   "network_or_execution_requirements", "security_notes",
-  "retrieved_at", "last_verified_at", "freshness_policy"
+  "retrieved_at", "last_verified_at", "freshness_policy",
+  "access_mode", "persistence", "execution", "data_classes_allowed",
+  "commercial_use", "quota_evidence", "adapter_status", "failure_policy",
+  "deletion_and_export"
 ]);
 
 function requiredString(value, field, maxLength) {
@@ -56,6 +72,44 @@ function validDateTime(value) {
   if (offsetHourText !== undefined &&
       (Number(offsetHourText) > 23 || Number(offsetMinuteText) > 59)) return false;
   return Number.isFinite(Date.parse(value));
+}
+
+function enumValue(value, allowed, field, fallback) {
+  const normalized = value ?? fallback;
+  if (!allowed.has(normalized)) throw new TypeError(`Invalid resource field: ${field}`);
+  return normalized;
+}
+
+function quotaEvidence(value) {
+  if (value === undefined) {
+    return { source_url: "unknown", checked_at: "unknown", limits: "unknown", confidence: "unknown" };
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError("Invalid resource field: quota_evidence");
+  }
+  const allowedKeys = new Set(["source_url", "checked_at", "limits", "confidence"]);
+  if (Object.keys(value).some(key => !allowedKeys.has(key))) {
+    throw new TypeError("Unsupported quota_evidence field");
+  }
+  const sourceUrl = requiredString(value.source_url ?? "unknown", "quota_evidence.source_url", 2048);
+  if (sourceUrl !== "unknown") {
+    let parsed;
+    try { parsed = new URL(sourceUrl); } catch { throw new TypeError("Invalid quota evidence URL"); }
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.port ||
+        !ALLOWED_RESOURCE_HOSTS.has(parsed.hostname.toLowerCase())) {
+      throw new TypeError("Quota evidence URL is outside the HTTPS research allowlist");
+    }
+  }
+  const checkedAt = value.checked_at ?? "unknown";
+  if (checkedAt !== "unknown" && !validDateTime(checkedAt)) {
+    throw new TypeError("Invalid quota evidence checked_at");
+  }
+  const limits = requiredString(value.limits ?? "unknown", "quota_evidence.limits", 2000);
+  const confidence = enumValue(value.confidence, QUOTA_CONFIDENCE, "quota_evidence.confidence", "unknown");
+  if (confidence === "high" && (sourceUrl === "unknown" || checkedAt === "unknown" || limits === "unknown")) {
+    throw new TypeError("High-confidence quota evidence requires an official source, check date, and stated limits");
+  }
+  return { source_url: sourceUrl, checked_at: checkedAt, limits, confidence };
 }
 
 function deepFreeze(value) {
@@ -115,6 +169,16 @@ export function prepareResourceCandidate(candidate, now = new Date()) {
     license: requiredString(candidate.license ?? "unknown", "license", 300),
     version_or_revision: requiredString(candidate.version_or_revision ?? "unknown", "version_or_revision", 300),
     cost_model: costModel,
+    access_mode: enumValue(candidate.access_mode, ACCESS_MODES, "access_mode", "public_read"),
+    persistence: enumValue(candidate.persistence, PERSISTENCE_MODES, "persistence", "unknown"),
+    execution: enumValue(candidate.execution, EXECUTION_MODES, "execution", "unknown"),
+    data_classes_allowed: stringList(candidate.data_classes_allowed ?? ["public"], "data_classes_allowed", { maxItems: 3, maxLength: 40 })
+      .filter(value => DATA_CLASSES.has(value)),
+    commercial_use: enumValue(candidate.commercial_use, COMMERCIAL_USE, "commercial_use", "unknown"),
+    quota_evidence: quotaEvidence(candidate.quota_evidence),
+    adapter_status: enumValue(candidate.adapter_status, ADAPTER_STATUSES, "adapter_status", "candidate"),
+    failure_policy: enumValue(candidate.failure_policy, FAILURE_POLICIES, "failure_policy", "manual_review"),
+    deletion_and_export: requiredString(candidate.deletion_and_export ?? "unknown", "deletion_and_export", 2000),
     dependencies: stringList(candidate.dependencies ?? [], "dependencies"),
     permissions: stringList(candidate.permissions ?? [], "permissions"),
     network_or_execution_requirements: stringList(candidate.network_or_execution_requirements ?? [], "network_or_execution_requirements"),
@@ -123,6 +187,10 @@ export function prepareResourceCandidate(candidate, now = new Date()) {
     retrieved_at: retrievedAt,
     last_verified_at: lastVerifiedAt
   };
+  if (result.data_classes_allowed.length !== (candidate.data_classes_allowed ?? ["public"]).length ||
+      result.data_classes_allowed.length === 0) {
+    throw new TypeError("Invalid resource field: data_classes_allowed");
+  }
   for (const optional of ["cost_notes", "freshness_policy"]) {
     if (candidate[optional] !== undefined) {
       result[optional] = requiredString(candidate[optional], optional, optional === "freshness_policy" ? 1000 : 2000);

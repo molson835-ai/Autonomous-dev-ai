@@ -22,6 +22,20 @@ const resource = z.object({
   license: z.string().min(1).max(300),
   cost_model: z.enum(["free_open_source", "free_tier_limited", "paid", "unknown"]),
   trust_state: z.enum(["discovered", "quarantined", "reviewed", "approved", "rejected", "stale"]),
+  access_mode: z.enum(["public_read", "authenticated_read", "local_only", "owner_action_required"]).optional(),
+  persistence: z.enum(["durable", "ephemeral", "unknown"]).optional(),
+  execution: z.enum(["none", "browser_local", "server_runtime", "interactive_remote", "unknown"]).optional(),
+  data_classes_allowed: z.array(z.enum(["public", "owner_selected_local", "approved_private"])).max(3).optional(),
+  commercial_use: z.enum(["allowed", "prohibited", "conditional", "unknown"]).optional(),
+  quota_evidence: z.object({
+    source_url: z.string().max(2048),
+    checked_at: z.string().max(80),
+    limits: z.string().max(2000),
+    confidence: z.enum(["high", "medium", "low", "unknown"]),
+  }).optional(),
+  adapter_status: z.enum(["candidate", "implemented", "tested", "enabled", "paused", "retired"]).optional(),
+  failure_policy: z.enum(["bounded_retry", "pause", "local_fallback", "manual_review"]).optional(),
+  deletion_and_export: z.string().max(2000).optional(),
 });
 
 export default defineTool({

@@ -2,6 +2,8 @@ export const SKILL_STATUSES = ["untested", "practiced", "demonstrated"] as const
 export type SkillStatus = (typeof SKILL_STATUSES)[number];
 export type ResourceTrustState = "discovered" | "quarantined" | "reviewed" | "approved" | "rejected" | "stale";
 export type ResourceCostModel = "free_open_source" | "free_tier_limited" | "paid" | "unknown";
+export type ResourceAccessMode = "public_read" | "authenticated_read" | "local_only" | "owner_action_required";
+export type ResourceAdapterStatus = "candidate" | "implemented" | "tested" | "enabled" | "paused" | "retired";
 
 export interface SkillRequirement {
   skill: string;
@@ -25,6 +27,15 @@ export interface PlannerResource {
   license: string;
   cost_model: ResourceCostModel;
   trust_state: ResourceTrustState;
+  access_mode?: ResourceAccessMode;
+  persistence?: "durable" | "ephemeral" | "unknown";
+  execution?: "none" | "browser_local" | "server_runtime" | "interactive_remote" | "unknown";
+  data_classes_allowed?: Array<"public" | "owner_selected_local" | "approved_private">;
+  commercial_use?: "allowed" | "prohibited" | "conditional" | "unknown";
+  quota_evidence?: { source_url: string; checked_at: string; limits: string; confidence: "high" | "medium" | "low" | "unknown" };
+  adapter_status?: ResourceAdapterStatus;
+  failure_policy?: "bounded_retry" | "pause" | "local_fallback" | "manual_review";
+  deletion_and_export?: string;
 }
 
 export interface TaskSkillPlanInput {
@@ -102,12 +113,26 @@ export function planTaskSkills(input: TaskSkillPlanInput) {
         trustState: resource.trust_state,
         licenseKnown: resource.license.trim().toLowerCase() !== "unknown",
         costModel: resource.cost_model,
+        accessMode: resource.access_mode ?? "unknown",
+        persistence: resource.persistence ?? "unknown",
+        execution: resource.execution ?? "unknown",
+        dataClassesAllowed: resource.data_classes_allowed ?? ["public"],
+        commercialUse: resource.commercial_use ?? "unknown",
+        quotaEvidence: resource.quota_evidence ?? {
+          source_url: "unknown", checked_at: "unknown", limits: "unknown", confidence: "unknown" as const,
+        },
+        adapterStatus: resource.adapter_status ?? "candidate",
+        failurePolicy: resource.failure_policy ?? "manual_review",
+        deletionAndExport: resource.deletion_and_export ?? "unknown",
         executionReady: false as const,
         reviewRequired: resource.trust_state !== "approved" ||
           resource.license.trim().toLowerCase() === "unknown" ||
           resource.cost_model === "unknown" ||
           resource.cost_model === "paid" ||
-          resource.cost_model === "free_tier_limited",
+          resource.cost_model === "free_tier_limited" ||
+          resource.access_mode !== "public_read" ||
+          resource.commercial_use !== "allowed" ||
+          (resource.adapter_status !== "tested" && resource.adapter_status !== "enabled"),
       }));
 
     return {
