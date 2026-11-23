@@ -70,3 +70,7 @@ Track separately:
 - Hardware bottlenecks measured and proposed
 
 Never count hypothetical prices, unpaid commitments, forecasts, or user interest as revenue.
+
+## Creative artifact capability
+
+The `create_artifact` tool and web-chat renderer support self-contained HTML/SVG, local note-based WAV synthesis, and short Canvas/MediaRecorder WebM motion graphics. HTML/SVG are validated server-side; WAV/WebM recipes are validated server-side and rendered on the owner's browser. All downloads are browser-session links; no server storage or public hosting is configured. This is procedural creative generation, not an integration with generative image/video/audio models. Do not claim that Invideo or another ChatGPT-side connector is callable from Eve.
