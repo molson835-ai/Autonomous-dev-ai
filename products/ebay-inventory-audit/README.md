@@ -35,6 +35,13 @@ The parser recognizes eBay Active Listings report fields such as `Custom label` 
 - Results are advisory. Review them before taking action.
 - Use a complete active-listings export; a partial export can create false "stock not listed" flags.
 
+## Input safeguards
+
+- Each selected file is limited to 10 MB.
+- Each CSV is limited to 100,000 data rows.
+- Rows with missing or extra columns are rejected with a row-numbered message instead of being silently misread.
+- The tool still processes data locally; these limits protect browser responsiveness on mobile devices.
+
 ## Current limitations
 
 - CSV only; no XLS/XLSX parsing.
