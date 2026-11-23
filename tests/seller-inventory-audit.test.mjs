@@ -1,4 +1,7 @@
 import test from "node:test";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import assert from "node:assert/strict";
 import { parseCsv, reconcileCsv, issuesToCsv } from "../products/ebay-inventory-audit/reconcile.mjs";
 
@@ -120,4 +123,15 @@ test("rejects CSV input above the bounded row count", () => {
   const lines = ["SKU,Title,Quantity"];
   for (let i = 0; i < 100001; i += 1) lines.push(`SKU-${i},Item,${i}`);
   assert.throws(() => parseCsv(lines.join("\n")), /100,000 data-row limit/);
+});
+
+
+test("deployed seller audit copies stay byte-for-byte aligned with the canonical product", () => {
+  const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  for (const file of ["index.html", "reconcile.mjs"]) {
+    const canonical = readFileSync(resolve(root, "products/ebay-inventory-audit", file), "utf8");
+    for (const copy of ["public/products/ebay-inventory-audit", "apps/web/public/products/ebay-inventory-audit"]) {
+      assert.equal(readFileSync(resolve(root, copy, file), "utf8"), canonical, `${copy}/${file} is stale`);
+    }
+  }
 });

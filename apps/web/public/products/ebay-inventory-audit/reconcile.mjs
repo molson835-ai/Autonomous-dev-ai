@@ -38,10 +38,16 @@ export function parseCsv(text) {
   row.push(cell);
   if (row.some(value => value.trim() !== "")) rows.push(row);
   if (rows.length < 2) throw new Error("The CSV needs a header row and at least one data row.");
+  if (rows.length > 100001) throw new Error("The CSV exceeds the 100,000 data-row limit. Split it into smaller files and try again.");
 
   const headers = rows[0].map(normalizeHeader);
   if (headers.some(header => !header)) throw new Error("Every CSV column needs a header.");
   if (new Set(headers).size !== headers.length) throw new Error("The CSV has duplicate column headers.");
+  const inconsistentRow = rows.slice(1).findIndex(values => values.length !== headers.length);
+  if (inconsistentRow !== -1) {
+    const rowNumber = inconsistentRow + 2;
+    throw new Error(`Row ${rowNumber} has ${rows[inconsistentRow + 1].length} columns; the header has ${headers.length}. Check for a missing or extra comma.`);
+  }
   return rows.slice(1).map((values, index) => {
     const record = { _row: index + 2 };
     headers.forEach((header, column) => { record[header] = String(values[column] ?? "").trim(); });
