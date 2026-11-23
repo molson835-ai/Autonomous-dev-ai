@@ -14,12 +14,12 @@ const cloudflare = createOpenAICompatible({
   includeUsage: true,
 });
 
-// A fresh scheduled session's first prompt currently consumes about 16.8k
-// uncached input tokens (observed in Production). Keep the per-session cap
-// above that startup cost so the workflow can complete more than one model
-// step. The 65,536-token ceiling remains below half the model context window;
-// the output ceiling still bounds long generations.
-const MAX_SESSION_INPUT_TOKENS = 65_536;
+// Production Agent Run telemetry recorded 71,883 uncached input tokens in a
+// fresh first turn. Eve checks this cap before each subsequent model call, so
+// a lower limit can stop the tool loop before task_transition closes the task.
+// Allow several full-context tool turns, while keeping the cumulative session
+// budget finite. Per-call context remains capped separately at 131,072 tokens.
+const MAX_SESSION_INPUT_TOKENS = 400_000;
 const MAX_SESSION_OUTPUT_TOKENS = 4_000;
 
 export default defineAgent({
