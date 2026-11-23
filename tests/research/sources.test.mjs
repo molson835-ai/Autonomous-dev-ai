@@ -38,6 +38,7 @@ test("extracts readable HTML while dropping script and navigation content", () =
 test("fetches a permitted source and returns a bounded citation excerpt", async () => {
   const results = await fetchResearchSources(
     ["https://developer.mozilla.org/en-US/docs/Web/JavaScript"],
+    "JavaScript reference",
     async () => response("<title>JavaScript</title><main>Reference text</main>"),
   );
   assert.equal(results[0].status, 200);
@@ -49,6 +50,7 @@ test("fetches a permitted source and returns a bounded citation excerpt", async 
 test("rejects redirects to hosts outside the allowlist", async () => {
   const results = await fetchResearchSources(
     ["https://developer.mozilla.org/start"],
+    "redirect behavior",
     async () => response("", { status: 302, headers: { location: "https://evil.example/steal" } }),
   );
   assert.match(results[0].error, /allowlist/);
@@ -58,6 +60,7 @@ test("revalidates allowed redirects and returns the final URL", async () => {
   let calls = 0;
   const results = await fetchResearchSources(
     ["https://developer.mozilla.org/start"],
+    "redirect behavior",
     async () => {
       calls += 1;
       return calls === 1
@@ -73,6 +76,7 @@ test("revalidates allowed redirects and returns the final URL", async () => {
 test("rejects non-document content types", async () => {
   const results = await fetchResearchSources(
     ["https://developer.mozilla.org/file"],
+    "file content",
     async () => response("binary", { contentType: "application/octet-stream" }),
   );
   assert.match(results[0].error, /content type/);
@@ -89,7 +93,7 @@ test("deduplicates URLs and caps the source list at five", async () => {
     "https://vercel.com/docs/e",
     "https://vercel.com/docs/f",
   ];
-  const results = await fetchResearchSources(urls, async () => {
+  const results = await fetchResearchSources(urls, "plain text retrieval", async () => {
     calls += 1;
     return response("text", { contentType: "text/plain" });
   });
@@ -100,6 +104,7 @@ test("deduplicates URLs and caps the source list at five", async () => {
 test("reports HTTP failures without treating them as evidence", async () => {
   const results = await fetchResearchSources(
     ["https://developer.mozilla.org/missing"],
+    "missing page",
     async () => response("not found", { status: 404 }),
   );
   assert.equal(results[0].status, 404);
@@ -111,4 +116,15 @@ test("plain text extraction preserves content and normalizes whitespace", () => 
     title: "",
     text: "alpha beta",
   });
+});
+
+test("selects topic-relevant passages and marks oversized partial responses", async () => {
+  const body = "<main><p>Unrelated introductory material that should not dominate this technical result.</p><p>JavaScript promises provide asynchronous behavior and allow chaining handlers.</p></main>";
+  const relevant = await fetchResearchSources(["https://developer.mozilla.org/topic"], "JavaScript promises", async () => response(body));
+  assert.match(relevant[0].excerpt, /JavaScript promises/);
+  const large = "preface ".repeat(160_000) + " JavaScript promise behavior appears near the end.";
+  const partial = await fetchResearchSources(["https://developer.mozilla.org/large"], "JavaScript promise", async () => response(large, {contentType:"text/plain"}));
+  assert.equal(partial[0].truncated, true);
+  assert.equal(partial[0].diagnostic, "partial-response-size-limit");
+  assert.ok(partial[0].excerpt.length <= 8_000);
 });
