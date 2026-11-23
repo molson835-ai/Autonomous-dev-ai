@@ -13,6 +13,7 @@ export function validateArtifact(input) {
   const errors = [];
   if (!input || typeof input !== "object" || Array.isArray(input)) return invalid(["An artifact object is required."]);
   if (!["html", "svg", "music", "video"].includes(input.format)) return invalid(["format must be html, svg, music, or video."]);
+  if (Object.keys(input).some((key) => !["format", "name", "content"].includes(key))) errors.push("Only format, name, and content are supported.");
   if (typeof input.name !== "string" || input.name.trim().length < 1 || input.name.length > 80) errors.push("name must contain 1–80 characters.");
   if (errors.length) return invalid(errors);
 
@@ -41,7 +42,7 @@ function validateSvg(input, errors) {
   if (typeof input.content !== "string" || input.content.trim().length === 0) return invalid(["content must be SVG markup."]);
   if (byteLength(input.content) > MAX_ARTIFACT_BYTES) errors.push("SVG artifact exceeds the 64 KiB limit.");
   if (!/^\s*<svg\b/i.test(input.content) || !/<\/svg\s*>\s*$/i.test(input.content)) errors.push("Provide one complete SVG root element.");
-  if (/<script\b|\bon[a-z]+\s*=|javascript:|<foreignObject\b|(?:href|xlink:href)\s*=\s*["']\s*(?:https?:|\/\/|data:text\/html)/i.test(input.content)) errors.push("SVG scripts, event handlers, foreignObject, and remote or executable links are prohibited.");
+  if (/<\!DOCTYPE|<\!ENTITY|<script\b|\bon[a-z]+\s*=|javascript:|<foreignObject\b|(?:href|xlink:href)\s*=\s*["']\s*(?:https?:|\/\/|file:|data:text\/html)/i.test(input.content)) errors.push("SVG DTDs, entities, scripts, event handlers, foreignObject, and remote links are prohibited.");
   if (/url\s*\(|@import/i.test(input.content)) errors.push("SVG CSS imports and URL references are prohibited.");
   if (errors.length) return invalid(errors);
   const previewHtml = "<!doctype html><html><head><meta http-equiv=" + JSON.stringify("Content-Security-Policy") + " content=" + JSON.stringify(CSP) + "></head><body style=" + JSON.stringify("margin:0") + ">" + input.content + "</body></html>";
@@ -58,38 +59,43 @@ function parseDescriptor(input, errors) {
 function validateMusic(input, errors) {
   const score = parseDescriptor(input, errors);
   if (!score) return invalid(errors);
+  if (Object.keys(score).some((key) => !["title", "bpm", "bars", "notes"].includes(key))) errors.push("Music score contains unsupported fields.");
   if (typeof score.title !== "string" || score.title.trim().length < 1 || score.title.length > 100) errors.push("Music title is required and must be at most 100 characters.");
   if (!Number.isInteger(score.bpm) || score.bpm < 40 || score.bpm > 200) errors.push("bpm must be an integer from 40 to 200.");
   if (!Number.isInteger(score.bars) || score.bars < 1 || score.bars > 16) errors.push("bars must be an integer from 1 to 16.");
   if (!Array.isArray(score.notes) || score.notes.length < 1 || score.notes.length > 128) errors.push("notes must contain 1–128 notes.");
   if (Array.isArray(score.notes)) for (const [i, note] of score.notes.entries()) {
     if (!note || typeof note !== "object" || Array.isArray(note)) { errors.push(`notes[${i}] must be an object.`); continue; }
+    if (Object.keys(note).some((key) => !["pitch", "startBeat", "durationBeats", "velocity", "waveform"].includes(key))) errors.push("A music note contains unsupported fields.");
     if (!Number.isInteger(note.pitch) || note.pitch < 36 || note.pitch > 96) errors.push(`notes[${i}].pitch must be MIDI 36–96.`);
-    if (!Number.isFinite(note.startBeat) || note.startBeat < 0 || note.startBeat > 64) errors.push(`notes[${i}].startBeat is out of range.`);
+    if (!Number.isFinite(note.startBeat) || note.startBeat < 0 || note.startBeat >= score.bars * 4) errors.push("A note startBeat is out of range.");
     if (!Number.isFinite(note.durationBeats) || note.durationBeats <= 0 || note.durationBeats > 8) errors.push(`notes[${i}].durationBeats is out of range.`);
     if (note.velocity !== undefined && (!Number.isFinite(note.velocity) || note.velocity < 0 || note.velocity > 1)) errors.push(`notes[${i}].velocity must be 0–1.`);
     if (note.waveform !== undefined && !["sine", "triangle", "square", "sawtooth"].includes(note.waveform)) errors.push(`notes[${i}].waveform is unsupported.`);
   }
   if (errors.length) return invalid(errors);
-  return { valid: true, status: "media_recipe_validated", artifact: { name: input.name.trim(), filename: safeFilename(input.name, "wav"), format: "music", mediaType: "audio/wav", composition: score }, limits: { generation: "browser-local-synthesis", network: false, serverPersistence: false, externalCredits: false } };
+  return { valid: true, status: "media_recipe_validated", artifact: { name: input.name.trim(), filename: safeFilename(input.name, "wav"), format: "music", mediaType: "audio/wav", composition: score }, limits: { generation: "isolated-fluidsynth-rendering", network: false, serverPersistence: true, externalCredits: false } };
 }
 function validateVideo(input, errors) {
   const storyboard = parseDescriptor(input, errors);
   if (!storyboard) return invalid(errors);
+  if (Object.keys(storyboard).some((key) => !["width", "height", "fps", "scenes"].includes(key))) errors.push("Video storyboard contains unsupported fields.");
   if (!Number.isInteger(storyboard.width) || ![640, 1280].includes(storyboard.width)) errors.push("width must be 640 or 1280.");
   if (!Number.isInteger(storyboard.height) || ![360, 720].includes(storyboard.height)) errors.push("height must be 360 or 720.");
   if (!Number.isInteger(storyboard.fps) || ![24, 30].includes(storyboard.fps)) errors.push("fps must be 24 or 30.");
   if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length < 1 || storyboard.scenes.length > 6) errors.push("scenes must contain 1–6 scenes.");
   if (Array.isArray(storyboard.scenes)) for (const [i, scene] of storyboard.scenes.entries()) {
     if (!scene || typeof scene !== "object" || Array.isArray(scene)) { errors.push(`scenes[${i}] must be an object.`); continue; }
+    if (Object.keys(scene).some((key) => !["durationSeconds", "background", "title", "subtitle", "motion"].includes(key))) errors.push("A video scene contains unsupported fields.");
     if (!Number.isFinite(scene.durationSeconds) || scene.durationSeconds < 1 || scene.durationSeconds > 5) errors.push(`scenes[${i}].durationSeconds must be 1–5.`);
     if (typeof scene.background !== "string" || !/^#[0-9a-f]{6}$/i.test(scene.background)) errors.push(`scenes[${i}].background must be a six-digit hex color.`);
-    if (typeof scene.title !== "string" || scene.title.length > 80) errors.push(`scenes[${i}].title must be at most 80 characters.`);
+    if (typeof scene.title !== "string" || scene.title.trim().length < 1 || scene.title.length > 80) errors.push(`scenes[${i}].title must be at most 80 characters.`);
     if (scene.subtitle !== undefined && (typeof scene.subtitle !== "string" || scene.subtitle.length > 120)) errors.push(`scenes[${i}].subtitle must be at most 120 characters.`);
     if (scene.motion !== undefined && !["rise", "drift", "pulse", "orbit"].includes(scene.motion)) errors.push(`scenes[${i}].motion is unsupported.`);
   }
   if (errors.length) return invalid(errors);
-  return { valid: true, status: "media_recipe_validated", artifact: { name: input.name.trim(), filename: safeFilename(input.name, "webm"), format: "video", mediaType: "video/webm", storyboard }, limits: { generation: "browser-local-canvas-recording", network: false, serverPersistence: false, externalCredits: false } };
+  if (storyboard.scenes.reduce((sum, scene) => sum + (Number.isFinite(scene?.durationSeconds) ? scene.durationSeconds : 0), 0) > 30) errors.push("Video storyboard cannot exceed 30 seconds.");
+  return { valid: true, status: "media_recipe_validated", artifact: { name: input.name.trim(), filename: safeFilename(input.name, "mp4"), format: "video", mediaType: "video/mp4", storyboard }, limits: { generation: "browser-local-canvas-recording", network: false, serverPersistence: true, externalCredits: false } };
 }
 function result(name, format, mediaType, extension, content, previewHtml) {
   return { valid: true, status: "artifact_validated_not_executed", artifact: { name: name.trim(), filename: safeFilename(name, extension), format, mediaType, bytes: byteLength(content), content, previewHtml }, limits: { maxBytes: MAX_ARTIFACT_BYTES, filesPerCall: 1, externalNetwork: false, serverFilesystem: false, codeExecutionByAgent: false, browserPreviewSandboxed: true, persistence: false } };
