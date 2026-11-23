@@ -149,15 +149,15 @@
   const samples = {
     active: {
       name: "sample-active-listings.csv",
-      csv: "SKU,Title,Quantity\\nA-100,Camping lantern,3\\nB-200,Storage tote,2\\nC-300,Water bottle,1\\n"
+      csv: "SKU,Title,Quantity\nA-100,Camping lantern,3\nB-200,Storage tote,2\nC-300,Water bottle,1\n"
     },
     inventory: {
       name: "sample-physical-inventory.csv",
-      csv: "SKU,Title,Quantity,Location\\nA-100,Camping lantern,2,Bin A1\\nB-200,Storage tote,2,Bin B2\\nD-400,Work gloves,5,Bin C3\\n"
+      csv: "SKU,Title,Quantity,Location\nA-100,Camping lantern,2,Bin A1\nB-200,Storage tote,2,Bin B2\nD-400,Work gloves,5,Bin C3\n"
     }
   };
   const downloadSample = sample => {
-    const url = URL.createObjectURL(new Blob(["\\uFEFF", sample.csv], { type: "text/csv;charset=utf-8" }));
+    const url = URL.createObjectURL(new Blob(["\uFEFF", sample.csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
     link.download = sample.name;
@@ -170,7 +170,7 @@
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   };
   document.querySelector("#sampleActive").addEventListener("click", () => downloadSample(samples.active));
-  document.querySelector("#sampleInventory").addEventListener("click", () => downloadSample(samples.inventory));;
+  document.querySelector("#sampleInventory").addEventListener("click", () => downloadSample(samples.inventory));
 </script>
 </body>
 </html>
