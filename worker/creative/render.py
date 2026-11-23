@@ -55,7 +55,7 @@ def render_music(data, out):
     score = json.loads(data["content"])
     ppq = 480
     tempo = int(60_000_000 / score["bpm"])
-    events = [(0, 0, b"\xC0\x00"), (0, 1, b"\xFF\x51\x03" + tempo.to_bytes(3, "big"))]
+    events = [(0, 0, bytes([0xC0, int(score.get("instrument", 0))])), (0, 1, b"\xFF\x51\x03" + tempo.to_bytes(3, "big"))]
     for note in score["notes"]:
         start = round(note["startBeat"] * ppq)
         end = round((note["startBeat"] + note["durationBeats"]) * ppq)
