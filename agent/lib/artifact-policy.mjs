@@ -33,7 +33,7 @@ function validateHtml(input, errors) {
   if (!/<meta\s+name=["']viewport["']/i.test(input.content)) errors.push("Include a responsive viewport meta tag for mobile preview.");
   if (/<script\b[^>]*\bsrc\s*=/i.test(input.content) || /\s(?:src|href)\s*=\s*["']https?:\/\//i.test(input.content)) errors.push("External scripts and external asset URLs are not allowed in standalone artifacts.");
   if (errors.length) return invalid(errors);
-  const previewHtml = input.content.replace(/<head\b[^>]*>/i, (head) => head + `\n<meta http-equiv="Content-Security-Policy" content="${CSP}">\n`);
+  const previewHtml = "<!doctype html><html><head><meta http-equiv=" + JSON.stringify("Content-Security-Policy") + " content=" + JSON.stringify(CSP) + "></head><body style=" + JSON.stringify("margin:0") + ">" + input.content + "</body></html>";
   return result(input.name, "html", "text/html;charset=utf-8", "html", input.content, previewHtml);
 }
 
