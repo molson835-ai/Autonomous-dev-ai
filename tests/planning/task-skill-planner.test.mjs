@@ -110,7 +110,7 @@ test("planner requires current commercial, quota, and adapter evidence before ma
     data_classes_allowed: ["public"],
     commercial_use: "allowed",
     quota_evidence: {
-      source_url: "https://example.invalid/terms",
+      source_url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript",
       checked_at: "2026-11-23T00:00:00.000Z",
       limits: "No account quota applies to this open-source documentation.",
       confidence: "high",
@@ -142,7 +142,7 @@ test("planner flags conditional commercial use, stale quota confidence, and non-
       access_mode: "authenticated_read",
       commercial_use: "conditional",
       quota_evidence: {
-        source_url: "https://example.invalid/terms",
+        source_url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript",
         checked_at: "2026-11-23T00:00:00.000Z",
         limits: "Unknown",
         confidence: "low",
@@ -151,4 +151,11 @@ test("planner flags conditional commercial use, stale quota confidence, and non-
     })],
   });
   assert.equal(report.skills[0].matchingResources[0].reviewRequired, true);
+});
+
+test("intake does not accept high-confidence quota claims without dated official evidence", () => {
+  assert.throws(() => prepareResourceCandidate({
+    ...base,
+    quota_evidence: { source_url: "unknown", checked_at: "unknown", limits: "unknown", confidence: "high" }
+  }), /High-confidence quota evidence/);
 });
