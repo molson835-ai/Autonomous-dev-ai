@@ -24,7 +24,7 @@ test("provider configuration cannot silently use a real credential when unset", 
 
 test("provider context matches GLM-4.7-Flash while session usage remains independently bounded", () => {
   assert.match(agent, /modelContextWindowTokens: 131_072/);
-  assert.match(agent, /const MAX_SESSION_INPUT_TOKENS = 65_536/);
+  assert.match(agent, /const MAX_SESSION_INPUT_TOKENS = 400_000/);
   assert.match(agent, /const MAX_SESSION_OUTPUT_TOKENS = 4_000/);
   assert.match(agent, /window\.inputTokens - window\.cacheReadTokens >= MAX_SESSION_INPUT_TOKENS/);
   assert.match(agent, /window\.outputTokens >= MAX_SESSION_OUTPUT_TOKENS/);
@@ -39,4 +39,17 @@ test("provider quota exhaustion is converted to a non-retryable error for genera
   assert.match(guard, /new Error\("EVE stopped this model request/);
   assert.equal((guard.match(/throw nonRetryableQuotaError\(error\)/g) ?? []).length, 2);
   assert.doesNotMatch(guard, /catch \(error\) \{ if \(isQuotaError\(error\)\) await circuit\(id\);/);
+});
+
+
+test("session input budget clears the observed first-turn prompt and permits task closeout", () => {
+  const match = agent.match(/const MAX_SESSION_INPUT_TOKENS = ([0-9_]+)/);
+  assert.ok(match, "session input limit must be explicit");
+  const limit = Number(match[1].replaceAll("_", ""));
+  // Production Agent Run telemetry recorded 71,883 uncached input tokens in its first turn.
+  // Eve checks sessionUsage before the next model call, so a lower cap strands the turn
+  // before it can finish the task's tool sequence and call task_transition.
+  assert.ok(limit > 71_883, "session limit must exceed the observed 71,883-token startup turn");
+  assert.ok(limit >= 400_000, "budget must allow several full-context tool turns before stopping");
+  assert.ok(limit < 131_072 * 4, "budget must remain bounded relative to the model context");
 });
