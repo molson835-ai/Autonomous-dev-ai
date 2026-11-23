@@ -23,8 +23,10 @@ test("accepts self-contained SVG and rejects script and event-handler injection"
   assert.equal(result.valid, true);
   assert.equal(result.artifact.filename, "Original-art.svg");
   assert.equal(result.artifact.mediaType, "image/svg+xml;charset=utf-8");
+  assert.match(result.artifact.previewHtml, /Content-Security-Policy/);
   assert.equal(validateArtifact({ format: "svg", name: "bad", content: svg.replace("<circle", '<circle onload="alert(1)"') }).valid, false);
   assert.equal(validateArtifact({ format: "svg", name: "bad", content: svg.replace("<circle", '<script>alert(1)</script><circle') }).valid, false);
+  assert.equal(validateArtifact({ format: "svg", name: "bad", content: svg.replace("</svg>", "<style>circle{fill:url(https://evil.test/x)}</style></svg>") }).valid, false);
 });
 test("validates bounded original music score recipes", () => {
   const content = JSON.stringify({ title: "Sunrise", bpm: 110, bars: 4, notes: [{ pitch: 60, startBeat: 0, durationBeats: 1, velocity: 0.4, waveform: "triangle" }] });
