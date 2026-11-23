@@ -38,7 +38,8 @@ test("discovers bounded GitHub, Hugging Face, and npm metadata and stores only q
   assert.equal(result.stored_quarantined_count, 3);
   assert.equal(stored.length, 3);
   assert.ok(calls.every(call => call.init.method === "GET" && call.init.redirect === "error"));
-  assert.ok(stored.every(item => item.trust_state === "quarantined"));
+  assert.ok(stored.every(item => !Object.hasOwn(item, "trust_state")));
+  assert.ok(result.results.every(source => source.candidates.every(item => item.storage_result === "quarantined_new")));
   assert.ok(stored.every(item => item.commercial_use === "unknown" && item.cost_model === "unknown"));
   assert.ok(stored.every(item => item.data_classes_allowed.join(",") === "public"));
   assert.equal(stored[0].license, "MIT");
@@ -78,7 +79,7 @@ test("caps catalog results and rejects malformed inputs", async () => {
 
 test("does not accept malformed upstream repository, model, or package identifiers", async () => {
   const responses = [
-    { host: "github", payload: { items: [{ full_name: "evil.example/path", description: "x" }] } },
+    { host: "github", payload: { items: [{ full_name: "https://evil.example/path", description: "x" }] } },
     { host: "huggingface", payload: [{ modelId: "https://evil.example/model" }] },
     { host: "npm", payload: { objects: [{ package: { name: "../../evil" } }] } }
   ];
