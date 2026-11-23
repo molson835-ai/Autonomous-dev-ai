@@ -291,3 +291,14 @@ Unknown, stale, or conflicting evidence must fail closed for execution. Discover
 - Quota exhaustion or stale quota evidence pauses the affected adapter without account rotation or paid fallback.
 - Existing Cloudflare memory records and owner-approval rules remain unchanged.
 - No production deployment, Worker deployment, merge, billing change, account creation, customer contact, publication, or purchase is implied by this roadmap.
+
+
+### Existing resource-catalog foundation discovered during implementation
+
+The repository already has a resource foundation; do not create a parallel registry:
+- Cloudflare Durable Object storage includes a resources table and owner-only listing/review routes.
+- POST /v1/resources accepts inert candidates through agent/resources/intake.mjs and stores them in quarantined state.
+- Current intake is intentionally narrow: exact HTTPS host allowlist (MDN, TC39, OWASP, Cloudflare Developers, Vercel) and a limited resource-type/cost schema.
+- The current agent planner accepts supplied resource metadata, but a general Eve-facing resource discovery/proposal workflow is not established by the inventory.
+
+Therefore the first code slice should extend the existing intake schema and owner-review lifecycle with additive metadata (access mode, persistence, execution, data classification, commercial-use state, quota evidence, adapter state, deletion/export behavior) and a carefully bounded set of source hosts. Add an Eve-facing proposal path only after the authenticated memory client contract and live runtime registration are verified. Preserve existing resource records and owner-only review routes. Do not broaden the allowlist to arbitrary domains or let resource discovery fetch/execute candidates automatically.
