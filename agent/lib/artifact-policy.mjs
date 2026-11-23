@@ -32,7 +32,7 @@ function validateHtml(input, errors) {
   if (!/<head\b[\s>]/i.test(input.content) || !/<\/head\s*>/i.test(input.content)) errors.push("The HTML document must have a complete head element.");
   if (!/<body\b[\s>]/i.test(input.content) || !/<\/body\s*>/i.test(input.content)) errors.push("The HTML document must have a complete body element.");
   if (!/<meta\s+name=["']viewport["']/i.test(input.content)) errors.push("Include a responsive viewport meta tag for mobile preview.");
-  if (/<script\b[^>]*\bsrc\s*=|\s(?:src|href)\s*=\s*["'](?:https?:|\/\/|file:|javascript:)/i.test(input.content)) errors.push("External scripts and external asset URLs are not allowed in standalone artifacts.");
+  if (/<script\b[^>]*\bsrc\s*=|\s(?:src|href|srcset|poster|action)\s*=\s*["'][^"']*(?:https?:|\/\/|file:|javascript:)|url\s*\(\s*["']?\s*(?:https?:|\/\/|file:)|@import/i.test(input.content)) errors.push("External scripts, external asset URLs, CSS imports, and remote CSS references are prohibited.");
   if (errors.length) return invalid(errors);
   const previewHtml = input.content.replace(/<head\b[^>]*>/i, (head) => head + "\n<meta http-equiv=" + JSON.stringify("Content-Security-Policy") + " content=" + JSON.stringify(CSP) + ">\n");
   return result(input.name, "html", "text/html;charset=utf-8", "html", input.content, previewHtml);
