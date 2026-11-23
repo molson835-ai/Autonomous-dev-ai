@@ -24,10 +24,10 @@ test("provider configuration cannot silently use a real credential when unset", 
 
 test("provider context matches GLM-4.7-Flash while session usage remains independently bounded", () => {
   assert.match(agent, /modelContextWindowTokens: 131_072/);
-  assert.match(
-    agent,
-    /sessionUsage: \(\{ window \}\) => window\.inputTokens - window\.cacheReadTokens >= 16_384 \|\| window\.outputTokens >= 4_000/,
-  );
+  assert.match(agent, /const MAX_SESSION_INPUT_TOKENS = 65_536/);
+  assert.match(agent, /const MAX_SESSION_OUTPUT_TOKENS = 4_000/);
+  assert.match(agent, /window\.inputTokens - window\.cacheReadTokens >= MAX_SESSION_INPUT_TOKENS/);
+  assert.match(agent, /window\.outputTokens >= MAX_SESSION_OUTPUT_TOKENS/);
   assert.match(agent, /createCloudflareNeuronGuard/);
 });
 
