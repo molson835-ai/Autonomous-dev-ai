@@ -29,7 +29,7 @@ Blender is installed in the worker image for a later declarative 3D-scene adapte
 
 - HTML/SVG source: 64 KiB maximum.
 - Music/video descriptors: 16 KiB maximum.
-- Music: 40–200 BPM, 1–16 bars, 1–128 notes, MIDI pitches 36–96.
+- Music: 40–200 BPM, 1–16 bars, 1–128 notes, MIDI pitches 36–96, optional General MIDI instrument program 0–127.
 - Video: 640×360 or 1280×720, 24 or 30 fps, 1–6 scenes, 1–5 seconds per scene, 30 seconds maximum.
 - Rendered output: 100 MiB maximum; SVG preview: 12 MiB maximum.
 - Per-render sandbox: 2 vCPU, 4 GiB memory, five-minute timeout, deny-all network, non-persistent workspace.
