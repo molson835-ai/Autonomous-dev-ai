@@ -32,7 +32,7 @@ The tool inventory is based on files under `agent/tools/`. It is not a claim tha
 The repository does not define tools for:
 
 - Arbitrary public website crawling
-- Reading/writing/editing local files
+- General repository filesystem access, local file writing/editing, or shell execution. A production trace did observe a sandbox-scoped `read_file` harness utility; it failed on `/workspace/package.json` because that path was absent. This does not establish that the repository is mounted. Eve must use only task-supplied or previously confirmed paths and must not guess workspace paths.
 - Shell or terminal execution
 - Direct GitHub repository/branch/pull-request operations
 - Vercel deployment control
