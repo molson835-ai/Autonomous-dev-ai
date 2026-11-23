@@ -90,7 +90,11 @@ function safeText(value, max) {
   if (typeof value !== "string") return "";
   return value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
 }
-function normalizeLicense(value) {\n  const license = safeText(value, 100);\n  return !license || license.toUpperCase() === "NOASSERTION" ? "unknown" : license;\n}\nfunction slug(value) {
+function normalizeLicense(value) {
+  const license = safeText(value, 100);
+  return !license || license.toUpperCase() === "NOASSERTION" ? "unknown" : license;
+}
+function slug(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "").slice(0, 130);
 }
 function uniqueTags(values) {
