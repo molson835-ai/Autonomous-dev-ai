@@ -92,3 +92,79 @@ test("rejects malformed, date-only, and impossible timestamps", () => {
 test("does not allow callers to mark candidates approved", () => {
   assert.throws(() => prepareResourceCandidate({ ...base, trust_state: "approved" }), /Unsupported resource field/);
 });
+
+
+test("accepts curated public resource hosts but rejects lookalikes and unlisted hosts", () => {
+  for (const url of [
+    "https://data.gov/",
+    "https://api.census.gov/data/",
+    "https://huggingface.co/models",
+    "https://github.com/org/repo",
+    "https://pypi.org/project/example/",
+    "https://commons.wikimedia.org/wiki/Main_Page"
+  ]) assert.equal(isResourceHostAllowed(url), true, url);
+  for (const url of [
+    "https://evil.example/",
+    "https://github.com.evil.example/",
+    "https://sub.github.com/",
+    "https://drive.google.com/",
+    "https://huggingface.co.evil.example/"
+  ]) assert.equal(isResourceHostAllowed(url), false, url);
+});
+
+test("adds explicit capability, quota, privacy, and adapter metadata with conservative defaults", () => {
+  const entry = prepareResourceCandidate(base, new Date("2026-11-23T00:00:00.000Z"));
+  assert.equal(entry.access_mode, "public_read");
+  assert.equal(entry.persistence, "unknown");
+  assert.equal(entry.execution, "unknown");
+  assert.deepEqual(entry.data_classes_allowed, ["public"]);
+  assert.equal(entry.commercial_use, "unknown");
+  assert.deepEqual(entry.quota_evidence, {
+    source_url: "unknown", checked_at: "unknown", limits: "unknown", confidence: "unknown"
+  });
+  assert.equal(entry.adapter_status, "candidate");
+  assert.equal(entry.failure_policy, "manual_review");
+  assert.equal(entry.deletion_and_export, "unknown");
+  assert.equal(entry.trust_state, "quarantined");
+});
+
+test("validates explicit resource metadata and official quota evidence", () => {
+  const entry = prepareResourceCandidate({
+    ...base,
+    resource_type: "dataset",
+    source_url: "https://data.gov/",
+    access_mode: "public_read",
+    persistence: "durable",
+    execution: "none",
+    data_classes_allowed: ["public"],
+    commercial_use: "conditional",
+    quota_evidence: {
+      source_url: "https://data.gov/",
+      checked_at: "2026-11-23T00:00:00.000Z",
+      limits: "Check current dataset-specific terms",
+      confidence: "medium"
+    },
+    adapter_status: "tested",
+    failure_policy: "pause",
+    deletion_and_export: "Source-hosted; local cache not enabled"
+  });
+  assert.equal(entry.commercial_use, "conditional");
+  assert.equal(entry.quota_evidence.confidence, "medium");
+  assert.equal(entry.adapter_status, "tested");
+  assert.equal(entry.failure_policy, "pause");
+  assert.equal(Object.isFrozen(entry.quota_evidence), true);
+});
+
+test("rejects invalid resource capability metadata and unapproved quota evidence hosts", () => {
+  for (const candidate of [
+    { ...base, access_mode: "admin" },
+    { ...base, persistence: "forever" },
+    { ...base, execution: "shell" },
+    { ...base, data_classes_allowed: ["public", "secret"] },
+    { ...base, commercial_use: "probably" },
+    { ...base, adapter_status: "auto_enabled" },
+    { ...base, failure_policy: "ignore_errors" },
+    { ...base, quota_evidence: { source_url: "https://evil.example/terms" } },
+    { ...base, quota_evidence: { source_url: "https://data.gov/", checked_at: "yesterday" } }
+  ]) assert.throws(() => prepareResourceCandidate(candidate));
+});
