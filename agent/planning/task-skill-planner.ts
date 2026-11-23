@@ -132,7 +132,6 @@ export function planTaskSkills(input: TaskSkillPlanInput) {
           resource.cost_model === "free_tier_limited" ||
           resource.access_mode !== "public_read" ||
           resource.commercial_use !== "allowed" ||
-          (resource.cost_model === "free_tier_limited" && resource.quota_evidence?.confidence !== "high") ||
           (resource.adapter_status !== "tested" && resource.adapter_status !== "enabled"),
       }));
 
