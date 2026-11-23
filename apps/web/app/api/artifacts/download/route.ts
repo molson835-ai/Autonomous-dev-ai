@@ -4,7 +4,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type DownloadPayload = { p: string; n: string; t: string; e: number };
+type DownloadPayload = { p: string; n: string; t: string; e: number; d: "attachment" | "inline" };
 
 const CONTENT_TYPES = new Set([
   "text/html; charset=utf-8",
