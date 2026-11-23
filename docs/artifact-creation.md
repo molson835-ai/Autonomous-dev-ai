@@ -33,7 +33,7 @@ Blender is installed in the worker image for a later declarative 3D-scene adapte
 - Video: 640×360 or 1280×720, 24 or 30 fps, 1–6 scenes, 1–5 seconds per scene, 30 seconds maximum.
 - Rendered output: 100 MiB maximum; SVG preview: 12 MiB maximum.
 - Per-render sandbox: 2 vCPU, 4 GiB memory, five-minute timeout, deny-all network, non-persistent workspace.
-- Private download links expire after seven days. Private Blob objects use a 30-day TTL and are automatically deleted after that retention period.
+- Private download links expire after 30 days. Private Blob objects use a 30-day TTL and are automatically deleted after that retention period.
 
 ## Required one-time project setup
 
