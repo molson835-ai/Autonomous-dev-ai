@@ -36,6 +36,7 @@ test("validates bounded original music score recipes", () => {
   assert.equal(result.artifact.mediaType, "audio/wav");
   assert.equal(result.limits.externalCredits, false);
   assert.equal(validateArtifact({ format: "music", name: "bad", content: JSON.stringify({ title: "x", bpm: 500, bars: 4, notes: [] }) }).valid, false);
+  assert.equal(validateArtifact({ format: "music", name: "bad", content: JSON.stringify({ title: "x", bpm: 100, bars: 4, notes: [null] }) }).valid, false);
 });
 test("validates bounded motion-graphics storyboards", () => {
   const content = JSON.stringify({ width: 640, height: 360, fps: 24, scenes: [{ durationSeconds: 2, background: "#112233", title: "Coastline", subtitle: "A new horizon", motion: "drift" }] });
@@ -45,6 +46,7 @@ test("validates bounded motion-graphics storyboards", () => {
   assert.equal(result.artifact.mediaType, "video/webm");
   assert.equal(result.limits.externalCredits, false);
   assert.equal(validateArtifact({ format: "video", name: "bad", content: JSON.stringify({ width: 1920, height: 1080, fps: 60, scenes: [] }) }).valid, false);
+  assert.equal(validateArtifact({ format: "video", name: "bad", content: JSON.stringify({ width: 640, height: 360, fps: 24, scenes: [null] }) }).valid, false);
 });
 test("rejects unknown formats, extra keys, and malformed descriptors", () => {
   assert.equal(validateArtifact({ format: "mp4", name: "x", content: "{}" }).valid, false);
