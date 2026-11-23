@@ -145,13 +145,17 @@ test("deployed seller audit copies stay byte-for-byte aligned with the canonical
 });
 
 
-test("sample CSV downloads use a real BOM and valid SKU headers", () => {
+test("sample CSV downloads use separate mobile-friendly buttons, a real BOM, and valid SKU headers", () => {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
   const html = readFileSync(resolve(root, "products/ebay-inventory-audit/index.html"), "utf8");
   assert.ok(html.includes(String.raw`new Blob(["\\uFEFF", csv]`) === false, "sample download must not emit a literal \\uFEFF prefix");
-  assert.ok(html.includes(String.raw`new Blob(["\uFEFF", csv]`), "sample download must prepend the actual BOM character at runtime");
+  assert.ok(html.includes(String.raw`new Blob(["\uFEFF", sample.csv]`), "sample download must prepend the actual BOM character at runtime");
+  assert.match(html, /id="sampleActive"/);
+  assert.match(html, /id="sampleInventory"/);
   assert.match(html, /sample-active-listings\.csv/);
   assert.match(html, /sample-physical-inventory\.csv/);
+  assert.match(html, /setTimeout\(\(\) => URL\.revokeObjectURL\(url\), 60000\)/);
+  assert.doesNotMatch(html, /Object\.entries\(samples\)/, "one tap must not trigger multiple downloads");
   const activeSample = "\uFEFFSKU,Title,Quantity\nA-100,Camping lantern,3\nB-200,Storage tote,2\nC-300,Water bottle,1\n";
   const inventorySample = "\uFEFFSKU,Title,Quantity,Location\nA-100,Camping lantern,2,Bin A1\nB-200,Storage tote,2,Bin B2\nD-400,Work gloves,5,Bin C3\n";
   const result = reconcileCsv(activeSample, inventorySample);
