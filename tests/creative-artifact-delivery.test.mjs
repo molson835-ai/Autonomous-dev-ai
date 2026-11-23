@@ -50,3 +50,11 @@ test("chat component only shows a download link for stored artifacts", async () 
   assert.match(source, /href=\{artifact\.downloadUrl\}/);
   assert.match(source, /artifact\.previewUrl/);
 });
+
+test("Preview download links prefer the deployment URL over the Production alias", async () => {
+  const source = await read("agent/lib/creative-renderer.ts");
+  assert.match(
+    source,
+    /env\.EVE_PUBLIC_BASE_URL\s*\?\?\s*env\.VERCEL_URL\s*\?\?\s*env\.VERCEL_PROJECT_PRODUCTION_URL/,
+  );
+});
