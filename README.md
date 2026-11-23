@@ -107,6 +107,6 @@ See [EVE's earn-before-spend policy](docs/eve-earn-before-spend-policy.md) for t
 MIT. See [LICENSE](LICENSE).
 
 
-## Standalone artifact creation
+## Creative artifact creation
 
-Eve supports one standalone HTML artifact per `create_artifact` call. The web chat displays a sandboxed preview with mobile/desktop sizing and a browser-side download. Artifacts are returned to the browser and are not persisted on the server. The validator enforces a 64 KiB limit, complete HTML structure, a responsive viewport, no external scripts/assets, and a restrictive preview Content Security Policy. This is not a general filesystem, shell, image-generation, repository-write, or deployment capability. See `docs/artifact-creation.md`.
+Eve's `create_artifact` tool supports self-contained HTML and SVG artwork, short original synthesized music (WAV), and short procedural motion-graphics video (WebM). HTML/SVG receive sandboxed previews and browser download links; music/video are rendered locally by the web client and expose playback plus download links after rendering. These local formats do not consume external generation credits or persist files on the server. They are not yet integrations with generative image/video/music models. Downloads are browser-session links, not durable public URLs. See `docs/artifact-creation.md`.
