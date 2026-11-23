@@ -107,6 +107,6 @@ See [EVE's earn-before-spend policy](docs/eve-earn-before-spend-policy.md) for t
 MIT. See [LICENSE](LICENSE).
 
 
-## Standalone artifact creation
+## Creative artifact creation
 
-Eve supports one standalone HTML artifact per `create_artifact` call. The web chat displays a sandboxed preview with mobile/desktop sizing and a browser-side download. Artifacts are returned to the browser and are not persisted on the server. The validator enforces a 64 KiB limit, complete HTML structure, a responsive viewport, no external scripts/assets, and a restrictive preview Content Security Policy. This is not a general filesystem, shell, image-generation, repository-write, or deployment capability. See `docs/artifact-creation.md`.
+Eve's `create_artifact` tool uses an isolated Vercel Sandbox worker and open-source renderers (Inkscape, FluidSynth, FFmpeg) to create HTML/SVG, WAV music, and MP4 motion graphics. Finished files are stored privately in Vercel Blob and delivered in chat through signed 30-day download links. The feature requires a private Blob store, Vercel Sandbox OIDC, and a prebuilt worker image; it fails closed until configured. It does not yet integrate generative media providers or expose arbitrary Blender scripts. See `docs/artifact-creation.md`.

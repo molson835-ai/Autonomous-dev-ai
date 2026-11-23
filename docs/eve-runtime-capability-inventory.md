@@ -70,3 +70,7 @@ Track separately:
 - Hardware bottlenecks measured and proposed
 
 Never count hypothetical prices, unpaid commitments, forecasts, or user interest as revenue.
+
+## Creative artifact capability
+
+Eve's `create_artifact` tool runs validated HTML/SVG, FluidSynth WAV, and FFmpeg MP4 jobs in a fresh network-isolated Vercel Sandbox using a prebuilt open-source renderer image. Finished files are stored in private Vercel Blob and returned with signed 30-day download links. This capability fails closed until the private Blob store, Vercel Sandbox OIDC, worker image, and link-signing environment are configured. Blender is installed but its declarative 3D adapter is not yet exposed. This is not a generative media-provider integration; do not claim Invideo or another ChatGPT-side connector is callable from Eve.
