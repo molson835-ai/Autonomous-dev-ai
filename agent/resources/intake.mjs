@@ -104,12 +104,12 @@ function quotaEvidence(value) {
   if (checkedAt !== "unknown" && !validDateTime(checkedAt)) {
     throw new TypeError("Invalid quota evidence checked_at");
   }
-  return {
-    source_url: sourceUrl,
-    checked_at: checkedAt,
-    limits: requiredString(value.limits ?? "unknown", "quota_evidence.limits", 2000),
-    confidence: enumValue(value.confidence, QUOTA_CONFIDENCE, "quota_evidence.confidence", "unknown")
-  };
+  const limits = requiredString(value.limits ?? "unknown", "quota_evidence.limits", 2000);
+  const confidence = enumValue(value.confidence, QUOTA_CONFIDENCE, "quota_evidence.confidence", "unknown");
+  if (confidence === "high" && (sourceUrl === "unknown" || checkedAt === "unknown" || limits === "unknown")) {
+    throw new TypeError("High-confidence quota evidence requires an official source, check date, and stated limits");
+  }
+  return { source_url: sourceUrl, checked_at: checkedAt, limits, confidence };
 }
 
 function deepFreeze(value) {
