@@ -8,7 +8,7 @@ The agent definition in `agent/agent.ts` registers a Cloudflare Workers AI model
 |---|---|---|
 | `research_sources` | Fetch up to five supplied HTTPS documentation URLs | Exact allowlist: MDN, TC39, OWASP, Cloudflare Developers, and Vercel. Not a search engine. Read-only. Live Eve invocation is not yet evidenced. |
 | `research_web` | Public web search through Tavily | Basic search only, max five results, HTTPS result filtering, safe search, no raw content, no retries/fallback. Requires both `TAVILY_API_KEY` and `EVE_TAVILY_FREE_PLAN_VERIFIED=true`. A sensitive Production variable entry exists for the key, but its value was not inspected. The free-plan verification variable is absent from the Production environment inventory, so the code fails closed and makes no request. |
-| `search_news` | Limited recent news discovery through GDELT DOC 2.0 | Keyless and read-only; at most 10 article leads per request. Not comprehensive web search. Verify important claims at the original publisher. Live Eve invocation is not yet evidenced. |
+| `search_news` | Limited recent news discovery through GDELT DOC 2.0 | Keyless and read-only; at most 10 article leads per request. Not comprehensive web search. Verify important claims at the original publisher. Live Eve invocation is not yet evidenced. |\n| `discover_resources` | Search GitHub repositories, Hugging Face models, and npm packages | New code path: at most 3 results per selected catalog, 3 catalogs, one HTTPS request per catalog, 6-second timeout, no retries. Submits inert metadata to the existing `/v1/resources` quarantine. Licenses, commercial use, and costs default to unknown unless upstream metadata states a license. No downloads, installs, execution, or approval. Runtime invocation and Production persistence are not yet verified. |
 | `memory_recall` | Retrieve approved memories/experiences | Production memory URL/token variable entries exist and owner diagnostic read endpoints returned HTTP 200. This does not prove the Eve tool works. Historical scheduled runs on Nov 18 and Nov 19 failed at `memory_recall`; traces omitted tool error content and used older Vercel commits. Current-deployment Eve success is not yet verified. |
 | `memory_record_experience` | Record a completed experience | Production write/read-back test is deferred. Do not claim a record was saved until a separately approved exact-ID round trip succeeds. |
 | `memory_propose` | Submit a pending knowledge proposal | Writes a pending proposal; does not approve itself. Production writes remain gated by owner approval. |
@@ -85,7 +85,7 @@ The following remain important blockers from the verified repository inventory:
 - The resource catalog is not an install queue. Every discovered item must be reviewed for license, commercial use, cost, privacy, security, freshness, and persistence before enabling it.
 - Public free services and community compute must not be combined to evade quotas or access controls. Personal cloud accounts are not Eve's backend.
 
-The next implementation slice is intentionally small: a typed resource-registry contract and documentation-backed catalog, followed by one keyless public discovery adapter and browser-local CSV/JSON processing. Keep each slice isolated, testable, and non-production until separately reviewed.
+PR #97 merged the additive resource metadata contract, exact-host intake allowlist, resource planner gating, and ecosystem catalog. The next slice adds a bounded keyless discovery adapter for GitHub, Hugging Face, and npm; it writes only to the existing quarantined resource registry. Follow with browser-local CSV/JSON processing. Keep each slice isolated, testable, and non-production until separately reviewed.
 
 
 ### Existing resource registry baseline correction
@@ -97,3 +97,15 @@ A repository inspection on 2026-11-23 confirmed that resource intake and owner r
 - No verified general-purpose Eve resource-discovery/proposal tool was found in the inspected runtime inventory.
 
 Do not build a second resource registry. Extend the current schema and intake with additive capability, access, persistence, data-classification, commercial-use, quota, and adapter-state fields. Keep arbitrary domains blocked, imported resources inert, and owner decisions owner-only. The new catalog is a discovery map, not evidence that any candidate has been activated.
+
+
+## Keyless resource discovery adapter — implementation branch
+
+Branch `feat/keyless-resource-discovery` adds a proposed Eve tool, `discover_resources`, backed by public catalog endpoints:
+- GitHub repository search (`api.github.com`)
+- Hugging Face model catalog (`huggingface.co`)
+- npm package registry search (`registry.npmjs.org`)
+
+The adapter is bounded to 1–3 results per selected catalog (maximum 9), one HTTPS request per catalog, a 6-second timeout, no retries, no API keys, and no downloads. It submits only compact inert metadata to the existing authenticated `POST /v1/resources` route, which stores candidates in quarantine. Upstream text is untrusted. License, cost, commercial rights, quota, and persistence remain unknown unless explicitly sourced; a discovered license string is not treated as commercial approval.
+
+**Verification boundary:** automated tests and CI can verify parsing, bounds, error handling, and quarantine submission contracts. A successful build does not prove the live Eve runtime discovers this tool or that the Production Worker accepts writes. Those require a separately authorized, controlled runtime test. Do not enable the Tavily adapter or change Production configuration as part of this work.
