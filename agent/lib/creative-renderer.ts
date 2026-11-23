@@ -83,7 +83,7 @@ export async function renderCreativeArtifact(input: CreativeInput) {
     image: WORKER_IMAGE,
     persistent: false,
     timeout: 5 * 60 * 1000,
-    resources: { vcpus: 2, memory: 4096 },
+    resources: { vcpus: 2 },
     networkPolicy: "deny-all",
   });
 
