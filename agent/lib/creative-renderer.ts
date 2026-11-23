@@ -19,7 +19,7 @@ type CreativeInput = {
   name: string;
   content: string;
 };
-type LinkPayload = { p: string; n: string; t: string; e: number };
+type LinkPayload = { p: string; n: string; t: string; e: number; d: "attachment" | "inline" };
 
 function safeFilename(name: string, extension: string): string {
   const base = name.trim().replace(/[^a-z0-9 _-]/gi, "").replace(/\s+/g, "-").slice(0, 48) || "eve-artifact";
@@ -32,11 +32,11 @@ function publicBaseUrl(): string | undefined {
   return configured.startsWith("http://") || configured.startsWith("https://") ? configured.replace(/\/$/, "") : `https://${configured.replace(/\/$/, "")}`;
 }
 
-function signedDownloadUrl(pathname: string, filename: string, contentType: string): string {
+function signedDownloadUrl(pathname: string, filename: string, contentType: string, disposition: "attachment" | "inline" = "attachment"): string {
   const secret = env.ARTIFACT_LINK_SECRET;
   const base = publicBaseUrl();
   if (!secret || !base) throw new Error("Artifact delivery is not configured: set ARTIFACT_LINK_SECRET and EVE_PUBLIC_BASE_URL.");
-  const payload: LinkPayload = { p: pathname, n: filename, t: contentType, e: Math.floor(Date.now() / 1000) + LINK_TTL_SECONDS };
+  const payload: LinkPayload = { p: pathname, n: filename, t: contentType, e: Math.floor(Date.now() / 1000) + LINK_TTL_SECONDS, d: disposition };
   const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const signature = createHmac("sha256", secret).update(encoded).digest("base64url");
   return `${base}/api/artifacts/download?token=${encoded}.${signature}`;
@@ -98,9 +98,9 @@ export async function renderCreativeArtifact(input: CreativeInput) {
     const filename = safeFilename(input.name, primary.filename.split(".").pop()!);
     const storagePath = `eve-artifacts/${new Date().toISOString().slice(0, 10)}/${randomUUID()}/${filename}`;
     const stored = await uploadPrivate(storagePath, bytes, primary.contentType);
-    const downloadUrl = signedDownloadUrl(stored.pathname, filename, primary.contentType);
+    const downloadUrl = signedDownloadUrl(stored.pathname, filename, primary.contentType, "attachment");
+    let previewUrl = ["music", "video"].includes(input.format) ? signedDownloadUrl(stored.pathname, filename, primary.contentType, "inline") : undefined;
 
-    let previewUrl: string | undefined;
     let previewBytes: Buffer | null = null;
     if (input.format === "svg") {
       previewBytes = await sandbox.readFileToBuffer({ path: `${outputDir}/preview.png` });
@@ -108,7 +108,7 @@ export async function renderCreativeArtifact(input: CreativeInput) {
     if (previewBytes?.byteLength) {
       if (previewBytes.byteLength > 12 * 1024 * 1024) throw new Error("SVG preview exceeds the 12 MiB limit.");
       const preview = await uploadPrivate(`eve-artifacts/${new Date().toISOString().slice(0, 10)}/${randomUUID()}/preview.png`, previewBytes, "image/png");
-      previewUrl = signedDownloadUrl(preview.pathname, "preview.png", "image/png");
+      previewUrl = signedDownloadUrl(preview.pathname, "preview.png", "image/png", "inline");
     }
 
     return {
