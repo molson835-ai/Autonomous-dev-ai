@@ -99,7 +99,7 @@ export async function renderCreativeArtifact(input: CreativeInput) {
     const storagePath = `eve-artifacts/${new Date().toISOString().slice(0, 10)}/${randomUUID()}/${filename}`;
     const stored = await uploadPrivate(storagePath, bytes, primary.contentType);
     const downloadUrl = signedDownloadUrl(stored.pathname, filename, primary.contentType, "attachment");
-    let previewUrl = ["music", "video"].includes(input.format) ? signedDownloadUrl(stored.pathname, filename, primary.contentType, "inline") : undefined;
+    let previewUrl = input.format === "music" || input.format === "video" ? signedDownloadUrl(stored.pathname, filename, primary.contentType, "inline") : undefined;
 
     let previewBytes: Buffer | null = null;
     if (input.format === "svg") {
