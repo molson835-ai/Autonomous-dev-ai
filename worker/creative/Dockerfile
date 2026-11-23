@@ -14,7 +14,7 @@ RUN apt-get update \
       ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
-COPY worker/creative/render.py /opt/eve-creative/render.py
+COPY render.py /opt/eve-creative/render.py
 RUN python3 -m py_compile /opt/eve-creative/render.py \
  && command -v blender \
  && command -v ffmpeg \
