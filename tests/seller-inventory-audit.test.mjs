@@ -108,3 +108,16 @@ test("neutralizes spreadsheet formulas in untrusted exported text fields", () =>
   assert.match(csv, /'@cmd/);
   assert.match(csv, /'-1\+2/);
 });
+
+
+test("rejects rows with missing or extra columns instead of silently shifting data", () => {
+  assert.throws(() => parseCsv("SKU,Title,Quantity\\nA-1,Lantern"), /Row 2 has 2 columns; the header has 3/);
+  assert.throws(() => parseCsv("SKU,Title,Quantity\\nA-1,Lantern,2,unexpected"), /Row 2 has 4 columns; the header has 3/);
+  assert.equal(parseCsv("SKU,Title,Quantity\\nA-1,Lantern,2")[0].quantity, "2");
+});
+
+test("rejects CSV input above the bounded row count", () => {
+  const lines = ["SKU,Title,Quantity"];
+  for (let i = 0; i < 100001; i += 1) lines.push(`SKU-${i},Item,${i}`);
+  assert.throws(() => parseCsv(lines.join("\\n")), /100,000 data-row limit/);
+});
