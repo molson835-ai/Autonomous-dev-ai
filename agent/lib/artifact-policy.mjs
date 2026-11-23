@@ -58,12 +58,13 @@ function parseDescriptor(input, errors) {
 function validateMusic(input, errors) {
   const score = parseDescriptor(input, errors);
   if (!score) return invalid(errors);
-  if (typeof score.title !== "string" || score.title.length > 100) errors.push("Music title is required and must be at most 100 characters.");
+  if (typeof score.title !== "string" || score.title.trim().length < 1 || score.title.length > 100) errors.push("Music title is required and must be at most 100 characters.");
   if (!Number.isInteger(score.bpm) || score.bpm < 40 || score.bpm > 200) errors.push("bpm must be an integer from 40 to 200.");
   if (!Number.isInteger(score.bars) || score.bars < 1 || score.bars > 16) errors.push("bars must be an integer from 1 to 16.");
   if (!Array.isArray(score.notes) || score.notes.length < 1 || score.notes.length > 128) errors.push("notes must contain 1–128 notes.");
   if (Array.isArray(score.notes)) for (const [i, note] of score.notes.entries()) {
-    if (!note || !Number.isInteger(note.pitch) || note.pitch < 36 || note.pitch > 96) errors.push(`notes[${i}].pitch must be MIDI 36–96.`);
+    if (!note || typeof note !== "object" || Array.isArray(note)) { errors.push(`notes[${i}] must be an object.`); continue; }
+    if (!Number.isInteger(note.pitch) || note.pitch < 36 || note.pitch > 96) errors.push(`notes[${i}].pitch must be MIDI 36–96.`);
     if (!Number.isFinite(note.startBeat) || note.startBeat < 0 || note.startBeat > 64) errors.push(`notes[${i}].startBeat is out of range.`);
     if (!Number.isFinite(note.durationBeats) || note.durationBeats <= 0 || note.durationBeats > 8) errors.push(`notes[${i}].durationBeats is out of range.`);
     if (note.velocity !== undefined && (!Number.isFinite(note.velocity) || note.velocity < 0 || note.velocity > 1)) errors.push(`notes[${i}].velocity must be 0–1.`);
@@ -80,6 +81,7 @@ function validateVideo(input, errors) {
   if (!Number.isInteger(storyboard.fps) || ![24, 30].includes(storyboard.fps)) errors.push("fps must be 24 or 30.");
   if (!Array.isArray(storyboard.scenes) || storyboard.scenes.length < 1 || storyboard.scenes.length > 6) errors.push("scenes must contain 1–6 scenes.");
   if (Array.isArray(storyboard.scenes)) for (const [i, scene] of storyboard.scenes.entries()) {
+    if (!scene || typeof scene !== "object" || Array.isArray(scene)) { errors.push(`scenes[${i}] must be an object.`); continue; }
     if (!Number.isFinite(scene.durationSeconds) || scene.durationSeconds < 1 || scene.durationSeconds > 5) errors.push(`scenes[${i}].durationSeconds must be 1–5.`);
     if (typeof scene.background !== "string" || !/^#[0-9a-f]{6}$/i.test(scene.background)) errors.push(`scenes[${i}].background must be a six-digit hex color.`);
     if (typeof scene.title !== "string" || scene.title.length > 80) errors.push(`scenes[${i}].title must be at most 80 characters.`);
