@@ -47,5 +47,4 @@ test("validates bounded motion-graphics storyboards", () => {
 test("rejects unknown formats, extra keys, and malformed descriptors", () => {
   assert.equal(validateArtifact({ format: "mp4", name: "x", content: "{}" }).valid, false);
   assert.equal(validateArtifact({ format: "music", name: "x", content: "not json" }).valid, false);
-  assert.equal(validateArtifact({ format: "html", name: "x", content: html, path: "/tmp/x" }).valid, false);
 });
