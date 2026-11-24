@@ -19,9 +19,9 @@ function collectText(value: unknown, depth = 0): string {
   if (typeof value === "string") return value.slice(0, 20_000);
   if (Array.isArray(value)) return value.slice(0, 30).map(item => collectText(item, depth + 1)).join("\n");
   if (typeof value === "object") {
-    return Object.entries(value as Record<string, unknown>)
+    return Object.values(value as Record<string, unknown>)
       .slice(0, 30)
-      .map(([key, item]) => /text|content|input|message|prompt|body/i.test(key) ? collectText(item, depth + 1) : "")
+      .map(item => collectText(item, depth + 1))
       .filter(Boolean)
       .join("\n");
   }
@@ -31,7 +31,7 @@ function collectText(value: unknown, depth = 0): string {
 /** Fail closed for an explicitly read-only current turn, regardless of caller role. */
 export function isExplicitReadOnlyTurn(input: unknown): boolean {
   const text = collectText(input);
-  return /\bread[\s-]?only\b|\bno\s+(?:writes?|mutations?|changes?)\b|\bdo\s+not\s+(?:write|save|record|modify|change|create)\b|\bdon['’]t\s+(?:write|save|record|modify|change|create)\b|\bwithout\s+(?:writing|saving|recording|modifying|changing)\b/i.test(text);
+  return /\bread[\s-]?only\b|\bno\s+(?:writes?|writing|mutations?|changes?)\b|\bdo\s+not\s+(?:write|save|record|modify|change|create|persist)\b|\bdon['’]t\s+(?:write|save|record|modify|change|create|persist)\b|\bwithout\s+(?:writing|saving|recording|modifying|changing|persisting)\b/i.test(text);
 }
 
 /**
