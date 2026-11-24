@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 
 export const OWNER_SESSION_COOKIE = "eve_owner_github";
+export const EVE_AGENT_OWNER_COOKIE = "eve_agent_owner";
 export const OWNER_OAUTH_STATE_COOKIE = "eve_github_oauth_state";
 export function isConfiguredOwnerId(value: unknown): boolean {
   const expected = Number(process.env.OWNER_GITHUB_ID);
