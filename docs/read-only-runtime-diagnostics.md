@@ -10,7 +10,7 @@ It reports:
 
 ## Important limits
 
-The documented Eve `ToolContext` exposes the current session, auth principal, messages, and invoked tool name. It does not document an accessor for enumerating the effective tool registry after dynamic resolution. Therefore this tool reports the live manifest as unavailable rather than presenting source filenames as live-registered tools. A successful call proves that `runtime_diagnostics` itself was callable; it does not prove that the other listed tools are available.
+The documented Eve `ToolContext` exposes the current session, auth principal, messages, and invoked tool name. Because `ctx.messages` is the model input for the current step and can include conversation history, the diagnostic selects only the newest user message when evaluating the current-turn read-only instruction. A regression test confirms that an older read-only request does not incorrectly govern a later user turn. It does not document an accessor for enumerating the effective tool registry after dynamic resolution. Therefore this tool reports the live manifest as unavailable rather than presenting source filenames as live-registered tools. A successful call proves that `runtime_diagnostics` itself was callable; it does not prove that the other listed tools are available.
 
 This tool performs no HTTP requests, memory operations, task operations, or writes. Integration health is deliberately reported as `not-tested`; each integration requires a separate bounded read-only check and its own evidence.
 
