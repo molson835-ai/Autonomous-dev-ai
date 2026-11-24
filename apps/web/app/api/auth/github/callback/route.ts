@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isConfiguredOwnerId, OWNER_OAUTH_STATE_COOKIE, OWNER_SESSION_COOKIE } from "@/lib/owner-github";
+import { EVE_AGENT_OWNER_COOKIE, isConfiguredOwnerId, OWNER_OAUTH_STATE_COOKIE, OWNER_SESSION_COOKIE } from "@/lib/owner-github";
 
 export const runtime = "nodejs";
 
@@ -47,6 +47,13 @@ export async function GET(request: NextRequest) {
     response.cookies.set(OWNER_SESSION_COOKIE, accessToken, {
       httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax",
       path: "/api/owner", maxAge: 8 * 60 * 60,
+    });
+    // Separate HttpOnly cookie scoped only to Eve's API routes. The channel
+    // independently verifies this token against the configured OAuth app
+    // and immutable owner ID before exposing stateful tools.
+    response.cookies.set(EVE_AGENT_OWNER_COOKIE, accessToken, {
+      httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax",
+      path: "/eve", maxAge: 8 * 60 * 60,
     });
     response.cookies.set(OWNER_OAUTH_STATE_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
     return response;

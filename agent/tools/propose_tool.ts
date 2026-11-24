@@ -1,6 +1,7 @@
-import { defineTool } from "eve/tools";
+import { defineDynamic, defineTool } from "eve/tools";
 import { z } from "zod";
 import { generateToolScaffold } from "../lib/toolsmith.mjs";
+import { canUseWriteTools } from "../lib/tool-access";
 
 const field = z.object({
   name: z.string().min(1).max(40),
@@ -11,7 +12,7 @@ const field = z.object({
   max: z.number().finite().optional(),
 }).strict();
 
-export default defineTool({
+const tool = defineTool({
   description: "Generate a proposal-only TypeScript scaffold for a small pure deterministic tool from a bounded declarative specification. It does not write files, run code, install packages, access the network or filesystem, register tools, or grant permissions. Generated code is inert and requires developer implementation, tests, review, and owner approval before use.",
   inputSchema: z.object({
     name: z.string().min(2).max(48),
@@ -24,3 +25,5 @@ export default defineTool({
     return generateToolScaffold(input);
   },
 });
+
+export default defineDynamic(ctx => canUseWriteTools(ctx) ? tool : null);

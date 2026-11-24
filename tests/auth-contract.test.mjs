@@ -8,7 +8,7 @@ const layout = readFileSync("apps/web/app/layout.tsx", "utf8");
 
 test("Eve chat channel accepts anonymous requests", () => {
   assert.match(channel, /import\s*\{[^}]*\bnone\b[^}]*\}\s*from\s*["']eve\/channels\/auth["']/);
-  assert.match(channel, /auth:\s*\[none\(\)\]/);
+  assert.match(channel, /auth:\s*\[[^\]]*none\(\)[^\]]*\]/);
   assert.doesNotMatch(channel, /verifyHttpBasic|ROUTE_AUTH_BASIC_USER|ROUTE_AUTH_BASIC_PASSWORD/);
 });
 

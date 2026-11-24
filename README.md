@@ -38,6 +38,7 @@ The research capability is read-only. It does not write to the repository, execu
 - Evidence handling: fetched text is untrusted reference material. The agent must cite final URLs, distinguish facts from inference, and surface uncertainty.
 - Knowledge: proposed records live under `agent/knowledge/proposed/`; nothing is automatically trusted or promoted.
 - Persistent memory: `memory/worker/` contains an authenticated Cloudflare Worker backed by a single-owner SQLite Durable Object; `agent/tools/memory_*.ts` exposes recall, experience recording, proposal review, and explicit approval/rejection.
+- Session permissions: anonymous chat is read-only; verified owner, trusted Production service, and scheduled sessions receive only the stateful tools appropriate to that session. An explicit read-only request always suppresses writes. See [session-scoped write permissions](docs/eve-session-write-permissions.md).
 - Memory is retrieval-based learning, not model-weight fine-tuning. It requires a separately configured Cloudflare Worker URL and shared secret; see `docs/persistent-memory-setup.md`.
 - Costs: no paid APIs or new paid services are introduced. Existing Cloudflare Workers AI usage remains subject to the configured free-tier allowance; pause if the free quota is exhausted.
 

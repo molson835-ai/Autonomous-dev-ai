@@ -1,9 +1,10 @@
-import { defineTool } from "eve/tools";
+import { defineDynamic, defineTool } from "eve/tools";
 import { z } from "zod";
 import { memoryRequest } from "../lib/memory-client";
 import { assertProductionTaskRuntime } from "../lib/task-runtime.mjs";
+import { canUseWriteTools } from "../lib/tool-access";
 
-export default defineTool({
+const tool = defineTool({
   description:
     "Required closeout: after claiming a task, call this tool exactly once before ending the invocation, including after partial work or a tool failure. Checkpoint or finish the currently running owner-approved task. Use waiting with resume_after_minutes (15–1440) for a safe, bounded continuation on a later schedule; use waiting without it when blocked on owner input or an external dependency. Use succeeded only after verification, failed for a confirmed failure, and paused to stop. If closeout fails, report that exact failure and do not claim the task was checkpointed. You cannot approve, resume a paused task, change approved scope, or mark a task queued.",
   inputSchema: z.object({
@@ -28,3 +29,5 @@ export default defineTool({
     });
   },
 });
+
+export default defineDynamic(ctx => canUseWriteTools(ctx) ? tool : null);
