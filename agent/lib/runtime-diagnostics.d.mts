@@ -1,5 +1,6 @@
 export const SOURCE_DEFINED_TOOL_NAMES: readonly string[];
 export const DYNAMICALLY_GATED_TOOL_NAMES: readonly string[];
+export function latestUserMessage(messages: unknown): unknown;
 
 export interface RuntimeDiagnosticInput {
   principal?: {
