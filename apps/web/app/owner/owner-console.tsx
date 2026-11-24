@@ -71,6 +71,32 @@ type MemoryDiagnostic = {
   checks: MemoryProbe[];
 };
 
+type RuntimeTool = {
+  name: string;
+  source: string;
+  source_kind: string;
+  owner: string;
+  has_execute: boolean;
+  requires_approval: boolean;
+  has_auth: boolean;
+};
+type RuntimeToolResolver = { slug: string; source: string; source_kind: string; owner: string };
+type RuntimeCapabilities = {
+  checked_at: string;
+  environment: string;
+  agent_name: string;
+  model_id: string;
+  agent_info_version: number | null;
+  manifest_scope: string;
+  static_tools: RuntimeTool[];
+  dynamic_tool_resolvers: RuntimeToolResolver[];
+  disabled_definitions: string[];
+  shadowed_definitions: string[];
+  discovery_errors: number | null;
+  discovery_warnings: number | null;
+  limitations: string[];
+};
+
 
 async function ownerRequest<T>(path: string, method = "GET", body?: unknown): Promise<T> {
   const response = await fetch("/api/owner" + path, {
@@ -109,6 +135,7 @@ export default function OwnerConsole() {
   const [busy, setBusy] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [memoryDiagnostic, setMemoryDiagnostic] = useState<MemoryDiagnostic | null>(null);
+  const [runtimeCapabilities, setRuntimeCapabilities] = useState<RuntimeCapabilities | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState("Verify Eve Runtime Memory and Research");
   const [newTaskGoal, setNewTaskGoal] = useState("Verify live Eve memory recall, enumerate actual runtime tools, and research one evidence-backed zero-cost revenue opportunity. Prepare a controlled memory write/read-back test plan but do not write to Production.");
   const [newTaskScope, setNewTaskScope] = useState("Read-only runtime verification and public research only. Do not write Production memory or proposals, deploy, merge, spend, contact anyone, publish, purchase, or change queue controls. Stop and request separate owner approval before any memory write.");
@@ -222,6 +249,27 @@ export default function OwnerConsole() {
     }
   }
 
+  async function runRuntimeCapabilityDiagnostic() {
+    setBusy("runtime-capabilities");
+    setMessage("");
+    try {
+      const response = await fetch("/api/owner/runtime-capabilities", { cache: "no-store" });
+      const payload: unknown = await response.json();
+      if (!response.ok) {
+        const reason = payload && typeof payload === "object" && "reason_code" in payload
+          ? String((payload as { reason_code: unknown }).reason_code)
+          : "Runtime capability inspection failed (" + response.status + ").";
+        throw new Error(reason);
+      }
+      setRuntimeCapabilities(payload as RuntimeCapabilities);
+      setMessage("Eve's compiled Production tool definitions were inspected. Session-specific availability remains separate.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Runtime capability inspection failed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function createTaskProposal() {
     setBusy("create-task");
     setMessage("");
@@ -315,6 +363,61 @@ export default function OwnerConsole() {
                   </p>
                 </article>
               ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {authenticated && (
+        <section className="space-y-3 rounded-xl border bg-card p-4 shadow-sm">
+          <div className="space-y-1">
+            <h2 className="font-semibold">Production runtime tool inventory</h2>
+            <p className="text-sm text-muted-foreground">Reads Eve's authenticated /eve/v1/info inspection endpoint through Vercel OIDC. It reports compiled static tool definitions and dynamic resolvers without exposing instructions, schemas, credentials, or source contents. This is read-only and does not invoke any tool or change state.</p>
+          </div>
+          <button type="button" onClick={() => void runRuntimeCapabilityDiagnostic()} disabled={busy !== null} className="rounded-lg border px-4 py-2 text-sm font-medium disabled:opacity-50">
+            {busy === "runtime-capabilities" ? "Inspecting Production…" : "Inspect Production tool inventory"}
+          </button>
+          {runtimeCapabilities && (
+            <div className="space-y-3" aria-live="polite">
+              <p className="text-xs text-muted-foreground">
+                Checked {new Date(runtimeCapabilities.checked_at).toLocaleString()} · {runtimeCapabilities.environment} · {runtimeCapabilities.agent_name} · {runtimeCapabilities.model_id}
+              </p>
+              <p className="text-sm font-medium">
+                {runtimeCapabilities.static_tools.length} static tool definitions · {runtimeCapabilities.dynamic_tool_resolvers.length} dynamic tool resolvers · agent-info v{runtimeCapabilities.agent_info_version ?? "unknown"}
+              </p>
+              {runtimeCapabilities.discovery_errors !== null && runtimeCapabilities.discovery_errors > 0 && <p className="text-sm">Discovery errors: {runtimeCapabilities.discovery_errors}</p>}
+              {runtimeCapabilities.discovery_warnings !== null && runtimeCapabilities.discovery_warnings > 0 && <p className="text-sm">Discovery warnings: {runtimeCapabilities.discovery_warnings}</p>}
+              <div className="space-y-2">
+                {runtimeCapabilities.static_tools.map(tool => (
+                  <article key={tool.name} className="rounded-lg border p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <strong className="text-sm">{tool.name}</strong>
+                      <span className="text-xs text-muted-foreground">{tool.owner} · {tool.source_kind}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{tool.source}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {tool.has_execute ? "Execute handler present" : "No execute handler"} · {tool.requires_approval ? "Approval required" : "No static approval flag"} · {tool.has_auth ? "Auth resolver present" : "No auth resolver"}
+                    </p>
+                  </article>
+                ))}
+              </div>
+              {runtimeCapabilities.dynamic_tool_resolvers.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold">Dynamic tool resolvers</h3>
+                  {runtimeCapabilities.dynamic_tool_resolvers.map(item => (
+                    <p key={item.slug} className="text-sm">{item.slug} <span className="text-xs text-muted-foreground">· {item.source}</span></p>
+                  ))}
+                </div>
+              )}
+              {(runtimeCapabilities.disabled_definitions.length > 0 || runtimeCapabilities.shadowed_definitions.length > 0) && (
+                <div className="space-y-1 text-sm">
+                  {runtimeCapabilities.disabled_definitions.length > 0 && <p>Disabled: {runtimeCapabilities.disabled_definitions.join(", ")}</p>}
+                  {runtimeCapabilities.shadowed_definitions.length > 0 && <p>Shadowed: {runtimeCapabilities.shadowed_definitions.join(", ")}</p>}
+                </div>
+              )}
+              <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+                {runtimeCapabilities.limitations.map(item => <li key={item}>{item}</li>)}
+              </ul>
             </div>
           )}
         </section>
