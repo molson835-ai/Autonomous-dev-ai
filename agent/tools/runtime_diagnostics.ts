@@ -1,7 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { canUseWriteTools, isExplicitReadOnlyTurn } from "../lib/tool-access";
-import { buildRuntimeDiagnostic } from "../lib/runtime-diagnostics.mjs";
+import { buildRuntimeDiagnostic, latestUserMessage } from "../lib/runtime-diagnostics.mjs";
 
 export default defineTool({
   description:
@@ -14,14 +14,14 @@ export default defineTool({
     // ToolContext.messages is the model input for this step and can include
     // prior conversation history. Evaluate only the newest user message so an
     // earlier read-only request cannot incorrectly govern a later turn.
-    const latestUserMessage = [...ctx.messages].reverse().find(message => message.role === "user") ?? null;
-    const readOnlyTurn = isExplicitReadOnlyTurn(latestUserMessage);
+    const currentUserMessage = latestUserMessage(ctx.messages);
+    const readOnlyTurn = isExplicitReadOnlyTurn(currentUserMessage);
     const accessContext = {
       session: {
         auth: session.auth,
         schedule: (session as unknown as { schedule?: unknown }).schedule ?? null,
       },
-      turn: { input: latestUserMessage },
+      turn: { input: currentUserMessage },
     } as Parameters<typeof canUseWriteTools>[0];
     const writeToolsAllowed = canUseWriteTools(accessContext);
 
