@@ -28,10 +28,26 @@ function collectText(value: unknown, depth = 0): string {
   return "";
 }
 
-/** Fail closed for an explicitly read-only current turn, regardless of caller role. */
+/**
+ * Fail closed for an explicitly read-only current turn, regardless of caller
+ * role. A prohibition scoped to other/another/unrelated resources must not
+ * suppress a separately authorized, bounded operation on the named resource.
+ */
 export function isExplicitReadOnlyTurn(input: unknown): boolean {
   const text = collectText(input);
-  return /\bread[\s-]?only\b|\bno\s+(?:writes?|writing|mutations?|changes?)\b|\bdo\s+not\s+(?:write|save|record|modify|change|create|persist)\b|\bdon['’]t\s+(?:write|save|record|modify|change|create|persist)\b|\bwithout\s+(?:writing|saving|recording|modifying|changing|persisting)\b/i.test(text);
+  const absoluteReadOnly =
+    /\bread[\s-]?only\b|\bno\s+(?:writes?|writing|mutations?|changes?)\b|\bwithout\s+(?:writing|saving|recording|modifying|changing|persisting)\b/i;
+
+  if (absoluteReadOnly.test(text)) return true;
+
+  const prohibitedWrite =
+    /\bdo\s+not\s+(?:write|save|record|modify|change|create|persist)\b|\bdon['’]t\s+(?:write|save|record|modify|change|create|persist)\b/i;
+
+  return text
+    .split(/(?<=[.!?])\s+|\n+/)
+    .some(sentence =>
+      prohibitedWrite.test(sentence) && !/\b(?:another|other|unrelated)\b/i.test(sentence)
+    );
 }
 
 /**
