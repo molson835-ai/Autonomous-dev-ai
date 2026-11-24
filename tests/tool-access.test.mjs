@@ -19,6 +19,18 @@ test("verified owner receives stateful tools outside read-only turns", () => {
   assert.equal(canUseWriteTools(context), true);
 });
 
+
+test("Preview and local deployments never receive stateful tools", () => {
+  process.env.OWNER_GITHUB_ID = "341732270";
+  process.env.VERCEL_ENV = "preview";
+  const owner = {
+    ...base,
+    session: { auth: { current: { authenticator: "github-owner", principalType: "user", principalId: "341732270" } } },
+  };
+  assert.equal(canUseWriteTools(owner), false);
+  process.env.VERCEL_ENV = "production";
+});
+
 test("trusted Vercel service and scheduled sessions retain work-loop tools", () => {
   const service = {
     ...base,
