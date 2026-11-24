@@ -24,6 +24,14 @@ export const SOURCE_DEFINED_TOOL_NAMES = Object.freeze([
   "task_transition",
 ]);
 
+export function latestUserMessage(messages) {
+  if (!Array.isArray(messages)) return null;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === "user") return messages[index];
+  }
+  return null;
+}
+
 export const DYNAMICALLY_GATED_TOOL_NAMES = Object.freeze([
   "create_artifact",
   "discover_resources",
