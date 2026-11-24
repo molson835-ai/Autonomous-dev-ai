@@ -14,7 +14,9 @@ The documented Eve `ToolContext` exposes the current session, auth principal, me
 
 This tool performs no HTTP requests, memory operations, task operations, or writes. Integration health is deliberately reported as `not-tested`; each integration requires a separate bounded read-only check and its own evidence.
 
-The source-defined inventory is a maintained list, not an automatically discovered manifest. Update it and its test whenever a tool file is added or removed. CI checks the expected count and uniqueness, but this does not prove runtime registration.
+The source-defined inventory is maintained explicitly and tested for uniqueness and expected count. Keep its list, tests, and the actual `agent/tools/` directory synchronized whenever a tool is added or removed. The inventory is not automatically discovered and does not prove runtime registration.
+
+The diagnostic's JavaScript helper has a companion `.d.mts` declaration so the TypeScript agent build can type-check its import.
 
 ## Verification sequence
 
