@@ -11,14 +11,17 @@ export default defineTool({
     const session = ctx.session;
     const principal = session.auth?.current ?? null;
     const ownerGithubId = process.env.OWNER_GITHUB_ID;
-    const messages = ctx.messages;
-    const readOnlyTurn = isExplicitReadOnlyTurn(messages);
+    // ToolContext.messages is the model input for this step and can include
+    // prior conversation history. Evaluate only the newest user message so an
+    // earlier read-only request cannot incorrectly govern a later turn.
+    const latestUserMessage = [...ctx.messages].reverse().find(message => message.role === "user") ?? null;
+    const readOnlyTurn = isExplicitReadOnlyTurn(latestUserMessage);
     const accessContext = {
       session: {
         auth: session.auth,
         schedule: (session as unknown as { schedule?: unknown }).schedule ?? null,
       },
-      turn: { input: messages },
+      turn: { input: latestUserMessage },
     } as Parameters<typeof canUseWriteTools>[0];
     const writeToolsAllowed = canUseWriteTools(accessContext);
 
