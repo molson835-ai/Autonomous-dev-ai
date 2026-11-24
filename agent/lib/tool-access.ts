@@ -41,6 +41,8 @@ export function isExplicitReadOnlyTurn(input: unknown): boolean {
  */
 export function canUseWriteTools(context: ToolAccessContext): boolean {
   if (isExplicitReadOnlyTurn(context.turn?.input)) return false;
+  // Preview and local deployments must never write to shared Production services.
+  if (env.VERCEL_ENV !== "production") return false;
 
   const principal = context.session.auth?.current;
   const ownerId = env.OWNER_GITHUB_ID;
