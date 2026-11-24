@@ -4,7 +4,18 @@ import {
   SOURCE_DEFINED_TOOL_NAMES,
   DYNAMICALLY_GATED_TOOL_NAMES,
   buildRuntimeDiagnostic,
+  latestUserMessage,
 } from "../agent/lib/runtime-diagnostics.mjs";
+
+test("latest user message excludes prior read-only instructions", () => {
+  const messages = [
+    { role: "user", content: "This is read-only; do not write." },
+    { role: "assistant", content: "Understood." },
+    { role: "user", content: "Now continue with the approved task." },
+  ];
+  assert.deepEqual(latestUserMessage(messages), messages[2]);
+  assert.equal(latestUserMessage([{ role: "assistant", content: "No user input" }]), null);
+});
 
 test("source inventory is explicit and contains unique tool names", () => {
   assert.equal(SOURCE_DEFINED_TOOL_NAMES.length, 23);
