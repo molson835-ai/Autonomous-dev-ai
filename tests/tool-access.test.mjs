@@ -58,3 +58,23 @@ test("read-only detection handles structured message content", () => {
   assert.equal(isExplicitReadOnlyTurn({ content: [{ text: "This is a read-only audit." }] }), true);
   assert.equal(isExplicitReadOnlyTurn("Continue approved work and record the verified result."), false);
 });
+
+test("one explicitly authorized memory write is not blocked by limits on other records", () => {
+  const prompt = [
+    "I explicitly authorize one controlled persistent-memory connectivity test.",
+    'Generate one experience record using "memory_record_experience".',
+    "Do not create another record if the first write succeeds.",
+    "Do not modify, approve, delete, or overwrite any other memory.",
+    "Do not perform any unrelated tasks.",
+  ].join("\n");
+  assert.equal(isExplicitReadOnlyTurn(prompt), false);
+});
+
+test("a global no-write instruction still overrides a bounded write authorization", () => {
+  const prompt = [
+    "I explicitly authorize one controlled persistent-memory connectivity test.",
+    'Generate one experience record using "memory_record_experience".',
+    "Do not write anything in this turn.",
+  ].join("\n");
+  assert.equal(isExplicitReadOnlyTurn(prompt), true);
+});
