@@ -1,8 +1,9 @@
-import { defineTool } from "eve/tools";
+import { defineDynamic, defineTool } from "eve/tools";
 import { z } from "zod";
 import { memoryRequest } from "../lib/memory-client";
+import { canUseWriteTools } from "../lib/tool-access";
 
-export default defineTool({
+const tool = defineTool({
   description:
     "Submit a candidate lesson, fact, procedure, or preference for owner review. Proposals are not trusted or automatically recalled. Include a source or experience reference and explain uncertainty. Never store credentials, secrets, private personal data, or sensitive financial/medical details. Ask the owner to review before treating a proposal as approved knowledge.",
   inputSchema: z.object({
@@ -15,3 +16,5 @@ export default defineTool({
     return memoryRequest("v1/proposals", { method: "POST", body: input });
   },
 });
+
+export default defineDynamic(ctx => canUseWriteTools(ctx) ? tool : null);
