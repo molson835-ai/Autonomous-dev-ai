@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { canUseWriteTools, isExplicitReadOnlyTurn } from "../agent/lib/tool-access.ts";
 
+process.env.VERCEL_ENV = "production";
+
 const base = { session: { auth: { current: null }, schedule: null }, turn: { input: "Check current status." } };
 
 test("anonymous chat does not receive stateful tools", () => {
