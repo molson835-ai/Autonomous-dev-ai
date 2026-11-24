@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readdir } from "node:fs/promises";
 import {
   SOURCE_DEFINED_TOOL_NAMES,
   DYNAMICALLY_GATED_TOOL_NAMES,
@@ -21,6 +22,16 @@ test("source inventory is explicit and contains unique tool names", () => {
   assert.equal(SOURCE_DEFINED_TOOL_NAMES.length, 23);
   assert.equal(new Set(SOURCE_DEFINED_TOOL_NAMES).size, SOURCE_DEFINED_TOOL_NAMES.length);
   assert.ok(SOURCE_DEFINED_TOOL_NAMES.includes("runtime_diagnostics"));
+});
+
+test("source inventory exactly matches the tool modules in agent/tools", async () => {
+  const entries = await readdir(new URL("../agent/tools/", import.meta.url), { withFileTypes: true });
+  const toolModules = entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
+    .map((entry) => entry.name.slice(0, -3))
+    .sort();
+  assert.deepEqual([...SOURCE_DEFINED_TOOL_NAMES].sort(), toolModules);
+  assert.ok(toolModules.includes("data_workbench"));
 });
 
 test("the diagnostic never returns owner or caller identifiers", () => {
