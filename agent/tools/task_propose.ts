@@ -1,9 +1,10 @@
-import { defineTool } from "eve/tools";
+import { defineDynamic, defineTool } from "eve/tools";
 import { z } from "zod";
 import { memoryRequest } from "../lib/memory-client";
 import { assertProductionTaskRuntime } from "../lib/task-runtime.mjs";
+import { canUseWriteTools } from "../lib/tool-access";
 
-export default defineTool({
+const tool = defineTool({
   description:
     "Create a bounded task proposal. Every task remains proposed until the owner explicitly approves it; Eve cannot grant itself standing authorization or choose a scope ID. Task proposals do not authorize purchases, payments, paid services, account access, external contact/publication, Production deployment, or expenses.",
   inputSchema: z.object({
@@ -18,3 +19,5 @@ export default defineTool({
     return memoryRequest("v1/tasks", { method: "POST", body: input });
   },
 });
+
+export default defineDynamic(ctx => canUseWriteTools(ctx) ? tool : null);
