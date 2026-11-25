@@ -23,6 +23,11 @@ const MAX_SESSION_INPUT_TOKENS = 400_000;
 const MAX_SESSION_OUTPUT_TOKENS = 4_000;
 
 export default defineAgent({
+  // Keep only explicitly authored application tools. The framework's optional
+  // shell, filesystem, web, and other default tools are not approved for Eve.
+  defaultTools: false,
+  // Prevent model-initiated root-copy delegation while authorization is reviewed.
+  tool: false,
   model: wrapLanguageModel({ model: cloudflare.chatModel("@cf/zai-org/glm-4.7-flash"), middleware: createCloudflareNeuronGuard() }),
   modelContextWindowTokens: 131_072,
   limits: {
