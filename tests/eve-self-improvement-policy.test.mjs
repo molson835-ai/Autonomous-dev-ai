@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 
 const prompt = await readFile(new URL("../agent/prompts/owner-approved-work-loop.ts", import.meta.url), "utf8");
 const policy = await readFile(new URL("../docs/eve-earn-before-spend-policy.md", import.meta.url), "utf8");
+const efficiency = await readFile(new URL("../docs/eve-work-efficiency-standard.md", import.meta.url), "utf8");
 
 test("Eve's work loop keeps revenue primary while requiring evidence-based learning", () => {
   assert.match(prompt, /first cleared dollar remain the primary near-term outcome/);
