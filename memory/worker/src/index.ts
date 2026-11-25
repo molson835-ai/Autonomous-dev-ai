@@ -511,8 +511,13 @@ export class MemoryStore extends DurableObject<Env> {
       const control = this.ctx.storage.sql.exec<{ queue_paused: number }>("SELECT queue_paused FROM task_control WHERE id=1").one();
       if (control.queue_paused === 1 && body.status === "waiting" && body.next_run_at) return json({ error: "The owner has paused the queue; scheduled continuation is blocked." }, 409);
       if (current.status === "paused" && body.status === "queued") return json({ error: "Owner approval is required to resume a paused task." }, 409);
+      const stepBudgetExhausted = body.status === "waiting" && current.step_count >= current.max_steps;
+      const nextStatus = stepBudgetExhausted ? "paused" : String(body.status);
+      const checkpointSummary = stepBudgetExhausted
+        ? [body.checkpoint_summary, "Maximum progress-step budget reached; owner review required."].filter(Boolean).join("\\n").slice(0, 2000)
+        : body.checkpoint_summary;
       let next;
-      try { next = transitionTask(current, String(body.status), { now, checkpointSummary: body.checkpoint_summary, resultSummary: body.result_summary, evidenceRefs: body.evidence_refs, nextRunAt: body.next_run_at }); }
+      try { next = transitionTask(current, nextStatus, { now, checkpointSummary, resultSummary: body.result_summary, evidenceRefs: body.evidence_refs, nextRunAt: body.next_run_at }); }
       catch (error) { return json({ error: String(error).includes("owner_approval_required") ? "Owner approval is required." : "Invalid task state transition." }, 409); }
       const update = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status=?,owner_approved=?,updated_at=?,attempt_count=?,next_run_at=?,checkpoint_summary=?,result_summary=?,evidence_refs=?,started_at=?,finished_at=? WHERE id=? AND status=? RETURNING id", next.status, next.owner_approved ? 1 : 0, next.updated_at, next.attempt_count, next.next_run_at, next.checkpoint_summary, next.result_summary, JSON.stringify(next.evidence_refs), next.started_at ?? null, next.finished_at ?? null, current.id, current.status).toArray();
       if (update.length !== 1) return json({ error: "Task state conflict." }, 409);
