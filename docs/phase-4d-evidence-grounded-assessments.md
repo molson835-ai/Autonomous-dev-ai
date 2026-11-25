@@ -20,7 +20,7 @@ Distinct hostnames are not proof of independent ownership or reporting. URL and 
 
 ## Existing research capabilities and blockers
 
-- search_news provides limited GDELT article discovery leads; each important claim must be checked at the publisher.
+- `search_news` provides limited GDELT article discovery leads; each important claim must be checked at the publisher. `research_revenue_opportunity` batches one to three focused queries into at most fifteen deduplicated leads, sequentially, using the same keyless GDELT adapter and Google News RSS fallback. It does not fetch publisher pages or create verified facts/source observations.
 - research_sources retrieves supplied URLs from a narrow technical-documentation allowlist; it is not a general market-source fetcher.
 - research_web uses Tavily basic search but fails closed until the no-cost plan and billing limits are verified and the explicit EVE_TAVILY_FREE_PLAN_VERIFIED=true gate is configured. Do not set that gate based only on the presence of an API key.
 - The opportunity evaluator produces a heuristic ranking from caller-supplied numeric signals. It cannot verify source URLs, source independence, demand, costs, margins, or time-to-sale. Its confidence is therefore always low, and it can only recommend further investigation or deprioritization. A score is not a demand or revenue forecast.
