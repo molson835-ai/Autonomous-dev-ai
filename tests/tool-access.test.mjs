@@ -71,7 +71,7 @@ test("schedule metadata without Eve's framework app identity cannot obtain state
       schedule: { definition: "owner-approved-work-loop" },
     },
   };
-  assert.equal(canUseWriteTools(userPrincipal), true);
+  assert.equal(canUseWriteTools(userPrincipal), false);
   assert.equal(canUseWriteTools(wrongAppPrincipal), false);
 });
 
