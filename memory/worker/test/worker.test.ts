@@ -958,7 +958,7 @@ describe("persistent quarantined resource catalog and owner review", () => {
     }) });
     const { task } = await create.json<{ task: { id: string } }>();
     await request(`/v1/tasks/${task.id}/approve`, { method: "POST" }, ownerToken);
-    for (let step = 1; step <= 5; step += 1) {
+    for (let step = 1; step <= 10; step += 1) {
       const claimed = await request("/v1/tasks/claim-next", { method: "POST" });
       expect((await claimed.json<{ task: { status: string; step_count: number; attempt_count: number } }>()).task)
         .toMatchObject({ status: "running", step_count: step, attempt_count: 0 });
@@ -966,9 +966,10 @@ describe("persistent quarantined resource catalog and owner review", () => {
         status: "waiting", checkpoint_summary: `Completed phase ${step}`, next_run_at: new Date(Date.now() - 1000).toISOString()
       }) });
       expect(waiting.status).toBe(200);
+      if (step === 10) expect((await waiting.json<{ task: { status: string } }>()).task.status).toBe("paused");
     }
     const record = await request(`/v1/tasks/${task.id}`);
     expect((await record.json<{ task: { status: string; step_count: number; attempt_count: number; max_steps: number } }>()).task)
-      .toMatchObject({ status: "waiting", step_count: 5, attempt_count: 0, max_steps: 10 });
+      .toMatchObject({ status: "paused", step_count: 10, attempt_count: 0, max_steps: 10 });
   });
 });
