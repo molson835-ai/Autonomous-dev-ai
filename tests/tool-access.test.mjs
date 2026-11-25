@@ -60,7 +60,7 @@ test("schedule metadata without Eve's framework app identity cannot obtain state
   const userPrincipal = {
     ...base,
     session: {
-      auth: { current: { authenticator: "github-owner", principalType: "user", principalId: "341732270" } },
+      auth: { current: null },
       schedule: { definition: "owner-approved-work-loop" },
     },
   };
