@@ -231,7 +231,7 @@ describe("shared daily neuron quota coordinator", () => {
       task: null, quota_blocked: true, reason_code: "local_neuron_budget_reached"
     });
     const unchanged = await request(`/v1/tasks/${task.id}`);
-    expect((await unchanged.json<{ task: { status: string; attempt_count: number } }>()).task)
+    expect((await unchanged.json<{ task: { status: string; attempt_count: number; step_count: number } }>()).task)
       .toMatchObject({ status: "queued", attempt_count: 0 });
     await request(`/v1/tasks/${task.id}/owner-control`, {
       method: "POST", body: JSON.stringify({ action: "pause" })
@@ -262,7 +262,7 @@ describe("shared daily neuron quota coordinator", () => {
       task: null, quota_blocked: true, reason_code: "quota_circuit_open"
     });
     const unchanged = await request(`/v1/tasks/${task.id}`);
-    expect((await unchanged.json<{ task: { status: string; attempt_count: number } }>()).task)
+    expect((await unchanged.json<{ task: { status: string; attempt_count: number; step_count: number } }>()).task)
       .toMatchObject({ status: "queued", attempt_count: 0 });
     await request(`/v1/tasks/${task.id}/owner-control`, {
       method: "POST", body: JSON.stringify({ action: "pause" })
@@ -682,7 +682,7 @@ describe("persistent memory Worker HTTP contract", () => {
     expect((await approved.json<{ task: { status: string; owner_approved: boolean; scope_id: string } }>()).task)
       .toMatchObject({ status: "queued", owner_approved: true, scope_id: "testing" });
     const claimed = await request("/v1/tasks/claim-next", { method: "POST" });
-    expect((await claimed.json<{ task: { id: string; status: string; attempt_count: number } }>()).task)
+    expect((await claimed.json<{ task: { id: string; status: string; attempt_count: number; step_count: number } }>()).task)
       .toMatchObject({ id: task.id, status: "running", attempt_count: 0, step_count: 1 });
     const blocked = await request("/v1/tasks/claim-next", { method: "POST" });
     expect(await blocked.json()).toEqual({ task: null });
@@ -699,7 +699,7 @@ describe("persistent memory Worker HTTP contract", () => {
     }, ownerToken);
     expect(ownerResume.status).toBe(200);
     const reclaimed = await request("/v1/tasks/claim-next", { method: "POST" });
-    expect((await reclaimed.json<{ task: { status: string; attempt_count: number } }>()).task)
+    expect((await reclaimed.json<{ task: { status: string; attempt_count: number; step_count: number } }>()).task)
       .toMatchObject({ status: "running", attempt_count: 0, step_count: 2 });
     const finish = await request(`/v1/tasks/${task.id}/transition`, {
       method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Approval test completed" })
@@ -728,7 +728,7 @@ describe("persistent memory Worker HTTP contract", () => {
       expect(await (await request("/v1/tasks/claim-next", { method: "POST" })).json()).toEqual({ task: null });
       vi.setSystemTime(Date.now() + 21 * 60 * 1000);
       const recovered = await request("/v1/tasks/claim-next", { method: "POST" });
-      expect((await recovered.json<{ task: { id: string; status: string; attempt_count: number } }>()).task)
+      expect((await recovered.json<{ task: { id: string; status: string; attempt_count: number; step_count: number } }>()).task)
         .toMatchObject({ id: task.id, status: "running", attempt_count: 1, step_count: 2 });
       const terminal = await request(`/v1/tasks/${task.id}/transition`, {
         method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Heartbeat recovery test complete" })
@@ -759,7 +759,7 @@ describe("persistent memory Worker HTTP contract", () => {
     const { task } = await create.json<{ task: { id: string } }>();
     await request(`/v1/tasks/${task.id}/approve`, { method: "POST" }, ownerToken);
     const firstClaim = await request("/v1/tasks/claim-next", { method: "POST" });
-    expect((await firstClaim.json<{ task: { id: string; status: string; attempt_count: number } }>()).task)
+    expect((await firstClaim.json<{ task: { id: string; status: string; attempt_count: number; step_count: number } }>()).task)
       .toMatchObject({ id: task.id, status: "running", attempt_count: 0, step_count: 1 });
 
     const denied = await request("/v1/owner/control", { method: "POST", body: JSON.stringify({ action: "pause" }) });
@@ -793,7 +793,7 @@ describe("persistent memory Worker HTTP contract", () => {
     expect(queueResumed.status).toBe(200);
 
     const claimed = await request("/v1/tasks/claim-next", { method: "POST" });
-    expect((await claimed.json<{ task: { id: string; status: string; attempt_count: number } }>()).task)
+    expect((await claimed.json<{ task: { id: string; status: string; attempt_count: number; step_count: number } }>()).task)
       .toMatchObject({ id: task.id, status: "running", attempt_count: 0, step_count: 2 });
     const finish = await request(`/v1/tasks/${task.id}/transition`, {
       method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Global pause test completed" })
@@ -809,7 +809,7 @@ describe("persistent memory Worker HTTP contract", () => {
     const { task } = await create.json<{ task: { id: string } }>();
     await request(`/v1/tasks/${task.id}/approve`, { method: "POST" }, ownerToken);
     const firstClaim = await request("/v1/tasks/claim-next", { method: "POST" });
-    expect((await firstClaim.json<{ task: { status: string; attempt_count: number } }>()).task)
+    expect((await firstClaim.json<{ task: { status: string; attempt_count: number; step_count: number } }>()).task)
       .toMatchObject({ status: "running", attempt_count: 0, step_count: 1 });
 
     const future = Date.now() + 31 * 60 * 1000;
@@ -817,7 +817,7 @@ describe("persistent memory Worker HTTP contract", () => {
     try {
       vi.setSystemTime(future);
       const recovered = await request("/v1/tasks/claim-next", { method: "POST" });
-      expect((await recovered.json<{ task: { id: string; status: string; attempt_count: number } }>()).task)
+      expect((await recovered.json<{ task: { id: string; status: string; attempt_count: number; step_count: number } }>()).task)
         .toMatchObject({ id: task.id, status: "running", attempt_count: 1, step_count: 2 });
       const finish = await request(`/v1/tasks/${task.id}/transition`, {
         method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Lease recovery verified" })
@@ -859,7 +859,7 @@ describe("persistent memory Worker HTTP contract", () => {
     }) });
     expect(waiting.status).toBe(200);
     const resumed = await request("/v1/tasks/claim-next", { method: "POST" });
-    expect((await resumed.json<{ task: { status: string; attempt_count: number } }>()).task)
+    expect((await resumed.json<{ task: { status: string; attempt_count: number; step_count: number } }>()).task)
       .toMatchObject({ status: "running", attempt_count: 0, step_count: 2 });
     const done = await request(`/v1/tasks/${task.id}/transition`, { method: "POST", body: JSON.stringify({
       status: "succeeded", result_summary: "Read-only test complete"
