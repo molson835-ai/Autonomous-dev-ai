@@ -14,6 +14,8 @@ type Task = {
   mission_authorized: boolean;
   attempt_count: number;
   max_attempts: number;
+  step_count: number;
+  max_steps: number;
   checkpoint_summary?: string | null;
   result_summary?: string | null;
   created_at: string;
@@ -531,7 +533,7 @@ export default function OwnerConsole() {
                 </div>
                 {task.checkpoint_summary && <p className="text-sm text-muted-foreground">Checkpoint: {task.checkpoint_summary}</p>}
                 {task.result_summary && <p className="text-sm text-muted-foreground">Result: {task.result_summary}</p>}
-                <p className="text-xs text-muted-foreground">Attempts: {task.attempt_count}/{task.max_attempts} · {task.mission_authorized ? "Blocked: legacy authorization" : task.owner_approved ? "Owner approved" : "Awaiting owner approval"} · ID {task.id}</p>
+                <p className="text-xs text-muted-foreground">Steps: {task.step_count}/{task.max_steps} · stale retries: {task.attempt_count}/{task.max_attempts} · {task.mission_authorized ? "Blocked: legacy authorization" : task.owner_approved ? "Owner approved" : "Awaiting owner approval"} · ID {task.id}</p>
                 <div className="flex flex-wrap gap-2">
                   {task.status === "proposed" && (
                     <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-end">
