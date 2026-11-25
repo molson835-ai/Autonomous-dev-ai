@@ -92,7 +92,7 @@ export async function runRevenueResearchPipeline(
     try {
       const result = await search(query, { timespan, maxRecords: maxResultsPerQuery });
       let returnedLeadCount = 0;
-      for (const article of result.articles) {
+      for (const article of result.articles.slice(0, maxResultsPerQuery)) {
         let parsed: URL;
         try { parsed = new URL(article.url); } catch { continue; }
         if (parsed.protocol !== "https:" || parsed.username || parsed.password) continue;
