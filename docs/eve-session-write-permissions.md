@@ -9,7 +9,7 @@ Keep Eve's useful state-changing capabilities while preventing an anonymous or e
 - The public chat channel remains available through the explicit anonymous fallback.
 - The channel first attempts to authenticate the owner using a separate HttpOnly cookie scoped to `/eve`. The token is verified against the configured GitHub OAuth App and the immutable `OWNER_GITHUB_ID`, using the same verifier as the Owner Console's Worker.
 - The channel also accepts Vercel OIDC for trusted internal service calls. The OIDC helper validates tokens for the current Vercel project.
-- Stateful tools are dynamic. They are offered only in Vercel Production, and only to a verified owner, a trusted service principal, or a platform-scheduled invocation. Preview and local deployments remain read-only even when the caller is authenticated.
+- Stateful tools are dynamic. They are offered only in Vercel Production, and only to a verified owner, a trusted service principal, or the exact `owner-approved-work-loop` schedule running under Eve's framework app identity (`authenticator: app`, `principalId: eve:app`, `principalType: runtime`). Schedule metadata alone is not authorization. Other schedule definitions and mismatched principals are denied. Preview and local deployments remain read-only even when the caller is authenticated.
 - The latest turn's input is checked for an explicit read-only/no-write instruction. That instruction takes precedence over owner, service, and schedule permissions.
 - Anonymous chat receives read-only tools. It does not receive memory writes, task mutations, resource-registry intake, tool scaffolding, or artifact creation.
 - Owner-only memory decisions remain disabled inside Eve. Owner approvals continue through the separately authenticated Owner Console.
@@ -35,7 +35,7 @@ The explicit read-only check is performed against the current turn input on ever
 
 ## Verification
 
-Unit tests cover anonymous denial, verified-owner access, trusted service/scheduled access, explicit read-only precedence, and structured message input. CI must also run the EVE build, TypeScript typecheck, and full test suite.
+Unit tests cover anonymous denial, verified-owner access, trusted service access, exact scheduled-work-loop identity, rejection of arbitrary schedules and mismatched principals, explicit read-only precedence, and structured message input. CI must also run the EVE build, TypeScript typecheck, and full test suite.
 
 ## Non-goals
 

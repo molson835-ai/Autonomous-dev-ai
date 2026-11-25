@@ -9,7 +9,7 @@ type AuthPrincipal = {
 type ToolAccessContext = {
   session: {
     auth?: { current?: AuthPrincipal };
-    schedule?: unknown;
+    schedule?: { definition?: string } | null;
   };
   turn?: { input?: unknown } | null;
 };
@@ -52,7 +52,7 @@ export function isExplicitReadOnlyTurn(input: unknown): boolean {
 
 /**
  * Stateful tools are available only to the verified owner, trusted Vercel
- * service calls, or scheduled invocations. Anonymous chat remains read-only.
+ * service calls, or Eve's one explicitly authorized scheduled work loop.
  * The current turn's explicit read-only request always wins.
  */
 export function canUseWriteTools(context: ToolAccessContext): boolean {
@@ -69,7 +69,13 @@ export function canUseWriteTools(context: ToolAccessContext): boolean {
     principal.principalId === ownerId;
 
   const trustedService = principal?.principalType === "service";
-  const scheduledInvocation = context.session.schedule !== undefined && context.session.schedule !== null;
+  // The schedule name is framework-owned provenance. Require the framework's
+  // app principal too; schedule metadata by itself is not authorization.
+  const scheduledOwnerWorkLoop =
+    context.session.schedule?.definition === "owner-approved-work-loop" &&
+    principal?.authenticator === "app" &&
+    principal.principalId === "eve:app" &&
+    principal.principalType === "runtime";
 
-  return verifiedOwner || trustedService || scheduledInvocation;
+  return verifiedOwner || trustedService || scheduledOwnerWorkLoop;
 }
