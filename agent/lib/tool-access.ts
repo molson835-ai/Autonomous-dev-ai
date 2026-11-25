@@ -36,17 +36,17 @@ function collectText(value: unknown, depth = 0): string {
 export function isExplicitReadOnlyTurn(input: unknown): boolean {
   const text = collectText(input);
   const absoluteReadOnly =
-    /\\bread[\\s-]?only\\b|\\bno\\s+(?:writes?|writing|mutations?|changes?)\\b|\\bwithout\\s+(?:writing|saving|recording|modifying|changing|persisting)\\b/i;
+    /\bread[\s-]?only\b|\bno\s+(?:writes?|writing|mutations?|changes?)\b|\bwithout\s+(?:writing|saving|recording|modifying|changing|persisting)\b/i;
 
   if (absoluteReadOnly.test(text)) return true;
 
   const prohibitedWrite =
-    /\\bdo\\s+not\\s+(?:write|save|record|modify|change|create|persist)\\b|\\bdon['’]t\\s+(?:write|save|record|modify|change|create|persist)\\b/i;
+    /\bdo\s+not\s+(?:write|save|record|modify|change|create|persist)\b|\bdon['’]t\s+(?:write|save|record|modify|change|create|persist)\b/i;
 
   return text
-    .split(/(?<=[.!?])\\s+|\\n+/)
+    .split(/(?<=[.!?])\s+|\n+/)
     .some(sentence =>
-      prohibitedWrite.test(sentence) && !/\\b(?:another|other|unrelated)\\b/i.test(sentence)
+      prohibitedWrite.test(sentence) && !/\b(?:another|other|unrelated)\b/i.test(sentence)
     );
 }
 
