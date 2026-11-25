@@ -1,4 +1,4 @@
-import { searchGdeltNews, type GdeltSearchResult, type GdeltTimespan } from "./gdelt";
+import { searchGdeltNews, type GdeltSearchResult, type GdeltTimespan } from "./gdelt.ts";
 
 const MAX_QUERIES = 3;
 const MAX_RESULTS_PER_QUERY = 5;
