@@ -517,7 +517,7 @@ export class MemoryStore extends DurableObject<Env> {
         ? [body.checkpoint_summary, "Maximum progress-step budget reached; owner review required."].filter(Boolean).join("\\n").slice(0, 2000)
         : body.checkpoint_summary;
       let next;
-      try { next = transitionTask(current, nextStatus, { now, checkpointSummary, resultSummary: body.result_summary, evidenceRefs: body.evidence_refs, nextRunAt: body.next_run_at }); }
+      try { next = transitionTask(current, nextStatus, { now, checkpointSummary, resultSummary: body.result_summary, evidenceRefs: body.evidence_refs, nextRunAt: stepBudgetExhausted ? undefined : body.next_run_at }); }
       catch (error) { return json({ error: String(error).includes("owner_approval_required") ? "Owner approval is required." : "Invalid task state transition." }, 409); }
       const update = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status=?,owner_approved=?,updated_at=?,attempt_count=?,next_run_at=?,checkpoint_summary=?,result_summary=?,evidence_refs=?,started_at=?,finished_at=? WHERE id=? AND status=? RETURNING id", next.status, next.owner_approved ? 1 : 0, next.updated_at, next.attempt_count, next.next_run_at, next.checkpoint_summary, next.result_summary, JSON.stringify(next.evidence_refs), next.started_at ?? null, next.finished_at ?? null, current.id, current.status).toArray();
       if (update.length !== 1) return json({ error: "Task state conflict." }, 409);
