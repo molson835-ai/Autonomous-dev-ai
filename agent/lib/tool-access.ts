@@ -9,7 +9,7 @@ type AuthPrincipal = {
 type ToolAccessContext = {
   session: {
     auth?: { current?: AuthPrincipal };
-    schedule?: unknown;
+    schedule?: { definition?: string } | null;
   };
   turn?: { input?: unknown } | null;
 };
@@ -36,23 +36,23 @@ function collectText(value: unknown, depth = 0): string {
 export function isExplicitReadOnlyTurn(input: unknown): boolean {
   const text = collectText(input);
   const absoluteReadOnly =
-    /\bread[\s-]?only\b|\bno\s+(?:writes?|writing|mutations?|changes?)\b|\bwithout\s+(?:writing|saving|recording|modifying|changing|persisting)\b/i;
+    /\\bread[\\s-]?only\\b|\\bno\\s+(?:writes?|writing|mutations?|changes?)\\b|\\bwithout\\s+(?:writing|saving|recording|modifying|changing|persisting)\\b/i;
 
   if (absoluteReadOnly.test(text)) return true;
 
   const prohibitedWrite =
-    /\bdo\s+not\s+(?:write|save|record|modify|change|create|persist)\b|\bdon['’]t\s+(?:write|save|record|modify|change|create|persist)\b/i;
+    /\\bdo\\s+not\\s+(?:write|save|record|modify|change|create|persist)\\b|\\bdon['’]t\\s+(?:write|save|record|modify|change|create|persist)\\b/i;
 
   return text
-    .split(/(?<=[.!?])\s+|\n+/)
+    .split(/(?<=[.!?])\\s+|\\n+/)
     .some(sentence =>
-      prohibitedWrite.test(sentence) && !/\b(?:another|other|unrelated)\b/i.test(sentence)
+      prohibitedWrite.test(sentence) && !/\\b(?:another|other|unrelated)\\b/i.test(sentence)
     );
 }
 
 /**
  * Stateful tools are available only to the verified owner, trusted Vercel
- * service calls, or scheduled invocations. Anonymous chat remains read-only.
+ * service calls, or Eve's one explicitly authorized scheduled work loop.
  * The current turn's explicit read-only request always wins.
  */
 export function canUseWriteTools(context: ToolAccessContext): boolean {
@@ -69,7 +69,13 @@ export function canUseWriteTools(context: ToolAccessContext): boolean {
     principal.principalId === ownerId;
 
   const trustedService = principal?.principalType === "service";
-  const scheduledInvocation = context.session.schedule !== undefined && context.session.schedule !== null;
+  // The schedule name is framework-owned provenance. Require the framework's
+  // app principal too; schedule metadata by itself is not authorization.
+  const scheduledOwnerWorkLoop =
+    context.session.schedule?.definition === "owner-approved-work-loop" &&
+    principal?.authenticator === "app" &&
+    principal.principalId === "eve:app" &&
+    principal.principalType === "runtime";
 
-  return verifiedOwner || trustedService || scheduledInvocation;
+  return verifiedOwner || trustedService || scheduledOwnerWorkLoop;
 }
