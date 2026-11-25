@@ -12,6 +12,7 @@ export const SOURCE_DEFINED_TOOL_NAMES = Object.freeze([
   "plan_task_skills",
   "propose_tool",
   "report_capability_benchmark",
+  "research_revenue_opportunity",
   "research_sources",
   "research_web",
   "runtime_diagnostics",
