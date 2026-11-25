@@ -37,7 +37,7 @@ A provider-eligible scope is only an owner-approved classification. It does not 
 
 - Tasks are stored in their own SQL table; existing memory and experience rows are not migrated, rewritten, or deleted.
 - Task proposals start unapproved; only owner-approved tasks can be claimed.
-- One active task at a time, a bounded stale-run recovery lease, at most three attempts, and terminal states cannot be reopened.
+- One active task at a time, a bounded stale-run recovery lease with at most three stale-run retries, up to ten bounded progress steps per task, and terminal states cannot be reopened.
 - The Production work loop is not active until a Production deployment containing this change is explicitly approved. No external action, customer contact, purchase, payment, or Production deployment is enabled merely by this code change.
 - Worker deployment is a separate, manually confirmed workflow. It must install the OAuth app credentials, immutable owner ID, Memory API token, and read-only Analytics token before publishing; post-deployment smoke tests must pass.
 

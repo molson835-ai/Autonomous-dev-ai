@@ -34,6 +34,8 @@ test("creates a valid proposed task without silently approving it", () => {
   assert.equal(task.owner_approved, false);
   assert.equal(task.mission_authorized, false);
   assert.equal(task.attempt_count, 0);
+  assert.equal(task.step_count, 0);
+  assert.equal(task.max_steps, 10);
 });
 
 test("requires explicit owner approval before queueing", () => {
@@ -75,7 +77,8 @@ test("scheduled waiting tasks resume only when their checkpoint time is due", ()
   assert.equal(selectNextTask([resumable], { now: Date.parse("2026-11-13T00:15:00.000Z") }).id, resumable.id);
   const resumed = transitionTask(resumable, "running", { now: "2026-11-13T00:15:00.000Z" });
   assert.equal(resumed.status, "running");
-  assert.equal(resumed.attempt_count, 2);
+  assert.equal(resumed.attempt_count, 0);
+  assert.equal(resumed.step_count, 2);
   assert.equal(resumed.next_run_at, null);
 });
 
@@ -92,9 +95,10 @@ test("state machine rejects illegal transitions and stale expected state", () =>
   assert.throws(() => transitionTask(task, "running", { expectedStatus: "waiting", now }), /task_state_conflict/);
 });
 
-test("claim increments attempts; checkpoint and terminal result are preserved", () => {
+test("claim increments progress steps, not stale-run retries; checkpoint and terminal result are preserved", () => {
   const claimed = transitionTask(queued(), "running", { now });
-  assert.equal(claimed.attempt_count, 1);
+  assert.equal(claimed.attempt_count, 0);
+  assert.equal(claimed.step_count, 1);
   const waiting = transitionTask(claimed, "waiting", {
     now, checkpointSummary: "Step 1 complete"
   });
@@ -103,7 +107,8 @@ test("claim increments attempts; checkpoint and terminal result are preserved", 
   const done = transitionTask(claimedAgain, "succeeded", {
     now, resultSummary: "Test report ready", evidenceRefs: ["ci://run/123"]
   });
-  assert.equal(done.attempt_count, 2);
+  assert.equal(done.attempt_count, 0);
+  assert.equal(done.step_count, 2);
   assert.equal(done.checkpoint_summary, "Step 1 complete");
   assert.equal(done.result_summary, "Test report ready");
   assert.deepEqual(done.evidence_refs, ["ci://run/123"]);
@@ -113,6 +118,28 @@ test("claim increments attempts; checkpoint and terminal result are preserved", 
 test("pause and cancellation are honored without deleting task history", () => {
   const paused = transitionTask(queued(), "paused", { now });
   assert.equal(transitionTask(paused, "cancelled", { now }).status, "cancelled");
+});
+
+test("stale-run retry budget and progress-step budget are independent", () => {
+  let task = queued({ id: "multi-step", idempotency_key: "multi-step" });
+  for (let step = 1; step <= 5; step += 1) {
+    task = transitionTask(task, "running", { now });
+    assert.equal(task.step_count, step);
+    assert.equal(task.attempt_count, 0);
+    if (step < 5) task = transitionTask(task, "waiting", { now, nextRunAt: "2026-11-14T00:00:00.000Z" });
+  }
+  let capped = queued({ id: "step-cap", idempotency_key: "step-cap" });
+  for (let step = 0; step < 10; step += 1) {
+    capped = transitionTask(capped, "running", { now });
+    if (step < 9) capped = transitionTask(capped, "waiting", { now, nextRunAt: "2026-11-14T00:00:00.000Z" });
+  }
+  capped = transitionTask(capped, "waiting", { now, nextRunAt: "2026-11-14T00:00:00.000Z" });
+  assert.throws(() => transitionTask(capped, "running", { now }), /task_step_budget_exhausted/);
+
+  const stale = transitionTask(queued({ id: "stale", idempotency_key: "stale" }), "running", { now });
+  const recovered = transitionTask(stale, "waiting", { now, countAttempt: true, nextRunAt: "2026-11-14T00:00:00.000Z" });
+  assert.equal(recovered.step_count, 1);
+  assert.equal(recovered.attempt_count, 1);
 });
 
 test("attempt budget is a hard stop", () => {
