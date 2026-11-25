@@ -5,6 +5,7 @@ import { canUseWriteTools, isExplicitReadOnlyTurn } from "../agent/lib/tool-acce
 process.env.VERCEL_ENV = "production";
 
 const base = { session: { auth: { current: null }, schedule: null }, turn: { input: "Check current status." } };
+const scheduleAuth = { authenticator: "app", principalId: "eve:app", principalType: "runtime" };
 
 test("anonymous chat does not receive stateful tools", () => {
   assert.equal(canUseWriteTools(base), false);
@@ -31,25 +32,76 @@ test("Preview and local deployments never receive stateful tools", () => {
   process.env.VERCEL_ENV = "production";
 });
 
-test("trusted Vercel service and scheduled sessions retain work-loop tools", () => {
+test("trusted Vercel service principal retains internal work-loop tools", () => {
   const service = {
     ...base,
     session: { auth: { current: { authenticator: "vercel-oidc", principalType: "service", principalId: "deployment" } } },
   };
-  const scheduled = { ...base, session: { auth: { current: null }, schedule: { id: "daily-eve" } } };
   assert.equal(canUseWriteTools(service), true);
-  assert.equal(canUseWriteTools(scheduled), true);
 });
 
-test("explicit read-only request overrides owner, service, and schedule permissions", () => {
+test("only the owner-approved work-loop schedule with Eve app identity receives scheduled write tools", () => {
+  const authorized = {
+    ...base,
+    session: { auth: { current: scheduleAuth }, schedule: { definition: "owner-approved-work-loop" } },
+  };
+  assert.equal(canUseWriteTools(authorized), true);
+});
+
+test("an arbitrary schedule cannot obtain stateful tools", () => {
+  const arbitrarySchedule = {
+    ...base,
+    session: { auth: { current: scheduleAuth }, schedule: { definition: "unrelated-maintenance" } },
+  };
+  assert.equal(canUseWriteTools(arbitrarySchedule), false);
+});
+
+test("schedule metadata without Eve's framework app identity cannot obtain stateful tools", () => {
+  const userPrincipal = {
+    ...base,
+    session: {
+      auth: { current: { authenticator: "github-owner", principalType: "user", principalId: "341732270" } },
+      schedule: { definition: "owner-approved-work-loop" },
+    },
+  };
+  const wrongAppPrincipal = {
+    ...base,
+    session: {
+      auth: { current: { authenticator: "app", principalType: "runtime", principalId: "other:app" } },
+      schedule: { definition: "owner-approved-work-loop" },
+    },
+  };
+  assert.equal(canUseWriteTools(userPrincipal), true);
+  assert.equal(canUseWriteTools(wrongAppPrincipal), false);
+});
+
+test("Eve app identity without the approved schedule cannot obtain stateful tools", () => {
+  const appWithoutSchedule = {
+    ...base,
+    session: { auth: { current: scheduleAuth }, schedule: null },
+  };
+  assert.equal(canUseWriteTools(appWithoutSchedule), false);
+});
+
+test("explicit read-only request overrides owner, service, and scheduled permissions", () => {
   process.env.OWNER_GITHUB_ID = "341732270";
   const owner = {
     ...base,
     session: { auth: { current: { authenticator: "github-owner", principalType: "user", principalId: "341732270" } } },
     turn: { input: "Perform a read-only check. Do not write anything." },
   };
-  const scheduled = { ...base, session: { auth: { current: null }, schedule: { id: "daily-eve" } }, turn: { input: "Read-only diagnostic only." } };
+  const service = {
+    ...base,
+    session: { auth: { current: { authenticator: "vercel-oidc", principalType: "service", principalId: "deployment" } } },
+    turn: { input: "Read-only diagnostic only." },
+  };
+  const scheduled = {
+    ...base,
+    session: { auth: { current: scheduleAuth }, schedule: { definition: "owner-approved-work-loop" } },
+    turn: { input: "Read-only diagnostic only." },
+  };
   assert.equal(canUseWriteTools(owner), false);
+  assert.equal(canUseWriteTools(service), false);
   assert.equal(canUseWriteTools(scheduled), false);
 });
 
