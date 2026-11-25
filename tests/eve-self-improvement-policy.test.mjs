@@ -16,7 +16,7 @@ test("Eve's work loop keeps revenue primary while requiring evidence-based learn
 
 test("free-resource autonomy excludes owner credentials, identity, and personal devices", () => {
   assert.match(prompt, /FREE-RESOURCE AUTONOMY/);
-  assert.match(prompt, /Never install, download, execute, store, or cache software\\/data on the owner's phone/);
+  assert.match(prompt, /Never install, download, execute, store, or cache software\/data on the owner's phone/);
   assert.match(prompt, /Do not create or change accounts/);
   assert.match(policy, /isolated EVE-controlled workspace/);
   assert.match(policy, /home address, or device details/);
