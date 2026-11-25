@@ -77,8 +77,8 @@ test("rejects duplicate queries and unbounded query counts before searching", as
   assert.equal(calls, 0);
 });
 
-test("rejects unsafe article URLs and caps query result size", async () => {
-  const output = await runRevenueResearchPipeline({ ...base, queries: [base.queries[0]], maxResultsPerQuery: 2 }, {
+test("rejects unsafe article URLs", async () => {
+  const output = await runRevenueResearchPipeline({ ...base, queries: [base.queries[0]], maxResultsPerQuery: 5 }, {
     search: async () => result([
       article("http://insecure.example/a"),
       { ...article("https://safe.example/a"), url: "https://user:pass@safe.example/a" },
@@ -87,6 +87,17 @@ test("rejects unsafe article URLs and caps query result size", async () => {
   });
   assert.equal(output.leads.length, 1);
   assert.equal(output.leads[0].url, "https://valid.example/a");
+});
+
+test("enforces the per-query result cap even if a provider adapter over-returns", async () => {
+  const output = await runRevenueResearchPipeline({ ...base, queries: [base.queries[0]], maxResultsPerQuery: 2 }, {
+    search: async () => result([
+      article("https://valid.example/a"),
+      article("https://valid.example/b"),
+      article("https://valid.example/c"),
+    ]),
+  });
+  assert.equal(output.leads.length, 2);
 });
 
 test("validates research context and per-query result bounds", async () => {
