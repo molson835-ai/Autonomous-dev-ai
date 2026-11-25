@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { OWNER_SESSION_COOKIE, getVerifiedOwnerLogin, isSameOriginRequest } from "@/lib/owner-github";
+import { EVE_AGENT_OWNER_COOKIE, OWNER_SESSION_COOKIE, getVerifiedOwnerLogin, isSameOriginRequest } from "@/lib/owner-github";
+import { buildOwnerChannelCookieHeader } from "@/lib/owner-run-auth.mjs";
 import { OWNER_APPROVED_WORK_LOOP_PROMPT } from "../../../../../../agent/prompts/owner-approved-work-loop";
 
 export const runtime = "nodejs";
@@ -55,9 +56,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "There are no queued owner-approved tasks to run." }, { status: 409, headers: { "cache-control": "no-store" } });
     }
 
+    // The browser's eve_agent_owner cookie is scoped to /eve and is therefore
+    // not sent to this /api/owner route. Reuse the already-verified owner
+    // session token for this same-origin server-to-server request. The Eve
+    // channel independently revalidates the OAuth app and immutable owner ID.
+    const channelCookie = buildOwnerChannelCookieHeader(EVE_AGENT_OWNER_COOKIE, token);
+    if (!channelCookie) {
+      return NextResponse.json({ error: "Owner session cannot be forwarded securely to Eve. No run was started." }, { status: 401, headers: { "cache-control": "no-store" } });
+    }
+
     const eveResponse = await fetch(new URL("/eve/v1/session", request.url), {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+        cookie: channelCookie,
+      },
       body: JSON.stringify({ message: OWNER_APPROVED_WORK_LOOP_PROMPT }),
       cache: "no-store",
       redirect: "error",
@@ -72,7 +86,7 @@ export async function POST(request: Request) {
       accepted: true,
       session_id: payload.sessionId,
       accepted_at: new Date().toISOString(),
-      message: "Eve accepted a Production session using the same bounded, owner-approved work-loop instructions as the daily schedule.",
+      message: "Eve accepted a Production session with the verified owner channel identity and bounded work-loop instructions. Task claim and completion remain unconfirmed.",
     }, { status: 202, headers: { "cache-control": "no-store" } });
   } catch {
     return NextResponse.json({ error: "The run-now request failed or timed out. Check the queue before retrying to avoid duplicate sessions." }, { status: 502, headers: { "cache-control": "no-store" } });
