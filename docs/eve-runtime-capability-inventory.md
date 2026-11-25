@@ -111,3 +111,17 @@ Branch `feat/keyless-resource-discovery` adds a proposed Eve tool, `discover_res
 The adapter is bounded to 1–3 results per selected catalog (maximum 9), one HTTPS request per catalog, a 6-second timeout, no retries, no API keys, and no downloads. It submits only compact inert metadata to the existing authenticated `POST /v1/resources` route, which stores candidates in quarantine. Upstream text is untrusted. License, cost, commercial rights, quota, and persistence remain unknown unless explicitly sourced; a discovered license string is not treated as commercial approval.
 
 **Verification boundary:** automated tests and CI can verify parsing, bounds, error handling, and quarantine submission contracts. A successful build does not prove the live Eve runtime discovers this tool or that the Production Worker accepts writes. Those require a separately authorized, controlled runtime test. Do not enable the Tavily adapter or change Production configuration as part of this work.
+
+
+## Framework default-tool surface hardening — draft PR
+
+The draft branch `security/disable-framework-default-tools` changes the root `agent/agent.ts` configuration to set `defaultTools: false` and `tool: false`.
+
+- `defaultTools: false` disables Eve's optional framework default tools while preserving authored tools under `agent/tools/` and required connection discovery tooling.
+- `tool: false` disables the root agent's model-facing root-copy delegation tool.
+- This is intended to remove the framework-provided generic shell, filesystem, web-fetch/search, and delegation surface seen in the previous Production inventory.
+- Application-authored tools remain and still require their own code-level security review. This setting does not disable or certify them.
+- The repository has no authored `agent/sandbox.ts` or `agent/sandbox/` provider configuration. Do not claim that the existing shared sandbox has a project-specific network, credential, persistence, or workspace policy.
+- The six discovery warnings remain unresolved because the current Owner Console exposes only the count. A later diagnostic improvement must return sanitized warning codes and source paths from the compiled Agent Info data.
+
+**Deployment verification required:** after a separately approved deployment, inspect the Production inventory and confirm that framework defaults are absent while intended authored tools remain. No runtime change is implied by this draft branch.
