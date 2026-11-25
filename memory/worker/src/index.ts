@@ -19,7 +19,7 @@ type MemoryRow = {
   id: string; kind: string; content: string; source: string;
   confidence: number; status: string; created_at: string; updated_at: string;
 };
-type TaskRow = { id: string; idempotency_key: string; task_type: string; title: string; goal: string; approved_scope: string; scope_id: string; status: string; owner_approved: number; mission_authorized: number; created_at: string; updated_at: string; attempt_count: number; max_attempts: number; next_run_at: string | null; checkpoint_summary: string | null; result_summary: string | null; evidence_refs: string; started_at: string | null; finished_at: string | null; };
+type TaskRow = { id: string; idempotency_key: string; task_type: string; title: string; goal: string; approved_scope: string; scope_id: string; status: string; owner_approved: number; mission_authorized: number; created_at: string; updated_at: string; attempt_count: number; max_attempts: number; step_count: number; max_steps: number; next_run_at: string | null; checkpoint_summary: string | null; result_summary: string | null; evidence_refs: string; started_at: string | null; finished_at: string | null; };
 type ResourceRow = { id: string; resource_json: string; trust_state: string; created_at: string; updated_at: string; reviewer: string | null; reviewed_at: string | null; review_evidence: string; };
 type ExperienceRow = {
   id: string; external_id: string | null; task: string; outcome: string; result: string;
@@ -73,8 +73,16 @@ export class MemoryStore extends DurableObject<Env> {
       );
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS experiences_created ON experiences(created_at DESC)");
       ensureExperienceExternalIdColumn(ctx.storage.sql);
-      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE, task_type TEXT NOT NULL, title TEXT NOT NULL, goal TEXT NOT NULL, approved_scope TEXT NOT NULL, scope_id TEXT NOT NULL DEFAULT 'owner_review_required', status TEXT NOT NULL CHECK (status IN ('proposed','queued','running','waiting','paused','succeeded','failed','cancelled')), owner_approved INTEGER NOT NULL CHECK (owner_approved IN (0,1)), mission_authorized INTEGER NOT NULL DEFAULT 0 CHECK (mission_authorized IN (0,1)), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, attempt_count INTEGER NOT NULL, max_attempts INTEGER NOT NULL CHECK (max_attempts BETWEEN 1 AND 3), next_run_at TEXT, checkpoint_summary TEXT, result_summary TEXT, evidence_refs TEXT NOT NULL DEFAULT '[]', started_at TEXT, finished_at TEXT)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE, task_type TEXT NOT NULL, title TEXT NOT NULL, goal TEXT NOT NULL, approved_scope TEXT NOT NULL, scope_id TEXT NOT NULL DEFAULT 'owner_review_required', status TEXT NOT NULL CHECK (status IN ('proposed','queued','running','waiting','paused','succeeded','failed','cancelled')), owner_approved INTEGER NOT NULL CHECK (owner_approved IN (0,1)), mission_authorized INTEGER NOT NULL DEFAULT 0 CHECK (mission_authorized IN (0,1)), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, attempt_count INTEGER NOT NULL, max_attempts INTEGER NOT NULL CHECK (max_attempts BETWEEN 1 AND 3), step_count INTEGER NOT NULL DEFAULT 0, max_steps INTEGER NOT NULL DEFAULT 10 CHECK (max_steps BETWEEN 1 AND 10), next_run_at TEXT, checkpoint_summary TEXT, result_summary TEXT, evidence_refs TEXT NOT NULL DEFAULT '[]', started_at TEXT, finished_at TEXT)");
       const taskColumns = ctx.storage.sql.exec<{ name: string }>("PRAGMA table_info(tasks)").toArray();
+      if (!taskColumns.some(column => column.name === "step_count")) {
+        ctx.storage.sql.exec("ALTER TABLE tasks ADD COLUMN step_count INTEGER NOT NULL DEFAULT 0");
+        ctx.storage.sql.exec("UPDATE tasks SET step_count=attempt_count, attempt_count=0");
+      }
+      if (!taskColumns.some(column => column.name === "max_steps")) {
+        ctx.storage.sql.exec("ALTER TABLE tasks ADD COLUMN max_steps INTEGER NOT NULL DEFAULT 10 CHECK (max_steps BETWEEN 1 AND 10)");
+        ctx.storage.sql.exec("UPDATE tasks SET max_steps=10 WHERE status IN ('proposed','queued','running','waiting','paused')");
+      }
       if (!taskColumns.some(column => column.name === "mission_authorized")) {
         ctx.storage.sql.exec("ALTER TABLE tasks ADD COLUMN mission_authorized INTEGER NOT NULL DEFAULT 0 CHECK (mission_authorized IN (0,1))");
       }
@@ -287,7 +295,7 @@ export class MemoryStore extends DurableObject<Env> {
       const taskInput = { idempotency_key: key, task_type: String(body.task_type).trim(), title: String(body.title).trim(), goal: String(body.goal).trim(), approved_scope: String(body.approved_scope).trim(), scope_id: "owner_review_required" };
       const missionAuthorized = false;
       const task = createTaskRecord({ id: crypto.randomUUID(), ...taskInput }, { now, missionAuthorized: false });
-      this.ctx.storage.sql.exec("INSERT INTO tasks (id,idempotency_key,task_type,title,goal,approved_scope,scope_id,status,owner_approved,mission_authorized,created_at,updated_at,attempt_count,max_attempts,next_run_at,checkpoint_summary,result_summary,evidence_refs,started_at,finished_at) VALUES (?,?,?,?,?,?,?,?,0,?,?,?,0,?,NULL,NULL,NULL,'[]',NULL,NULL)", task.id, task.idempotency_key, task.task_type, task.title, task.goal, task.approved_scope, task.scope_id, task.status, missionAuthorized ? 1 : 0, task.created_at, task.updated_at, task.max_attempts);
+      this.ctx.storage.sql.exec("INSERT INTO tasks (id,idempotency_key,task_type,title,goal,approved_scope,scope_id,status,owner_approved,mission_authorized,created_at,updated_at,attempt_count,max_attempts,step_count,max_steps,next_run_at,checkpoint_summary,result_summary,evidence_refs,started_at,finished_at) VALUES (?,?,?,?,?,?,?,?,0,?,?,?,0,?,0,?,NULL,NULL,NULL,'[]',NULL,NULL)", task.id, task.idempotency_key, task.task_type, task.title, task.goal, task.approved_scope, task.scope_id, task.status, missionAuthorized ? 1 : 0, task.created_at, task.updated_at, task.max_attempts, task.max_steps);
       return json({ task, created: true, mission_authorized: missionAuthorized }, 201);
     }
 
@@ -426,17 +434,18 @@ export class MemoryStore extends DurableObject<Env> {
       if (runningRow) {
         const runningTask = taskFromRow(runningRow);
         if (!isTaskLeaseExpired(runningTask, { now: Date.parse(now) })) return json({ task: null });
-        const retryable = runningTask.attempt_count < runningTask.max_attempts;
+        const retryable = runningTask.attempt_count + 1 < runningTask.max_attempts;
         const recovered = transitionTask(runningTask, retryable ? "waiting" : "failed", {
           now,
+          countAttempt: true,
           checkpointSummary: (runningTask.checkpoint_summary ? runningTask.checkpoint_summary + "\n" : "") +
             "Recovered after a stale scheduled run; inspect prior evidence before continuing.",
           resultSummary: retryable ? runningTask.result_summary : "Execution lease expired on the final allowed attempt; no further retry.",
           nextRunAt: retryable ? now : undefined,
         });
         const recoveredRow = this.ctx.storage.sql.exec<{ id: string }>(
-          "UPDATE tasks SET status=?,updated_at=?,next_run_at=?,checkpoint_summary=?,result_summary=?,finished_at=? WHERE id=? AND status='running' AND updated_at=? RETURNING id",
-          recovered.status, now, recovered.next_run_at, recovered.checkpoint_summary, recovered.result_summary,
+          "UPDATE tasks SET status=?,attempt_count=?,step_count=?,updated_at=?,next_run_at=?,checkpoint_summary=?,result_summary=?,finished_at=? WHERE id=? AND status='running' AND updated_at=? RETURNING id",
+          recovered.status, recovered.attempt_count, recovered.step_count, now, recovered.next_run_at, recovered.checkpoint_summary, recovered.result_summary,
           recovered.finished_at ?? null, runningTask.id, runningTask.updated_at
         ).toArray();
         if (recoveredRow.length !== 1) return json({ task: null });
@@ -444,13 +453,13 @@ export class MemoryStore extends DurableObject<Env> {
       const stillRunning = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='running'").one().count;
       if (stillRunning > 0) return json({ task: null });
       const rows = this.ctx.storage.sql.exec<TaskRow>(
-        "SELECT * FROM tasks WHERE owner_approved=1 AND mission_authorized=0 AND attempt_count<max_attempts AND ((status='queued' AND (next_run_at IS NULL OR next_run_at<=?)) OR (status='waiting' AND next_run_at IS NOT NULL AND next_run_at<=?)) ORDER BY COALESCE(next_run_at,created_at) ASC LIMIT 500",
+        "SELECT * FROM tasks WHERE owner_approved=1 AND mission_authorized=0 AND attempt_count<max_attempts AND step_count<max_steps AND ((status='queued' AND (next_run_at IS NULL OR next_run_at<=?)) OR (status='waiting' AND next_run_at IS NOT NULL AND next_run_at<=?)) ORDER BY COALESCE(next_run_at,created_at) ASC LIMIT 500",
         now, now
       ).toArray();
       const selected = selectNextTask(rows.map(taskFromRow), { now: Date.parse(now) });
       if (!selected) return json({ task: null });
       const claimed = transitionTask(selected, "running", { now });
-      const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status='running', attempt_count=?, updated_at=?, started_at=COALESCE(started_at,?), next_run_at=NULL WHERE id=? AND status=? AND owner_approved=1 AND mission_authorized=0 AND attempt_count<max_attempts RETURNING id", claimed.attempt_count, now, now, selected.id, selected.status).toArray();
+      const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status='running', step_count=?, updated_at=?, started_at=COALESCE(started_at,?), next_run_at=NULL WHERE id=? AND status=? AND owner_approved=1 AND mission_authorized=0 AND attempt_count<max_attempts AND step_count<max_steps RETURNING id", claimed.step_count, now, now, selected.id, selected.status).toArray();
       if (updated.length !== 1) return json({ error: "Task claim state conflict." }, 409);
       return json({ task: claimed });
     }
