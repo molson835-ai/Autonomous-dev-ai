@@ -30,7 +30,8 @@ const TRANSITIONS = Object.freeze({
 
 const REQUIRED = [
   "id", "idempotency_key", "task_type", "title", "goal",
-  "approved_scope", "scope_id", "created_at", "updated_at", "status"
+  "approved_scope", "scope_id", "created_at", "updated_at", "status",
+  "step_count", "max_steps"
 ];
 
 function nonEmpty(value) {
@@ -60,6 +61,9 @@ export function validateTaskRecord(task) {
     return { valid: false, reason: "invalid_max_attempts" };
   }
   if (task.attempt_count > task.max_attempts) return { valid: false, reason: "attempt_budget_exceeded" };
+  if (!Number.isInteger(task.step_count) || task.step_count < 0) return { valid: false, reason: "invalid_step_count" };
+  if (!Number.isInteger(task.max_steps) || task.max_steps < 1 || task.max_steps > 10) return { valid: false, reason: "invalid_max_steps" };
+  if (task.step_count > task.max_steps) return { valid: false, reason: "step_budget_exceeded" };
   if (typeof task.mission_authorized !== "boolean") return { valid: false, reason: "missing_mission_authorization_state" };
   if (task.mission_authorized === true && !isMissionAuthorizedTask(task)) return { valid: false, reason: "invalid_mission_authorized_scope" };
   if (task.status !== "proposed" && task.owner_approved !== true && task.mission_authorized !== true) {
@@ -72,7 +76,7 @@ export function validateTaskRecord(task) {
 }
 
 /** Create a metadata-only task record. Persistence and ID generation belong to the caller. */
-export function createTaskRecord(input, { now = new Date().toISOString(), maxAttempts = 3, missionAuthorized = false } = {}) {
+export function createTaskRecord(input, { now = new Date().toISOString(), maxAttempts = 3, maxSteps = 10, missionAuthorized = false } = {}) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new TypeError("Task input must be an object");
   }
@@ -91,6 +95,8 @@ export function createTaskRecord(input, { now = new Date().toISOString(), maxAtt
     updated_at: now,
     attempt_count: 0,
     max_attempts: maxAttempts,
+    step_count: 0,
+    max_steps: maxSteps,
     next_run_at: null,
     checkpoint_summary: null,
     result_summary: null,
@@ -123,7 +129,7 @@ export function selectNextTask(tasks, { now = Date.now() } = {}) {
     const dueWaiting = task.status === "waiting" && task.next_run_at !== null && task.next_run_at !== undefined && Date.parse(task.next_run_at) <= now;
     if (!dueQueued && !dueWaiting) return false;
     if (task.owner_approved !== true && task.mission_authorized !== true) return false;
-    if (task.attempt_count >= task.max_attempts) return false;
+    if (task.attempt_count >= task.max_attempts || task.step_count >= task.max_steps) return false;
     return true;
   });
   eligible.sort((a, b) =>
@@ -141,7 +147,8 @@ export function transitionTask(task, nextStatus, {
   checkpointSummary,
   resultSummary,
   evidenceRefs,
-  nextRunAt
+  nextRunAt,
+  countAttempt = false
 } = {}) {
   const validation = validateTaskRecord(task);
   if (!validation.valid) throw new TypeError(`Invalid existing task: ${validation.reason}`);
@@ -158,6 +165,9 @@ export function transitionTask(task, nextStatus, {
   if (nextStatus === "running" && task.attempt_count >= task.max_attempts) {
     throw new Error("task_attempt_budget_exhausted");
   }
+  if (nextStatus === "running" && task.step_count >= task.max_steps) {
+    throw new Error("task_step_budget_exhausted");
+  }
   const updated = {
     ...task,
     status: nextStatus,
@@ -165,9 +175,10 @@ export function transitionTask(task, nextStatus, {
     updated_at: now
   };
   if (nextStatus === "running") {
-    updated.attempt_count += 1;
+    updated.step_count += 1;
     updated.started_at ??= now;
   }
+  if (countAttempt === true) updated.attempt_count += 1;
   if (nextStatus === "succeeded" || nextStatus === "failed" || nextStatus === "cancelled") {
     updated.finished_at = now;
   }
