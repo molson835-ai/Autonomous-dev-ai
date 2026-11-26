@@ -598,6 +598,20 @@ export default function OwnerConsole() {
                       Pause
                     </button>
                   )}
+                  {task.status === "waiting" && task.owner_approved && !task.mission_authorized && (
+                    <button
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() => {
+                        if (window.confirm("Move this exact waiting, owner-approved task back to the queue? Its checkpoint, evidence, and approved scope will be preserved. No other task will be changed.")) {
+                          void perform(task.id, "/v1/tasks/" + task.id + "/owner-control", "POST", { action: "resume" });
+                        }
+                      }}
+                      className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                    >
+                      {busy === task.id ? "Resuming…" : "Resume this task now"}
+                    </button>
+                  )}
                   {task.status === "paused" && (
                     <>
                       <button type="button" disabled={busy !== null} onClick={() => void perform(task.id, "/v1/tasks/" + task.id + "/owner-control", "POST", { action: "resume" })} className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
