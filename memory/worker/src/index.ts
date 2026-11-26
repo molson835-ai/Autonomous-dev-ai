@@ -131,6 +131,8 @@ export class MemoryStore extends DurableObject<Env> {
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS quota_daily (day TEXT PRIMARY KEY, baseline_neurons REAL NOT NULL, observed_neurons REAL NOT NULL, observed_at TEXT NOT NULL, local_estimated_neurons REAL NOT NULL DEFAULT 0, circuit_open INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS quota_reservations (id TEXT PRIMARY KEY, day TEXT NOT NULL, reserved_neurons REAL NOT NULL, created_at TEXT NOT NULL)");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS quota_reservations_day ON quota_reservations(day)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS quota_call_ledger (reservation_id TEXT PRIMARY KEY, day TEXT NOT NULL, settled_at TEXT NOT NULL, model_id TEXT NOT NULL, input_tokens INTEGER, output_tokens INTEGER, estimated_neurons REAL NOT NULL, accounting_source TEXT NOT NULL CHECK (accounting_source IN ('provider_usage','fallback')), settlement_reason TEXT NOT NULL)");
+      ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS quota_call_ledger_day_settled ON quota_call_ledger(day, settled_at DESC)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS tavily_credit_monthly (month TEXT PRIMARY KEY, used_credits REAL NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS tavily_credit_reservations (id TEXT PRIMARY KEY, month TEXT NOT NULL, reserved_credits REAL NOT NULL, created_at TEXT NOT NULL)");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS tavily_credit_reservations_month ON tavily_credit_reservations(month)");
@@ -305,6 +307,16 @@ export class MemoryStore extends DurableObject<Env> {
       this.ctx.storage.sql.exec("DELETE FROM tavily_credit_reservations WHERE id=?", reservation.id);
       return json({ settled: true, month: reservation.month, charged_credits: charged });
     }
+    if (request.method === "GET" && url.pathname === "/v1/owner/quota/calls") {
+      const limit = boundedLimit(url.searchParams.get("limit"), 50);
+      const day = url.searchParams.get("day") ?? now.slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return json({ error: "Invalid quota ledger day." }, 400);
+      const calls = this.ctx.storage.sql.exec<{
+        reservation_id:string; day:string; settled_at:string; model_id:string; input_tokens:number|null;
+        output_tokens:number|null; estimated_neurons:number; accounting_source:string; settlement_reason:string;
+      }>("SELECT reservation_id,day,settled_at,model_id,input_tokens,output_tokens,estimated_neurons,accounting_source,settlement_reason FROM quota_call_ledger WHERE day=? ORDER BY settled_at DESC, rowid DESC LIMIT ?", day, limit).toArray();
+      return json({ day, source: "eve_durable_object_per_call_estimate_ledger_not_provider_account_telemetry", retention_days: 30, count: calls.length, calls });
+    }
     if (request.method === "GET" && ["/v1/quota/status", "/v1/owner/quota/status"].includes(url.pathname)) {
       const day = now.slice(0, 10);
       const daily = this.ctx.storage.sql.exec<{
@@ -383,26 +395,43 @@ export class MemoryStore extends DurableObject<Env> {
     }
     if (request.method === "POST" && url.pathname === "/v1/quota/settle") {
       const body = await readBody(request);
-      if (!body || Object.keys(body).some(k => !["reservation_id", "actual_neurons"].includes(k)) ||
+      const allowed = ["reservation_id", "actual_neurons", "input_tokens", "output_tokens", "accounting_source", "settlement_reason"];
+      const validToken = (value: unknown) => value === undefined || (Number.isSafeInteger(value) && Number(value) >= 0 && Number(value) <= 1_000_000_000);
+      const validReason = (value: unknown) => value === undefined || ["completed", "provider_error", "stream_interrupted", "cancelled", "completed_without_usage", "legacy_or_unknown"].includes(String(value));
+      if (!body || Object.keys(body).some(k => !allowed.includes(k)) ||
           typeof body.reservation_id !== "string" || !/^[0-9a-f-]{36}$/i.test(body.reservation_id) ||
-          (body.actual_neurons !== undefined && (typeof body.actual_neurons !== "number" || !Number.isFinite(body.actual_neurons) ||
-          body.actual_neurons < 0 || body.actual_neurons > 100000)))
+          (body.actual_neurons !== undefined && (typeof body.actual_neurons !== "number" || !Number.isFinite(body.actual_neurons) || body.actual_neurons < 0 || body.actual_neurons > 100000)) ||
+          !validToken(body.input_tokens) || !validToken(body.output_tokens) ||
+          (body.accounting_source !== undefined && !["provider_usage", "fallback"].includes(String(body.accounting_source))) ||
+          !validReason(body.settlement_reason) ||
+          (body.accounting_source === "provider_usage" && (!Number.isSafeInteger(body.input_tokens) || !Number.isSafeInteger(body.output_tokens))))
         return json({ error: "Invalid quota settlement." }, 400);
       const row = this.ctx.storage.sql.exec<{id:string;day:string;reserved_neurons:number}>(
         "SELECT * FROM quota_reservations WHERE id=? LIMIT 1", body.reservation_id
       ).toArray()[0];
       if (!row) return json({ error: "Reservation not found or already settled." }, 404);
-      // Provider-reported token usage is converted using the published model rates
-      // plus a 50% margin in the trusted server-side middleware. Missing usage
-      // settles to a conservative 200-neuron fallback.
       const charged = body.actual_neurons === undefined ? row.reserved_neurons : body.actual_neurons;
+      const accountingSource = body.accounting_source === "provider_usage" ? "provider_usage" : "fallback";
+      const settlementReason = String(body.settlement_reason ?? (accountingSource === "provider_usage" ? "completed" : "legacy_or_unknown"));
+      const inserted = this.ctx.storage.sql.exec<{reservation_id:string}>(
+        "INSERT OR IGNORE INTO quota_call_ledger (reservation_id,day,settled_at,model_id,input_tokens,output_tokens,estimated_neurons,accounting_source,settlement_reason) VALUES (?,?,?,?,?,?,?,?,?) RETURNING reservation_id",
+        row.id, row.day, now, "@cf/zai-org/glm-4.7-flash",
+        accountingSource === "provider_usage" ? Number(body.input_tokens) : null,
+        accountingSource === "provider_usage" ? Number(body.output_tokens) : null,
+        charged, accountingSource, settlementReason
+      ).toArray();
+      if (inserted.length !== 1) return json({ error: "Quota call already has an audit record; reservation retained." }, 409);
       const updated = this.ctx.storage.sql.exec<{day:string}>(
         "UPDATE quota_daily SET local_estimated_neurons=local_estimated_neurons+?,updated_at=? WHERE day=? RETURNING day",
         charged, now, row.day
       ).toArray();
-      if (updated.length !== 1) return json({ error: "Quota ledger unavailable; reservation retained." }, 503);
+      if (updated.length !== 1) {
+        this.ctx.storage.sql.exec("DELETE FROM quota_call_ledger WHERE reservation_id=?", row.id);
+        return json({ error: "Quota ledger unavailable; reservation retained." }, 503);
+      }
       this.ctx.storage.sql.exec("DELETE FROM quota_reservations WHERE id=?", row.id);
-      return json({ settled: true, charged_neurons: charged });
+      this.ctx.storage.sql.exec("DELETE FROM quota_call_ledger WHERE settled_at < ?", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+      return json({ settled: true, charged_neurons: charged, accounting_source: accountingSource, settlement_reason: settlementReason });
     }
     if (request.method === "POST" && url.pathname === "/v1/quota/circuit") {
       const body = await readBody(request);
@@ -1010,7 +1039,7 @@ export default {
     const ownerResourceDecisionRoute = request.method === "POST" && /^\/v1\/owner\/resources\/[a-z0-9][a-z0-9._:-]{0,159}\/decision$/.test(url.pathname);
     const ownerArtifactDeleteRoute = request.method === "POST" && /^\/v1\/owner\/artifacts\/[0-9a-f-]{36}\/delete$/i.test(url.pathname);
     const ownerArtifactReadRoute = request.method === "GET" && (/^\/v1\/owner\/artifacts$/i.test(url.pathname) || /^\/v1\/owner\/artifacts\/[0-9a-f-]{36}$/i.test(url.pathname));
-    const ownerReadRoute = request.method === "GET" && (["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status", "/v1/owner/resources", "/v1/owner/quota/status", "/v1/owner/research/credits/status"].includes(url.pathname) || ownerArtifactReadRoute);
+    const ownerReadRoute = request.method === "GET" && (["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status", "/v1/owner/resources", "/v1/owner/quota/status", "/v1/owner/quota/calls", "/v1/owner/research/credits/status"].includes(url.pathname) || ownerArtifactReadRoute);
     const ownerQueueControlRoute = request.method === "POST" && url.pathname === "/v1/owner/control";
     const ownerTaskCreateRoute = request.method === "POST" && url.pathname === "/v1/owner/tasks";
     const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute || ownerMemoryDecisionRoute || ownerResourceDecisionRoute || ownerArtifactDeleteRoute || ownerReadRoute || ownerQueueControlRoute || ownerTaskCreateRoute;

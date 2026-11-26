@@ -160,6 +160,39 @@ describe("shared daily neuron quota coordinator", () => {
     expect(settled.status).toBe(200);
     expect(await settled.json()).toMatchObject({ settled: true, charged_neurons: 1200 });
   });
+  it("records per-call provider token usage and labels conservative fallback settlements", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-30T12:00:00.000Z"));
+    const first = await quotaRequest();
+    const { reservation_id: providerId } = await first.json<{ reservation_id: string }>();
+    const providerSettlement = await quotaControlRequest("/v1/quota/settle", {
+      reservation_id: providerId, actual_neurons: 42, input_tokens: 12000, output_tokens: 300,
+      accounting_source: "provider_usage", settlement_reason: "completed",
+    });
+    expect(providerSettlement.status).toBe(200);
+    expect(await providerSettlement.json()).toMatchObject({ accounting_source: "provider_usage", settlement_reason: "completed", charged_neurons: 42 });
+
+    const second = await quotaRequest();
+    const { reservation_id: fallbackId } = await second.json<{ reservation_id: string }>();
+    const fallbackSettlement = await quotaControlRequest("/v1/quota/settle", {
+      reservation_id: fallbackId, actual_neurons: 200, accounting_source: "fallback", settlement_reason: "stream_interrupted",
+    });
+    expect(fallbackSettlement.status).toBe(200);
+
+    const ownerDenied = await request("/v1/owner/quota/calls");
+    expect(ownerDenied.status).toBe(401);
+    const ledger = await request("/v1/owner/quota/calls?day=2026-11-30&limit=10", {}, ownerToken);
+    expect(ledger.status).toBe(200);
+    expect(await ledger.json()).toMatchObject({
+      day: "2026-11-30",
+      source: "eve_durable_object_per_call_estimate_ledger_not_provider_account_telemetry",
+      count: 2,
+      calls: [
+        { reservation_id: fallbackId, input_tokens: null, output_tokens: null, estimated_neurons: 200, accounting_source: "fallback", settlement_reason: "stream_interrupted" },
+        { reservation_id: providerId, input_tokens: 12000, output_tokens: 300, estimated_neurons: 42, accounting_source: "provider_usage", settlement_reason: "completed" },
+      ],
+    });
+  });
   it("charges reported-token neuron estimates instead of the full 200-neuron hold", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-11-20T12:00:00.000Z"));
@@ -1064,7 +1097,7 @@ describe("persistent quarantined resource catalog and owner review", () => {
     };
     expect((await request("/v1/resources", { method: "POST", body: JSON.stringify(candidate) })).status).toBe(201);
     const path = `/v1/owner/resources/${id}/decision`;
-    expect((await request(path, { method: "POST", body: JSON.stringify({ decision: "approve", review_evidence: ["Reviewed"] }) })).status).toBe(401);
+    expect((await request(path, { method: "POST", headers: { "cf-connecting-ip": "203.0.113.99" }, body: JSON.stringify({ decision: "approve", review_evidence: ["Reviewed"] }) })).status).toBe(401);
     expect((await request(path, { method: "POST", body: JSON.stringify({ decision: "approve" }) }, ownerToken)).status).toBe(400);
     const approved = await request(path, {
       method: "POST",
