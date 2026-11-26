@@ -49,10 +49,34 @@ function constantTimeEqual(left: string, right: string): boolean {
 }
 
 async function readBody(request: Request, maxBytes = 16_000): Promise<Record<string, unknown> | null> {
-  const raw = await request.text();
-  if (new TextEncoder().encode(raw).byteLength > maxBytes) return null;
+  if (!request.body) return null;
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
   try {
-    const value: unknown = JSON.parse(raw);
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (total + value.byteLength > maxBytes) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } catch {
+    return null;
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    const value: unknown = JSON.parse(new TextDecoder().decode(bytes));
     return value !== null && typeof value === "object" && !Array.isArray(value)
       ? value as Record<string, unknown>
       : null;
