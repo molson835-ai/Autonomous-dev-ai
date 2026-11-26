@@ -22,11 +22,22 @@ export interface PlannerResource {
   id: string;
   name: string;
   summary: string;
+  resource_type?: string;
   skill_tags: string[];
   source_url: string;
+  maintainer?: string;
   license: string;
+  version_or_revision?: string;
   cost_model: ResourceCostModel;
   trust_state: ResourceTrustState;
+  cost_notes?: string;
+  dependencies?: string[];
+  permissions?: string[];
+  network_or_execution_requirements?: string[];
+  security_notes?: string;
+  freshness_policy?: string;
+  retrieved_at?: string;
+  last_verified_at?: string;
   access_mode?: ResourceAccessMode;
   persistence?: "durable" | "ephemeral" | "unknown";
   execution?: "none" | "browser_local" | "server_runtime" | "interactive_remote" | "unknown";
@@ -64,6 +75,40 @@ function bestEvidenceStatus(skill: string, evidence: SkillEvidence[]): SkillStat
   if (supported.some((item) => item.status === "demonstrated")) return "demonstrated";
   if (supported.some((item) => item.status === "practiced")) return "practiced";
   return "untested";
+}
+
+function isUnknownText(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  return normalized === "" || normalized === "unknown";
+}
+
+function resourceReviewGaps(resource: PlannerResource): string[] {
+  const quota = resource.quota_evidence;
+  const gaps: string[] = [];
+  if (isUnknownText(resource.maintainer)) gaps.push("maintainer");
+  if (isUnknownText(resource.version_or_revision)) gaps.push("revision");
+  if (isUnknownText(resource.license)) gaps.push("license");
+  if (!resource.security_notes || !resource.security_notes.trim()) gaps.push("security_notes");
+  if (!resource.cost_notes || !resource.cost_notes.trim()) gaps.push("cost_notes");
+  if (!resource.freshness_policy || !resource.freshness_policy.trim()) gaps.push("freshness_policy");
+  if (isUnknownText(resource.retrieved_at)) gaps.push("retrieved_at");
+  if (!Array.isArray(resource.dependencies)) gaps.push("dependencies");
+  if (!Array.isArray(resource.permissions)) gaps.push("permissions");
+  if (!Array.isArray(resource.network_or_execution_requirements)) gaps.push("network_or_execution_requirements");
+  if (isUnknownText(resource.last_verified_at)) gaps.push("last_verified_at");
+  if (!resource.access_mode || resource.access_mode !== "public_read") gaps.push("access_mode");
+  if (!resource.persistence || resource.persistence === "unknown") gaps.push("persistence");
+  if (!resource.execution || resource.execution === "unknown") gaps.push("execution");
+  if (!resource.data_classes_allowed || resource.data_classes_allowed.length === 0) gaps.push("data_classes_allowed");
+  if (!resource.commercial_use || resource.commercial_use !== "allowed") gaps.push("commercial_use");
+  if (!quota || quota.confidence !== "high" || isUnknownText(quota.source_url) ||
+      isUnknownText(quota.checked_at) || isUnknownText(quota.limits)) gaps.push("quota_evidence");
+  if (!resource.failure_policy) gaps.push("failure_policy");
+  if (isUnknownText(resource.deletion_and_export)) gaps.push("deletion_and_export");
+  if (!resource.adapter_status || !["tested", "enabled"].includes(resource.adapter_status)) gaps.push("adapter_status");
+  if (!resource.trust_state || resource.trust_state !== "approved") gaps.push("owner_approval");
+  if (resource.cost_model !== "free_open_source") gaps.push("cost_model");
+  return gaps;
 }
 
 /**
@@ -106,34 +151,44 @@ export function planTaskSkills(input: TaskSkillPlanInput) {
       .filter((resource) => resource.skill_tags.some((tag) => normalizeTag(tag) === skill))
       .filter((resource) => resource.trust_state !== "rejected" && resource.trust_state !== "stale")
       .slice(0, 10)
-      .map((resource) => ({
-        id: resource.id,
-        name: resource.name,
-        sourceUrl: resource.source_url,
-        trustState: resource.trust_state,
-        licenseKnown: resource.license.trim().toLowerCase() !== "unknown",
-        costModel: resource.cost_model,
-        accessMode: resource.access_mode ?? "unknown",
-        persistence: resource.persistence ?? "unknown",
-        execution: resource.execution ?? "unknown",
-        dataClassesAllowed: resource.data_classes_allowed ?? ["public"],
-        commercialUse: resource.commercial_use ?? "unknown",
-        quotaEvidence: resource.quota_evidence ?? {
-          source_url: "unknown", checked_at: "unknown", limits: "unknown", confidence: "unknown" as const,
-        },
-        adapterStatus: resource.adapter_status ?? "candidate",
-        failurePolicy: resource.failure_policy ?? "manual_review",
-        deletionAndExport: resource.deletion_and_export ?? "unknown",
-        executionReady: false as const,
-        reviewRequired: resource.trust_state !== "approved" ||
-          resource.license.trim().toLowerCase() === "unknown" ||
-          resource.cost_model === "unknown" ||
-          resource.cost_model === "paid" ||
-          resource.cost_model === "free_tier_limited" ||
-          resource.access_mode !== "public_read" ||
-          resource.commercial_use !== "allowed" ||
-          (resource.adapter_status !== "tested" && resource.adapter_status !== "enabled"),
-      }));
+      .map((resource) => {
+        const missingReviewEvidence = resourceReviewGaps(resource);
+        return {
+          id: resource.id,
+          name: resource.name,
+          summary: resource.summary,
+          resourceType: resource.resource_type ?? "unknown",
+          sourceUrl: resource.source_url,
+          maintainer: resource.maintainer ?? "unknown",
+          revision: resource.version_or_revision ?? "unknown",
+          trustState: resource.trust_state,
+          license: resource.license,
+          licenseKnown: !isUnknownText(resource.license),
+          costModel: resource.cost_model,
+          costNotes: resource.cost_notes ?? "unknown",
+          dependencies: resource.dependencies ?? [],
+          permissions: resource.permissions ?? [],
+          networkOrExecutionRequirements: resource.network_or_execution_requirements ?? [],
+          securityNotes: resource.security_notes ?? "unknown",
+          freshnessPolicy: resource.freshness_policy ?? "unknown",
+          retrievedAt: resource.retrieved_at ?? "unknown",
+          lastVerifiedAt: resource.last_verified_at ?? "unknown",
+          accessMode: resource.access_mode ?? "unknown",
+          persistence: resource.persistence ?? "unknown",
+          execution: resource.execution ?? "unknown",
+          dataClassesAllowed: resource.data_classes_allowed ?? ["public"],
+          commercialUse: resource.commercial_use ?? "unknown",
+          quotaEvidence: resource.quota_evidence ?? {
+            source_url: "unknown", checked_at: "unknown", limits: "unknown", confidence: "unknown" as const,
+          },
+          adapterStatus: resource.adapter_status ?? "candidate",
+          failurePolicy: resource.failure_policy ?? "manual_review",
+          deletionAndExport: resource.deletion_and_export ?? "unknown",
+          missingReviewEvidence,
+          executionReady: false as const,
+          reviewRequired: missingReviewEvidence.length > 0,
+        };
+      });
 
     return {
       skill,
@@ -157,7 +212,8 @@ export function planTaskSkills(input: TaskSkillPlanInput) {
       "Skill evidence and resource metadata are supplied inputs; this planner does not independently verify them.",
       "Agent self-reports never count as practiced or demonstrated evidence.",
       "A plan does not run tests, install resources, grant permissions, or change skill status.",
-      "Unapproved, unknown-license, unknown-cost, and paid resources are not execution-ready.",
+      "Execution readiness is always false here; this planner never enables or executes a resource.",
+      "Resources remain review-required until owner approval and complete provenance, security, cost, quota, access, persistence, execution, and lifecycle evidence are supplied.",
       "Demonstrated status still requires objective evidence or independent review and the existing owner approval gate.",
     ],
   };

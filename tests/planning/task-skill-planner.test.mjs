@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { planTaskSkills } from "../../agent/planning/task-skill-planner.ts";
+import { prepareResourceCandidate } from "../../agent/resources/intake.mjs";
+
+const base = {
+  id: "test.resource", name: "Test resource", summary: "Test metadata", resource_type: "documentation",
+  skill_tags: ["testing"], source_url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript",
+};
 
 const criteria = ["Complete a repeatable test and capture its output."];
 const resource = (overrides = {}) => ({
@@ -104,6 +110,16 @@ test("planner never promotes skills or executes resource actions", () => {
 
 test("planner requires current commercial, quota, and adapter evidence before marking a resource review-complete", () => {
   const reviewedResource = resource({
+    maintainer: "TypeScript maintainers",
+    version_or_revision: "current-docs",
+    security_notes: "Read-only public documentation; no code execution.",
+    cost_notes: "Open-source documentation; no provider account or paid quota required.",
+    freshness_policy: "Recheck official documentation at least every 90 days.",
+    dependencies: [],
+    permissions: [],
+    network_or_execution_requirements: ["Public HTTPS read only."],
+    last_verified_at: "2026-11-25T00:00:00.000Z",
+    retrieved_at: "2026-11-25T00:00:00.000Z",
     access_mode: "public_read",
     persistence: "durable",
     execution: "none",
@@ -131,6 +147,9 @@ test("planner requires current commercial, quota, and adapter evidence before ma
   assert.equal(selected.commercialUse, "allowed");
   assert.equal(selected.adapterStatus, "tested");
   assert.equal(selected.accessMode, "public_read");
+  assert.deepEqual(selected.missingReviewEvidence, []);
+  assert.equal(selected.maintainer, "TypeScript maintainers");
+  assert.equal(selected.revision, "current-docs");
 });
 
 test("planner flags conditional commercial use, stale quota confidence, and non-public access", () => {
@@ -151,6 +170,8 @@ test("planner flags conditional commercial use, stale quota confidence, and non-
     })],
   });
   assert.equal(report.skills[0].matchingResources[0].reviewRequired, true);
+  assert.ok(report.skills[0].matchingResources[0].missingReviewEvidence.includes("quota_evidence"));
+  assert.ok(report.skills[0].matchingResources[0].missingReviewEvidence.includes("persistence"));
 });
 
 test("intake does not accept high-confidence quota claims without dated official evidence", () => {
@@ -158,4 +179,18 @@ test("intake does not accept high-confidence quota claims without dated official
     ...base,
     quota_evidence: { source_url: "unknown", checked_at: "unknown", limits: "unknown", confidence: "high" }
   }), /High-confidence quota evidence/);
+});
+
+test("planner treats whitespace-only provenance as missing evidence", () => {
+  const report = planTaskSkills({
+    task: "Inspect incomplete metadata",
+    requirements: [{ skill: "typescript", requiredStatus: "untested", acceptanceCriteria: criteria }],
+    skillEvidence: [],
+    resources: [resource({ maintainer: " ", version_or_revision: " ", license: " " })],
+  });
+  const selected = report.skills[0].matchingResources[0];
+  assert.equal(selected.licenseKnown, false);
+  assert.ok(selected.missingReviewEvidence.includes("maintainer"));
+  assert.ok(selected.missingReviewEvidence.includes("revision"));
+  assert.ok(selected.missingReviewEvidence.includes("license"));
 });
