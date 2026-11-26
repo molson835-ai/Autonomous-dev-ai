@@ -138,7 +138,7 @@ jobs:
         run: npx --no-install tsc --noEmit -p apps/web/tsconfig.json
 
       - name: Test planning and financial safety contract
-        run: node --test tests/*.test.mjs
+        run: node --test tests/*.test.mjs tests/planning/*.test.mjs
 
       - name: Test persistent memory policy
         run: node --test tests/memory-policy.test.mjs
