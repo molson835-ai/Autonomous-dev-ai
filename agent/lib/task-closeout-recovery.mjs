@@ -46,7 +46,7 @@ export function recoverableTaskCloseout({
   const status = canContinue ? "waiting" : "paused";
   const checkpointSummary = [
     "Automatic safety checkpoint: the Eve turn settled after claiming this individually owner-approved task but before calling task_transition.",
-    "This records no task completion and does not certify the preceding work; inspect the prior tool results before continuing.",
+    "This is not evidence of task completion and does not certify the preceding work; inspect the prior tool results before continuing.",
     `Recovery trace: session ${sessionId}, turn ${turnId}.`,
     canContinue
       ? "A completed work call was recorded and no work-call failure was recorded; schedule the next bounded step."
