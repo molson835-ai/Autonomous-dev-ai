@@ -92,8 +92,11 @@ function boundedLimit(value: string | null, fallback = 8): number {
 }
 
 export class MemoryStore extends DurableObject<Env> {
+  private readonly env: Env;
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.env = env;
     ctx.blockConcurrencyWhile(async () => {
       ctx.storage.sql.exec(
         "CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, kind TEXT NOT NULL, content TEXT NOT NULL, source TEXT NOT NULL, confidence REAL NOT NULL, status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
@@ -146,14 +149,95 @@ export class MemoryStore extends DurableObject<Env> {
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS csv_artifacts (id TEXT PRIMARY KEY, name TEXT NOT NULL, filename TEXT NOT NULL, media_type TEXT NOT NULL CHECK (media_type = 'text/csv; charset=utf-8'), content TEXT NOT NULL, bytes INTEGER NOT NULL CHECK (bytes BETWEEN 1 AND 65536), created_at TEXT NOT NULL, idempotency_key TEXT, sha256 TEXT)");
       ctx.storage.sql.exec("CREATE UNIQUE INDEX IF NOT EXISTS csv_artifacts_idempotency_key ON csv_artifacts(idempotency_key) WHERE idempotency_key IS NOT NULL");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS csv_artifacts_created ON csv_artifacts(created_at DESC)");
+      await this.scheduleTaskWakeup();
     });
+  }
+
+  private async scheduleTaskWakeup(): Promise<void> {
+    const control = this.ctx.storage.sql.exec<{ queue_paused: number }>("SELECT queue_paused FROM task_control WHERE id=1").one();
+    const running = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='running'").one().count;
+    if (control.queue_paused === 1 || running > 0) {
+      await this.ctx.storage.deleteAlarm();
+      return;
+    }
+    const next = this.ctx.storage.sql.exec<{ next_run_at: string }>(
+      "SELECT MIN(next_run_at) AS next_run_at FROM tasks WHERE status='waiting' AND owner_approved=1 AND mission_authorized=0 AND attempt_count<max_attempts AND step_count<max_steps AND next_run_at IS NOT NULL"
+    ).toArray()[0];
+    if (!next?.next_run_at) {
+      await this.ctx.storage.deleteAlarm();
+      return;
+    }
+    const dueAt = Date.parse(next.next_run_at);
+    if (!Number.isFinite(dueAt)) {
+      await this.ctx.storage.deleteAlarm();
+      return;
+    }
+    await this.ctx.storage.setAlarm(Math.max(Date.now() + 1000, dueAt));
+  }
+
+  async alarm(): Promise<void> {
+    const now = new Date().toISOString();
+    const control = this.ctx.storage.sql.exec<{ queue_paused: number }>("SELECT queue_paused FROM task_control WHERE id=1").one();
+    const running = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='running'").one().count;
+    if (control.queue_paused === 1 || running > 0) {
+      await this.scheduleTaskWakeup();
+      return;
+    }
+    const due = this.ctx.storage.sql.exec<TaskRow>(
+      "SELECT * FROM tasks WHERE status='waiting' AND owner_approved=1 AND mission_authorized=0 AND attempt_count<max_attempts AND step_count<max_steps AND next_run_at IS NOT NULL AND next_run_at<=? ORDER BY next_run_at ASC LIMIT 1",
+      now
+    ).toArray()[0];
+    if (!due) {
+      await this.scheduleTaskWakeup();
+      return;
+    }
+    if (!this.env.MEMORY_API_TOKEN) throw new Error("Task wake-up credential is not configured.");
+    const operationId = `eve-task-${due.id}-${Date.parse(due.next_run_at ?? now)}`;
+    const response = await fetch("https://autonomous-dev-ai.vercel.app/api/internal/task-wakeup", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer " + this.env.MEMORY_API_TOKEN,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ task_id: due.id, next_run_at: due.next_run_at, operation_id: operationId }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (response.status >= 500 || response.status === 429) {
+      throw new Error("Task wake-up endpoint returned a retryable server response.");
+    }
+    if (!response.ok) {
+      console.error("Eve task wake-up was rejected; the daily schedule remains the fallback.", {
+        taskId: due.id,
+        status: response.status,
+      });
+      return;
+    }
+    const payload: unknown = await response.json().catch(() => null);
+    if (!payload || typeof payload !== "object" || !("accepted" in payload) || payload.accepted !== true) {
+      await this.scheduleTaskWakeup();
+    }
   }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const now = new Date().toISOString();
 
-
+    if (request.method === "GET" && url.pathname === "/v1/internal/wakeup-status") {
+      const taskId = url.searchParams.get("task_id") ?? "";
+      const expectedNextRunAt = url.searchParams.get("next_run_at") ?? "";
+      if (!/^[0-9a-f-]{36}$/i.test(taskId) || !Number.isFinite(Date.parse(expectedNextRunAt))) {
+        return json({ error: "Invalid wake-up status query." }, 400);
+      }
+      const control = this.ctx.storage.sql.exec<{ queue_paused: number }>("SELECT queue_paused FROM task_control WHERE id=1").one();
+      const running = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='running'").one().count;
+      const row = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE id=? LIMIT 1", taskId).toArray()[0];
+      const task = row ? taskFromRow(row) : null;
+      const eligible = control.queue_paused === 0 && running === 0 && !!task &&
+        task.status === "waiting" && task.owner_approved === true && task.mission_authorized === false &&
+        task.attempt_count < task.max_attempts && task.step_count < task.max_steps &&
+        task.next_run_at === expectedNextRunAt && Date.parse(expectedNextRunAt) <= Date.parse(now);
+      return json({ eligible, queue_paused: control.queue_paused === 1, running_tasks: running });
+    }
 
     if (request.method === "POST" && url.pathname === "/v1/research/credits/reserve") {
       const body = await readBody(request);
@@ -455,6 +539,7 @@ export class MemoryStore extends DurableObject<Env> {
         paused ? 1 : 0, paused ? (body.reason ?? "Paused by owner") : null, now
       ).toArray();
       if (updated.length !== 1) return json({ error: "Owner control state unavailable." }, 503);
+      await this.scheduleTaskWakeup();
       return json({ queue_paused: paused, reason: paused ? (body.reason ?? "Paused by owner") : null });
     }
 
@@ -594,6 +679,7 @@ export class MemoryStore extends DurableObject<Env> {
       const claimed = transitionTask(selected, "running", { now });
       const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status='running', step_count=?, updated_at=?, started_at=COALESCE(started_at,?), next_run_at=NULL WHERE id=? AND status=? AND owner_approved=1 AND mission_authorized=0 AND attempt_count<max_attempts AND step_count<max_steps RETURNING id", claimed.step_count, now, now, selected.id, selected.status).toArray();
       if (updated.length !== 1) return json({ error: "Task claim state conflict." }, 409);
+      await this.scheduleTaskWakeup();
       return json({ task: claimed });
     }
 
@@ -627,6 +713,7 @@ export class MemoryStore extends DurableObject<Env> {
       catch { return json({ error: "Invalid task state transition." }, 409); }
       const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status=?, owner_approved=?, updated_at=?, next_run_at=NULL, finished_at=? WHERE id=? AND status=? RETURNING id", next.status, next.owner_approved ? 1 : 0, now, next.finished_at ?? null, current.id, current.status).toArray();
       if (updated.length !== 1) return json({ error: "Task state conflict." }, 409);
+      await this.scheduleTaskWakeup();
       return json({ task: next });
     }
 
@@ -671,6 +758,7 @@ export class MemoryStore extends DurableObject<Env> {
       }
       const update = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status=?,owner_approved=?,updated_at=?,attempt_count=?,next_run_at=?,checkpoint_summary=?,result_summary=?,evidence_refs=?,started_at=?,finished_at=? WHERE id=? AND status=? RETURNING id", next.status, next.owner_approved ? 1 : 0, next.updated_at, next.attempt_count, next.next_run_at, next.checkpoint_summary, next.result_summary, JSON.stringify(next.evidence_refs), next.started_at ?? null, next.finished_at ?? null, current.id, current.status).toArray();
       if (update.length !== 1) return json({ error: "The task state changed before the transition could be saved.", reason_code: "task_state_conflict" }, 409);
+      await this.scheduleTaskWakeup();
       return json({ task: next });
     }
 
