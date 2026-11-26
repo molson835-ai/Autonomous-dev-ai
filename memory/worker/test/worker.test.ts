@@ -183,7 +183,15 @@ describe("shared daily neuron quota coordinator", () => {
     }
     const blocked = await quotaRequest();
     expect(blocked.status).toBe(429);
-    expect(await blocked.json()).toMatchObject({ reason_code: "local_neuron_budget_reached" });
+    expect(await blocked.json()).toMatchObject({
+      reason_code: "local_neuron_budget_reached",
+      quota: {
+        target_neurons: 7000,
+        requested_reservation_neurons: 200,
+        projected_neurons: 7200,
+        remaining_to_target: 0,
+      },
+    });
     const status = await quotaControlRequest("/v1/quota/status");
     expect(await status.json()).toMatchObject({ model_calls_allowed: false, circuit_open: false });
   });

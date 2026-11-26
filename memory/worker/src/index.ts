@@ -363,6 +363,17 @@ export class MemoryStore extends DurableObject<Env> {
       if (projected + Number(body.reserve_neurons) > 7000) return json({
         error: "Eve's local neuron safety target is reached; the 3,000-neuron reserve is preserved.",
         reason_code: "local_neuron_budget_reached",
+        quota: {
+          day,
+          target_neurons: 7000,
+          projected_neurons: projected,
+          active_reserved_neurons: active,
+          baseline_neurons: daily.baseline_neurons,
+          observed_neurons: daily.observed_neurons,
+          local_estimated_neurons: daily.local_estimated_neurons,
+          requested_reservation_neurons: Number(body.reserve_neurons),
+          remaining_to_target: Math.max(0, 7000 - projected),
+        },
       }, 429);
       const id = crypto.randomUUID();
       this.ctx.storage.sql.exec(
