@@ -702,7 +702,7 @@ describe("persistent memory Worker HTTP contract", () => {
     expect((await reclaimed.json<{ task: { status: string; attempt_count: number; step_count: number } }>()).task)
       .toMatchObject({ status: "running", attempt_count: 0, step_count: 2 });
     const finish = await request(`/v1/tasks/${task.id}/transition`, {
-      method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Approval test completed" })
+      method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Approval test completed", evidence_refs: ["test://approval-closeout"] })
     });
     expect(finish.status).toBe(200);
   });
@@ -731,7 +731,7 @@ describe("persistent memory Worker HTTP contract", () => {
       expect((await recovered.json<{ task: { id: string; status: string; attempt_count: number; step_count: number } }>()).task)
         .toMatchObject({ id: task.id, status: "running", attempt_count: 1, step_count: 2 });
       const terminal = await request(`/v1/tasks/${task.id}/transition`, {
-        method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Heartbeat recovery test complete" })
+        method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Heartbeat recovery test complete", evidence_refs: ["test://heartbeat-recovery"] })
       });
       expect(terminal.status).toBe(200);
       expect((await request(`/v1/tasks/${task.id}/heartbeat`, { method: "POST", body: "{}" })).status).toBe(409);
@@ -796,7 +796,7 @@ describe("persistent memory Worker HTTP contract", () => {
     expect((await claimed.json<{ task: { id: string; status: string; attempt_count: number; step_count: number } }>()).task)
       .toMatchObject({ id: task.id, status: "running", attempt_count: 0, step_count: 2 });
     const finish = await request(`/v1/tasks/${task.id}/transition`, {
-      method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Global pause test completed" })
+      method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Global pause test completed", evidence_refs: ["test://global-pause"] })
     });
     expect(finish.status).toBe(200);
   });
@@ -820,7 +820,7 @@ describe("persistent memory Worker HTTP contract", () => {
       expect((await recovered.json<{ task: { id: string; status: string; attempt_count: number; step_count: number } }>()).task)
         .toMatchObject({ id: task.id, status: "running", attempt_count: 1, step_count: 2 });
       const finish = await request(`/v1/tasks/${task.id}/transition`, {
-        method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Lease recovery verified" })
+        method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Lease recovery verified", evidence_refs: ["test://lease-recovery"] })
       });
       expect(finish.status).toBe(200);
     } finally {
@@ -862,7 +862,7 @@ describe("persistent memory Worker HTTP contract", () => {
     expect((await resumed.json<{ task: { status: string; attempt_count: number; step_count: number } }>()).task)
       .toMatchObject({ status: "running", attempt_count: 0, step_count: 2 });
     const done = await request(`/v1/tasks/${task.id}/transition`, { method: "POST", body: JSON.stringify({
-      status: "succeeded", result_summary: "Read-only test complete"
+      status: "succeeded", result_summary: "Read-only test complete", evidence_refs: ["ci://test/1"]
     }) });
     expect(done.status).toBe(200);
     const read = await request(`/v1/tasks/${task.id}`);
