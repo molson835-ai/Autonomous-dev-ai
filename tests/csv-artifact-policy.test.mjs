@@ -25,7 +25,7 @@ test("handles quoted commas, quotes and line breaks", () => {
 });
 
 test("rejects malformed quoting and formula-like cells", () => {
-  for (const content of ['a,b\n1,"unfinished', "a,b\n1,2x\"3", "item,note\nA,=HYPERLINK(\"https://bad\")", "item,note\nA, +SUM(1,2)"]) {
+  for (const content of ['a,b\n1,"unfinished', "a,b\n1,2x\"3", "item,note\nA,=HYPERLINK(\"https://bad\")", 'item,note\nA," +SUM(1,2)"']) {
     assert.equal(validateCsvArtifact({ name: "bad", content }).valid, false);
   }
 });
