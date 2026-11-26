@@ -339,6 +339,59 @@ describe("owner OAuth app and immutable identity verification", () => {
   });
 });
 
+describe("durable task wake-up eligibility", () => {
+  it("exposes only a token-protected eligibility check for a due approved checkpoint", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2041-06-12T12:00:00.000Z"));
+    const created = await request("/v1/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        idempotency_key: `TASK-WAKEUP-${crypto.randomUUID()}`,
+        task_type: "verification",
+        title: "Wake-up eligibility test",
+        goal: "Verify a due approved checkpoint can be woken",
+        approved_scope: "Isolated regression test only",
+      }),
+    });
+    expect(created.status).toBe(201);
+    const { task } = await created.json<{ task: { id: string } }>();
+    expect((await request(`/v1/tasks/${task.id}/approve`, {
+      method: "POST", body: JSON.stringify({ scope_id: "testing" }),
+    }, ownerToken)).status).toBe(200);
+    const claimed = await request("/v1/tasks/claim-next", { method: "POST" });
+    expect(claimed.status).toBe(200);
+    const dueAt = new Date(Date.now() - 1000).toISOString();
+    const transitioned = await request(`/v1/tasks/${task.id}/transition`, {
+      method: "POST",
+      body: JSON.stringify({ status: "waiting", checkpoint_summary: "Verified test checkpoint", next_run_at: dueAt }),
+    });
+    expect(transitioned.status).toBe(200);
+
+    const denied = await exports.default.fetch(new Request(new URL(
+      `/v1/internal/wakeup-status?task_id=${task.id}&next_run_at=${encodeURIComponent(dueAt)}`, endpoint,
+    )));
+    expect(denied.status).toBe(401);
+
+    const eligible = await request(
+      `/v1/internal/wakeup-status?task_id=${task.id}&next_run_at=${encodeURIComponent(dueAt)}`,
+    );
+    expect(eligible.status).toBe(200);
+    expect(await eligible.json()).toMatchObject({ eligible: true, queue_paused: false, running_tasks: 0 });
+
+    expect((await request("/v1/owner/control", {
+      method: "POST", body: JSON.stringify({ action: "pause", reason: "test cleanup" }),
+    }, ownerToken)).status).toBe(200);
+    const paused = await request(
+      `/v1/internal/wakeup-status?task_id=${task.id}&next_run_at=${encodeURIComponent(dueAt)}`,
+    );
+    expect(await paused.json()).toMatchObject({ eligible: false, queue_paused: true });
+    await request("/v1/owner/control", { method: "POST", body: JSON.stringify({ action: "resume" }) }, ownerToken);
+    await request(`/v1/tasks/${task.id}/owner-control`, {
+      method: "POST", body: JSON.stringify({ action: "pause" }),
+    }, ownerToken);
+  });
+});
+
 describe("persistent memory Worker HTTP contract", () => {
   it("rejects requests without the test credential", async () => {
     const response = await exports.default.fetch(
