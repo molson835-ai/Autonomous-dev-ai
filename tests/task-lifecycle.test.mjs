@@ -111,6 +111,7 @@ test("claim increments progress steps, not stale-run retries; checkpoint and ter
   assert.equal(done.step_count, 2);
   assert.equal(done.checkpoint_summary, "Step 1 complete");
   assert.equal(done.result_summary, "Test report ready");
+  assert.throws(() => transitionTask(claimedAgain, "succeeded", { now, resultSummary: "No evidence supplied" }), /task_completion_evidence_required/);
   assert.deepEqual(done.evidence_refs, ["ci://run/123"]);
   assert.throws(() => transitionTask(done, "queued", { now }), /invalid_task_transition/);
 });
