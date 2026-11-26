@@ -139,6 +139,6 @@ The current development branch adds structured metadata to the seven bundled ski
 - Exact category/capability filtering without loading unrelated guide files.
 - Loading one guide still uses the fixed bundled-file allowlist and the 8,000-character maximum.
 
-The task-to-skill planner now returns the resource's provenance, revision, maintainer, license, cost notes, dependencies, permissions, security notes, freshness policy, quota evidence, and lifecycle fields. It explicitly lists missing review evidence. A resource is never marked execution-ready by this planner. Review completeness requires owner approval, a known open-source cost model, explicit commercial-use permission, current high-confidence quota evidence, and complete access/persistence/execution/security/lifecycle metadata.
+The task-to-skill planner now returns the resource's provenance, revision, maintainer, license, cost notes, dependencies, permissions, security notes, freshness policy, quota evidence, and lifecycle fields. It explicitly lists missing review evidence. A resource is never marked execution-ready by this planner. Review completeness requires owner approval, a known open-source cost model, explicit commercial-use permission, dated high-confidence quota evidence, and complete access/persistence/execution/security/lifecycle metadata.
 
 The test command now includes `tests/planning/*.test.mjs`; previously the nested planner suite was not included by the package test script. No Worker schema, endpoint, binding, secret, or deployment is changed by this catalog slice.
