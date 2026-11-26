@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { EVE_AGENT_OWNER_COOKIE, OWNER_SESSION_COOKIE, getVerifiedOwnerLogin, isSameOriginRequest } from "@/lib/owner-github";
 import { buildOwnerChannelCookieHeader } from "@/lib/owner-run-auth.mjs";
-import { OWNER_APPROVED_WORK_LOOP_PROMPT } from "../../../../../../agent/prompts/owner-approved-work-loop";
+import { OWNER_APPROVED_MANUAL_RUN_PROMPT } from "../../../../../../agent/prompts/owner-approved-manual-run";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
         accept: "application/json",
         cookie: channelCookie,
       },
-      body: JSON.stringify({ message: OWNER_APPROVED_WORK_LOOP_PROMPT }),
+      body: JSON.stringify({ message: OWNER_APPROVED_MANUAL_RUN_PROMPT }),
       cache: "no-store",
       redirect: "error",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
