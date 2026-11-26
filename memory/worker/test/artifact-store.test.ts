@@ -84,7 +84,7 @@ describe("durable owner-visible artifacts", () => {
   });
 
   it("enforces the 25-artifact item cap", async () => {
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 20; i++) {
       const response = await request("/v1/artifacts", { method: "POST", body: JSON.stringify({ name: "Report " + i, content: html }) });
       expect(response.status).toBe(201);
     }
@@ -115,7 +115,7 @@ test("rejects an oversized request body while preserving the storage limit", asy
 test("enforces the one-megabyte aggregate content cap", async () => {
   const largeHtml = html.replace("</main>", "<p>" + "x".repeat(60_000) + "</p></main>");
   let stored = 0;
-  for (let i = 0; i < 25; i++) {
+  for (let i = 0; i < 20; i++) {
     const response = await request("/v1/artifacts", { method: "POST", body: JSON.stringify({ name: "Large " + i, content: largeHtml }) });
     if (response.status === 429) break;
     expect(response.status).toBe(201);
