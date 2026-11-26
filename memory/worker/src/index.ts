@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { compareOwnerClientId, diagnosticSharedSecretReason, ownerAuthConfigurationReason, verifyOwnerGithubToken, type OwnerAuthReasonCode } from "./owner-auth";
 import { isSafeMemoryText, normalizeMemoryQuery } from "../../../agent/lib/memory-policy.mjs";
 import { validateHtmlArtifact } from "../../../agent/lib/artifact-policy.mjs";
+import { validateCsvArtifact } from "../../../agent/lib/csv-artifact-policy.mjs";
 import { prepareResourceCandidate } from "../../../agent/resources/intake.mjs";
 import { ensureExperienceExternalIdColumn, findExperienceByExternalId } from "../../../agent/lib/memory-schema.mjs";
 import { createTaskRecord, isMissionAuthorizedTask, isTaskLeaseExpired, selectNextTask, TASK_STATUS_VALUES, transitionTask } from "../../../agent/lib/task-lifecycle.mjs";
@@ -19,7 +20,7 @@ interface Env {
 type ArtifactRow = { id: string; name: string; filename: string; media_type: string; content: string; bytes: number; created_at: string; idempotency_key: string | null; sha256: string | null; };
 const MAX_ARTIFACT_COUNT = 20;
 const MAX_ARTIFACT_TOTAL_BYTES = 1_048_576;
-const MAX_ARTIFACT_REQUEST_BYTES = 96_000;
+const MAX_ARTIFACT_REQUEST_BYTES = 160_000;
 
 type MemoryRow = {
   id: string; kind: string; content: string; source: string;
@@ -142,6 +143,9 @@ export class MemoryStore extends DurableObject<Env> {
       if (!artifactColumns.some(column => column.name === "sha256")) ctx.storage.sql.exec("ALTER TABLE artifacts ADD COLUMN sha256 TEXT");
       ctx.storage.sql.exec("CREATE UNIQUE INDEX IF NOT EXISTS artifacts_idempotency_key ON artifacts(idempotency_key) WHERE idempotency_key IS NOT NULL");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS artifacts_created ON artifacts(created_at DESC)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS csv_artifacts (id TEXT PRIMARY KEY, name TEXT NOT NULL, filename TEXT NOT NULL, media_type TEXT NOT NULL CHECK (media_type = 'text/csv; charset=utf-8'), content TEXT NOT NULL, bytes INTEGER NOT NULL CHECK (bytes BETWEEN 1 AND 65536), created_at TEXT NOT NULL, idempotency_key TEXT, sha256 TEXT)");
+      ctx.storage.sql.exec("CREATE UNIQUE INDEX IF NOT EXISTS csv_artifacts_idempotency_key ON csv_artifacts(idempotency_key) WHERE idempotency_key IS NOT NULL");
+      ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS csv_artifacts_created ON csv_artifacts(created_at DESC)");
     });
   }
 
@@ -318,6 +322,30 @@ export class MemoryStore extends DurableObject<Env> {
       return json({ id: candidate.id, trust_state: "quarantined", created: true }, 201);
     }
 
+    if (request.method === "POST" && url.pathname === "/v1/artifacts/csv") {
+      const body = await readBody(request, MAX_ARTIFACT_REQUEST_BYTES);
+      if (!body || Object.keys(body).some(key => !["name", "content", "idempotency_key"].includes(key)) ||
+          typeof body.idempotency_key !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.idempotency_key)) {
+        return json({ error: "A valid UUID idempotency_key is required." }, 400);
+      }
+      const validation = validateCsvArtifact({ name: body.name, content: body.content });
+      if (!validation.valid) return json({ error: "CSV artifact validation failed.", errors: validation.errors }, 400);
+      const artifact = validation.artifact;
+      const storedContent = artifact.content;
+      const storedBytes = new TextEncoder().encode(storedContent).byteLength;
+      const digest = await sha256Hex(storedContent);
+      const existing = this.ctx.storage.sql.exec<ArtifactRow>("SELECT * FROM csv_artifacts WHERE idempotency_key=? LIMIT 1", body.idempotency_key).toArray()[0];
+      if (existing) {
+        if (existing.name !== artifact.name || existing.sha256 !== digest) return json({ error: "Idempotency key was already used for different CSV content.", reason_code: "artifact_idempotency_conflict" }, 409);
+        return json({ stored: true, duplicate: true, artifact: { id: existing.id, name: existing.name, filename: existing.filename, media_type: existing.media_type, bytes: existing.bytes, created_at: existing.created_at, sha256: existing.sha256 } });
+      }
+      const totals = this.ctx.storage.sql.exec<{ count: number; bytes: number }>("SELECT (SELECT COUNT(*) FROM artifacts)+(SELECT COUNT(*) FROM csv_artifacts) AS count,(SELECT COALESCE(SUM(bytes),0) FROM artifacts)+(SELECT COALESCE(SUM(bytes),0) FROM csv_artifacts) AS bytes").one();
+      if (totals.count >= MAX_ARTIFACT_COUNT || totals.bytes + storedBytes > MAX_ARTIFACT_TOTAL_BYTES) return json({ error: "Artifact storage limit reached. Ask the owner to remove an existing artifact before saving another.", reason_code: "artifact_storage_limit_reached", max_artifacts: MAX_ARTIFACT_COUNT, max_total_bytes: MAX_ARTIFACT_TOTAL_BYTES }, 429);
+      const id = crypto.randomUUID();
+      this.ctx.storage.sql.exec("INSERT INTO csv_artifacts (id,name,filename,media_type,content,bytes,created_at,idempotency_key,sha256) VALUES (?,?,?,?,?,?,?,?,?)", id, artifact.name, artifact.filename, artifact.mediaType, storedContent, storedBytes, now, body.idempotency_key, digest);
+      return json({ stored: true, duplicate: false, artifact: { id, name: artifact.name, filename: artifact.filename, media_type: artifact.mediaType, bytes: storedBytes, created_at: now, sha256: digest } }, 201);
+    }
+
     if (request.method === "POST" && url.pathname === "/v1/artifacts") {
       const body = await readBody(request, MAX_ARTIFACT_REQUEST_BYTES);
       if (!body || Object.keys(body).some(key => !["name", "content", "idempotency_key"].includes(key)) ||
@@ -337,7 +365,7 @@ export class MemoryStore extends DurableObject<Env> {
         }
         return json({ stored: true, duplicate: true, artifact: { id: existing.id, name: existing.name, filename: existing.filename, media_type: existing.media_type, bytes: existing.bytes, created_at: existing.created_at, sha256: existing.sha256 } });
       }
-      const totals = this.ctx.storage.sql.exec<{ count: number; bytes: number }>("SELECT COUNT(*) AS count, COALESCE(SUM(bytes),0) AS bytes FROM artifacts").one();
+      const totals = this.ctx.storage.sql.exec<{ count: number; bytes: number }>("SELECT (SELECT COUNT(*) FROM artifacts)+(SELECT COUNT(*) FROM csv_artifacts) AS count,(SELECT COALESCE(SUM(bytes),0) FROM artifacts)+(SELECT COALESCE(SUM(bytes),0) FROM csv_artifacts) AS bytes").one();
       if (totals.count >= MAX_ARTIFACT_COUNT || totals.bytes + storedBytes > MAX_ARTIFACT_TOTAL_BYTES) {
         return json({ error: "Artifact storage limit reached. Ask the owner to remove an existing artifact before saving another.", reason_code: "artifact_storage_limit_reached", max_artifacts: MAX_ARTIFACT_COUNT, max_total_bytes: MAX_ARTIFACT_TOTAL_BYTES }, 429);
       }
@@ -348,7 +376,8 @@ export class MemoryStore extends DurableObject<Env> {
 
     const artifactMatch = url.pathname.match(/^\/v1\/artifacts\/([0-9a-f-]{36})$/i);
     if (request.method === "GET" && artifactMatch) {
-      const row = this.ctx.storage.sql.exec<ArtifactRow>("SELECT * FROM artifacts WHERE id=? LIMIT 1", artifactMatch[1]).toArray()[0];
+      const row = this.ctx.storage.sql.exec<ArtifactRow>("SELECT * FROM artifacts WHERE id=? LIMIT 1", artifactMatch[1]).toArray()[0]
+        ?? this.ctx.storage.sql.exec<ArtifactRow>("SELECT * FROM csv_artifacts WHERE id=? LIMIT 1", artifactMatch[1]).toArray()[0];
       if (!row) return json({ error: "Artifact not found." }, 404);
       const digest = await sha256Hex(row.content);
       if (row.sha256 && row.sha256 !== digest) return json({ error: "Stored artifact integrity check failed.", reason_code: "artifact_integrity_mismatch" }, 500);
@@ -359,14 +388,15 @@ export class MemoryStore extends DurableObject<Env> {
     if (request.method === "GET" && url.pathname === "/v1/owner/artifacts") {
       const limit = boundedLimit(url.searchParams.get("limit"), 20);
       const artifacts = this.ctx.storage.sql.exec<Omit<ArtifactRow, "content">>(
-        "SELECT id,name,filename,media_type,bytes,created_at,sha256 FROM artifacts ORDER BY created_at DESC LIMIT ?", limit
+        "SELECT id,name,filename,media_type,bytes,created_at,sha256 FROM (SELECT id,name,filename,media_type,bytes,created_at,sha256 FROM artifacts UNION ALL SELECT id,name,filename,media_type,bytes,created_at,sha256 FROM csv_artifacts) ORDER BY created_at DESC LIMIT ?", limit
       ).toArray();
       return json({ artifacts });
     }
 
     const ownerArtifactMatch = url.pathname.match(/^\/v1\/owner\/artifacts\/([0-9a-f-]{36})$/i);
     if (request.method === "GET" && ownerArtifactMatch) {
-      const artifact = this.ctx.storage.sql.exec<ArtifactRow>("SELECT * FROM artifacts WHERE id=? LIMIT 1", ownerArtifactMatch[1]).toArray()[0];
+      const artifact = this.ctx.storage.sql.exec<ArtifactRow>("SELECT * FROM artifacts WHERE id=? LIMIT 1", ownerArtifactMatch[1]).toArray()[0]
+        ?? this.ctx.storage.sql.exec<ArtifactRow>("SELECT * FROM csv_artifacts WHERE id=? LIMIT 1", ownerArtifactMatch[1]).toArray()[0];
       if (!artifact) return json({ error: "Artifact not found." }, 404);
       const digest = await sha256Hex(artifact.content);
       if (artifact.sha256 && artifact.sha256 !== digest) return json({ error: "Stored artifact integrity check failed.", reason_code: "artifact_integrity_mismatch" }, 500);
@@ -379,7 +409,10 @@ export class MemoryStore extends DurableObject<Env> {
       const deleted = this.ctx.storage.sql.exec<{ id: string }>(
         "DELETE FROM artifacts WHERE id=? RETURNING id", ownerArtifactDeleteMatch[1]
       ).toArray();
-      return deleted.length === 1 ? json({ id: ownerArtifactDeleteMatch[1], deleted: true }) : json({ error: "Artifact not found." }, 404);
+      const csvDeleted = deleted.length ? [] : this.ctx.storage.sql.exec<{ id: string }>(
+        "DELETE FROM csv_artifacts WHERE id=? RETURNING id", ownerArtifactDeleteMatch[1]
+      ).toArray();
+      return deleted.length + csvDeleted.length === 1 ? json({ id: ownerArtifactDeleteMatch[1], deleted: true }) : json({ error: "Artifact not found." }, 404);
     }
 
     if (request.method === "POST" && ["/v1/tasks", "/v1/owner/tasks"].includes(url.pathname)) {
