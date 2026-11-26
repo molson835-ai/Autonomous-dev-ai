@@ -316,38 +316,46 @@ export class MemoryStore extends DurableObject<Env> {
 
     if (request.method === "POST" && url.pathname === "/v1/artifacts") {
       const body = await readBody(request, MAX_ARTIFACT_REQUEST_BYTES);
-      if (!body || Object.keys(body).some(key => !["name", "content"].includes(key))) {
-        return json({ error: "Invalid artifact request." }, 400);
+      if (!body || Object.keys(body).some(key => !["name", "content", "idempotency_key"].includes(key)) ||
+          typeof body.idempotency_key !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.idempotency_key)) {
+        return json({ error: "A valid UUID idempotency_key is required." }, 400);
       }
-      const validation = validateHtmlArtifact(body);
+      const validation = validateHtmlArtifact({ name: body.name, content: body.content });
       if (!validation.valid) return json({ error: "Artifact validation failed.", errors: validation.errors }, 400);
       const artifact = validation.artifact;
       const storedContent = artifact.previewHtml;
       const storedBytes = new TextEncoder().encode(storedContent).byteLength;
-      const totals = this.ctx.storage.sql.exec<{ count: number; bytes: number }>(
-        "SELECT COUNT(*) AS count, COALESCE(SUM(bytes),0) AS bytes FROM artifacts"
-      ).one();
+      const digest = await sha256Hex(storedContent);
+      const existing = this.ctx.storage.sql.exec<ArtifactRow>("SELECT * FROM artifacts WHERE idempotency_key=? LIMIT 1", body.idempotency_key).toArray()[0];
+      if (existing) {
+        if (existing.name !== artifact.name || existing.sha256 !== digest) {
+          return json({ error: "Idempotency key was already used for different artifact content.", reason_code: "artifact_idempotency_conflict" }, 409);
+        }
+        return json({ stored: true, duplicate: true, artifact: { id: existing.id, name: existing.name, filename: existing.filename, media_type: existing.media_type, bytes: existing.bytes, created_at: existing.created_at, sha256: existing.sha256 } });
+      }
+      const totals = this.ctx.storage.sql.exec<{ count: number; bytes: number }>("SELECT COUNT(*) AS count, COALESCE(SUM(bytes),0) AS bytes FROM artifacts").one();
       if (totals.count >= MAX_ARTIFACT_COUNT || totals.bytes + storedBytes > MAX_ARTIFACT_TOTAL_BYTES) {
         return json({ error: "Artifact storage limit reached. Ask the owner to remove an existing artifact before saving another.", reason_code: "artifact_storage_limit_reached", max_artifacts: MAX_ARTIFACT_COUNT, max_total_bytes: MAX_ARTIFACT_TOTAL_BYTES }, 429);
       }
       const id = crypto.randomUUID();
-      this.ctx.storage.sql.exec(
-        "INSERT INTO artifacts (id,name,filename,media_type,content,bytes,created_at) VALUES (?,?,?,?,?,?,?)",
-        id, artifact.name, artifact.filename, artifact.mediaType, storedContent, storedBytes, now
-      );
-      return json({ stored: true, artifact: { id, name: artifact.name, filename: artifact.filename, media_type: artifact.mediaType, bytes: storedBytes, created_at: now } }, 201);
+      this.ctx.storage.sql.exec("INSERT INTO artifacts (id,name,filename,media_type,content,bytes,created_at,idempotency_key,sha256) VALUES (?,?,?,?,?,?,?,?,?)", id, artifact.name, artifact.filename, artifact.mediaType, storedContent, storedBytes, now, body.idempotency_key, digest);
+      return json({ stored: true, duplicate: false, artifact: { id, name: artifact.name, filename: artifact.filename, media_type: artifact.mediaType, bytes: storedBytes, created_at: now, sha256: digest } }, 201);
     }
 
     const artifactMatch = url.pathname.match(/^\/v1\/artifacts\/([0-9a-f-]{36})$/i);
     if (request.method === "GET" && artifactMatch) {
       const row = this.ctx.storage.sql.exec<ArtifactRow>("SELECT * FROM artifacts WHERE id=? LIMIT 1", artifactMatch[1]).toArray()[0];
-      return row ? json({ artifact: row }) : json({ error: "Artifact not found." }, 404);
+      if (!row) return json({ error: "Artifact not found." }, 404);
+      const digest = await sha256Hex(row.content);
+      if (row.sha256 && row.sha256 !== digest) return json({ error: "Stored artifact integrity check failed.", reason_code: "artifact_integrity_mismatch" }, 500);
+      if (!row.sha256) this.ctx.storage.sql.exec("UPDATE artifacts SET sha256=? WHERE id=?", digest, row.id);
+      return json({ artifact: { ...row, sha256: digest } });
     }
 
     if (request.method === "GET" && url.pathname === "/v1/owner/artifacts") {
       const limit = boundedLimit(url.searchParams.get("limit"), 20);
       const artifacts = this.ctx.storage.sql.exec<Omit<ArtifactRow, "content">>(
-        "SELECT id,name,filename,media_type,bytes,created_at FROM artifacts ORDER BY created_at DESC LIMIT ?", limit
+        "SELECT id,name,filename,media_type,bytes,created_at,sha256 FROM artifacts ORDER BY created_at DESC LIMIT ?", limit
       ).toArray();
       return json({ artifacts });
     }
@@ -355,7 +363,11 @@ export class MemoryStore extends DurableObject<Env> {
     const ownerArtifactMatch = url.pathname.match(/^\/v1\/owner\/artifacts\/([0-9a-f-]{36})$/i);
     if (request.method === "GET" && ownerArtifactMatch) {
       const artifact = this.ctx.storage.sql.exec<ArtifactRow>("SELECT * FROM artifacts WHERE id=? LIMIT 1", ownerArtifactMatch[1]).toArray()[0];
-      return artifact ? json({ artifact }) : json({ error: "Artifact not found." }, 404);
+      if (!artifact) return json({ error: "Artifact not found." }, 404);
+      const digest = await sha256Hex(artifact.content);
+      if (artifact.sha256 && artifact.sha256 !== digest) return json({ error: "Stored artifact integrity check failed.", reason_code: "artifact_integrity_mismatch" }, 500);
+      if (!artifact.sha256) this.ctx.storage.sql.exec("UPDATE artifacts SET sha256=? WHERE id=?", digest, artifact.id);
+      return json({ artifact: { ...artifact, sha256: digest } });
     }
 
     const ownerArtifactDeleteMatch = url.pathname.match(/^\/v1\/owner\/artifacts\/([0-9a-f-]{36})\/delete$/i);
