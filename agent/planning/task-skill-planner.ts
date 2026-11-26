@@ -63,7 +63,7 @@ const statusRank: Record<SkillStatus, number> = {
 };
 
 function normalizeTag(value: string): string {
-  return value.trim().toLowerCase().replace(/\\s+/g, "-");
+  return value.trim().toLowerCase().replace(/\s+/g, "-");
 }
 
 function bestEvidenceStatus(skill: string, evidence: SkillEvidence[]): SkillStatus {
