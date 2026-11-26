@@ -84,6 +84,12 @@ function resourceReviewGaps(resource: PlannerResource): string[] {
   if (!resource.version_or_revision || resource.version_or_revision.trim().toLowerCase() === "unknown") gaps.push("revision");
   if (!resource.license || resource.license.trim().toLowerCase() === "unknown") gaps.push("license");
   if (!resource.security_notes || !resource.security_notes.trim()) gaps.push("security_notes");
+  if (!resource.cost_notes || !resource.cost_notes.trim()) gaps.push("cost_notes");
+  if (!resource.freshness_policy || !resource.freshness_policy.trim()) gaps.push("freshness_policy");
+  if (!resource.retrieved_at || resource.retrieved_at.trim().toLowerCase() === "unknown") gaps.push("retrieved_at");
+  if (!Array.isArray(resource.dependencies)) gaps.push("dependencies");
+  if (!Array.isArray(resource.permissions)) gaps.push("permissions");
+  if (!Array.isArray(resource.network_or_execution_requirements)) gaps.push("network_or_execution_requirements");
   if (!resource.last_verified_at || resource.last_verified_at.trim().toLowerCase() === "unknown") gaps.push("last_verified_at");
   if (!resource.access_mode || resource.access_mode !== "public_read") gaps.push("access_mode");
   if (!resource.persistence || resource.persistence === "unknown") gaps.push("persistence");
