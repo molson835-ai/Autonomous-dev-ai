@@ -74,6 +74,19 @@ test("pauses when a claimed task has no completed substantive work", () => {
   assert.equal(result.status, "paused");
 });
 
+test("pauses when a substantive work call failed, even if another work call completed", () => {
+  const result = scenario({
+    calls: [
+      call("task_claim_next", { output: { task } }),
+      call("research_sources", { state: "failed" }),
+      call("research_revenue_opportunity"),
+    ],
+  });
+
+  assert.equal(result.status, "paused");
+  assert.equal(result.resumeAfterMinutes, undefined);
+});
+
 test("does not retry closeout when task_transition was already attempted, even if it failed", () => {
   const result = scenario({
     calls: [
@@ -114,6 +127,17 @@ test("does not recover ambiguous multiple claims or a missing task result", () =
   assert.equal(scenario({
     calls: [call("task_claim_next", { output: { task: null } })],
   }), null);
+});
+
+test("ignores calls from other turns when deciding whether closeout was omitted", () => {
+  const result = scenario({
+    calls: [
+      call("task_claim_next", { output: { task }, turnId: "old-turn" }),
+      call("research_revenue_opportunity"),
+    ],
+  });
+
+  assert.equal(result, null);
 });
 
 test("pauses at exhausted progress or stale-attempt budget", () => {
