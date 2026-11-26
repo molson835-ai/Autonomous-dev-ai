@@ -1,5 +1,5 @@
 import { exports } from "cloudflare:workers";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, test, vi } from "vitest";
 
 const token = "local-vitest-only-token";
 const endpoint = "https://memory-test.invalid";
@@ -83,7 +83,7 @@ describe("durable owner-visible artifacts", () => {
     expect((await list.json()).artifacts).toHaveLength(0);
   });
 
-  it("enforces the 25-artifact item cap", async () => {
+  it("enforces the 20-artifact item cap", async () => {
     for (let i = 0; i < 20; i++) {
       const response = await request("/v1/artifacts", { method: "POST", body: JSON.stringify({ name: "Report " + i, content: html }) });
       expect(response.status).toBe(201);
