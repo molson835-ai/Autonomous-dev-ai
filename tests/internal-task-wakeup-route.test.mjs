@@ -19,7 +19,7 @@ test("internal wake-up route authenticates, rechecks eligibility, and starts onl
   assert.match(route, /authorization:\s*"Bearer " \+ configuredToken/);
   assert.match(route, /authorization:\s*"Bearer " \+ oidcToken/);
   assert.match(route, /operationId:\s*value\.operation_id/);
-  assert.match(route, /typeof payload\.sessionId === "string"/);
+  assert.match(route, /typeof payload\.sessionId !== "string"/);
   assert.match(route, /Task claim and completion remain unconfirmed/);
   assert.doesNotMatch(route, /\/v1\/tasks\/[^\n]*\/transition/);
 });
