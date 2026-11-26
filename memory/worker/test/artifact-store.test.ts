@@ -5,7 +5,22 @@ const token = "local-vitest-only-token";
 const endpoint = "https://memory-test.invalid";
 const ownerToken = "local-vitest-only-owner-token";
 
-afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+afterEach(async () => {
+  try {
+    while (true) {
+      const listed = await request("/v1/owner/artifacts?limit=20", {}, ownerToken);
+      if (!listed.ok) break;
+      const { artifacts } = await listed.json();
+      if (!artifacts.length) break;
+      for (const artifact of artifacts) {
+        await request("/v1/owner/artifacts/" + artifact.id + "/delete", { method: "POST" }, ownerToken);
+      }
+    }
+  } finally {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  }
+});
 
 function request(path, init = {}, credential = token) {
   if (credential === ownerToken) {
@@ -63,7 +78,7 @@ describe("durable owner-visible artifacts", () => {
     const response = await request("/v1/artifacts", { method: "POST", body: JSON.stringify({ name: "Bad", content: "<script>alert(1)</script>" }) });
     expect(response.status).toBe(400);
     const list = await request("/v1/owner/artifacts", {}, ownerToken);
-    expect((await list.json()).artifacts).toHaveLength(1);
+    expect((await list.json()).artifacts).toHaveLength(0);
   });
 
   it("enforces the 25-artifact item cap", async () => {
