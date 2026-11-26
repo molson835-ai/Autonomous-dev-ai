@@ -17,7 +17,7 @@ interface Env {
 }
 
 type ArtifactRow = { id: string; name: string; filename: string; media_type: string; content: string; bytes: number; created_at: string; };
-const MAX_ARTIFACT_COUNT = 25;
+const MAX_ARTIFACT_COUNT = 20;
 const MAX_ARTIFACT_TOTAL_BYTES = 1_048_576;
 const MAX_ARTIFACT_REQUEST_BYTES = 96_000;
 
