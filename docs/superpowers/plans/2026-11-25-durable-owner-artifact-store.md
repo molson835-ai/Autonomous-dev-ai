@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - 64 KiB maximum original HTML per artifact.
-- 25 stored artifacts maximum and 1 MiB aggregate content maximum.
+- 20 stored artifacts maximum and 1 MiB aggregate content maximum.
 - Revalidate every write with the existing HTML artifact validator.
 - Keep the default 16 KiB Worker request-body limit for all non-artifact routes.
 - Agent writes require the existing canUseWriteTools gate.
@@ -59,7 +59,7 @@
 
 - [ ] Add artifacts table and indexes without changing existing tables.
 - [ ] Add a route-specific 96 KiB body limit for artifact creation.
-- [ ] Validate HTML at the Worker boundary, enforce 64 KiB/25-item/1 MiB caps, and persist CSP-injected HTML.
+- [ ] Validate HTML at the Worker boundary, enforce 64 KiB/20-item/1 MiB caps, and persist CSP-injected HTML.
 - [ ] Make create_artifact persist after validation and return the durable artifact ID.
 - [ ] Add read-only get_artifact with UUID input validation.
 - [ ] Add get_artifact to the source-defined tool inventory.
