@@ -870,6 +870,53 @@ describe("persistent memory Worker HTTP contract", () => {
       .toMatchObject({ status: "succeeded", attempt_count: 0, step_count: 2, checkpoint_summary: "First test stage complete", result_summary: "Read-only test complete", evidence_refs: ["ci://test/1"] });
   });
 
+
+  it("serializes concurrent claims so only one approved task can run", async () => {
+    const tasks = [];
+    for (const suffix of ["A", "B"]) {
+      const created = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
+        idempotency_key: `TASK-CONCURRENT-CLAIM-${suffix}-${crypto.randomUUID()}`,
+        task_type: "verification",
+        title: `Concurrent claim candidate ${suffix}`,
+        goal: "Verify only one task is claimed across overlapping requests",
+        approved_scope: "Isolated integration test only"
+      }) });
+      expect(created.status).toBe(201);
+      const { task } = await created.json<{ task: { id: string } }>();
+      tasks.push(task);
+      const approved = await request(`/v1/tasks/${task.id}/approve`, {
+        method: "POST", body: JSON.stringify({ scope_id: "testing" })
+      }, ownerToken);
+      expect(approved.status).toBe(200);
+    }
+
+    const claims = await Promise.all([
+      request("/v1/tasks/claim-next", { method: "POST" }),
+      request("/v1/tasks/claim-next", { method: "POST" })
+    ]);
+    const results = await Promise.all(claims.map(response => response.json<{ task: { id: string } | null }>()));
+    expect(results.filter(result => result.task !== null)).toHaveLength(1);
+
+    const records = await Promise.all(tasks.map(async task => {
+      const response = await request(`/v1/tasks/${task.id}`);
+      return (await response.json<{ task: { id: string; status: string; step_count: number } }>()).task;
+    }));
+    expect(records.filter(task => task.status === "running")).toHaveLength(1);
+    expect(records.filter(task => task.status === "queued")).toHaveLength(1);
+    expect(records.filter(task => task.step_count === 1)).toHaveLength(1);
+
+    const running = records.find(task => task.status === "running");
+    expect(running).toBeDefined();
+    await request(`/v1/tasks/${running!.id}/owner-control`, {
+      method: "POST", body: JSON.stringify({ action: "pause" })
+    }, ownerToken);
+    const queued = records.find(task => task.status === "queued");
+    expect(queued).toBeDefined();
+    await request(`/v1/tasks/${queued!.id}/owner-control`, {
+      method: "POST", body: JSON.stringify({ action: "pause" })
+    }, ownerToken);
+  });
+
 });
 
 
