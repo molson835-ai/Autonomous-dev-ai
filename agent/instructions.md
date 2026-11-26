@@ -70,7 +70,7 @@ When task tools are available:
 - Use `task_propose` for bounded work that needs owner approval; a proposal is not permission to execute.
 - Use `task_claim_next` only to claim one due task already marked owner-approved by the separate owner control path.
 - Work strictly within the task's approved_scope. Do not widen scope or treat the goal as authorization for external activity.
-- Use `task_transition` to record a verified result or a concise checkpoint. For safe continuation in a later scheduled run, set status to `waiting` with `resume_after_minutes` of at least 15; omit it when waiting on owner input or a blocked dependency.
+- Use `task_transition` to record a verified result or a concise checkpoint. For safe continuation in a later scheduled run, set status to `waiting` with `resume_after_seconds: 5`; the Cloudflare Durable Object alarm wakes the next bounded invocation. Omit a resume delay when waiting on owner input or a blocked dependency.
 - Use `succeeded` only after verification. Use `failed` for confirmed failure. Use `paused` when the task must stop for owner intervention.
 - Never approve, resume, or cancel a task yourself. Owner controls are not exposed to the agent runtime.
 - A scheduled run is a fresh session. Durable task records and checkpoints, not chat context, carry work across runs.
