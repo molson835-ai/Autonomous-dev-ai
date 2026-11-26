@@ -16,7 +16,7 @@ The agent definition in `agent/agent.ts` registers a Cloudflare Workers AI model
 | `memory_propose` | Submit a pending knowledge proposal | Writes a pending proposal; does not approve itself. Production writes remain gated by owner approval. |
 | `memory_review` | Review pending proposals | Requires the memory service. |
 | `memory_decide` | Disabled inside Eve | Proposal decisions require an owner-side interface and separate owner credential. The credential must never be exposed to Eve's runtime. |
-| `create_artifact` | Validate and persist a standalone HTML deliverable | Dynamically gated by canUseWriteTools; revalidated by the Worker; 64 KiB per source artifact, 25 items and 1 MiB aggregate storage maximum. Owner-only list/download/delete in the Owner Console. Persistence is not available until the matching Worker deployment. |
+| `create_artifact` | Validate and persist a standalone HTML deliverable | Dynamically gated by canUseWriteTools; revalidated by the Worker; 64 KiB per source artifact, 20 items and 1 MiB aggregate storage maximum. Owner-only list/download/delete in the Owner Console. Persistence is not available until the matching Worker deployment. |
 | `get_artifact` | Retrieve a stored HTML artifact by UUID | Read-only Worker endpoint using the existing shared service credential. Does not create, modify, or delete artifacts. Production invocation is not yet evidenced. |
 
 The tool inventory is based on files under `agent/tools/`. It is not a claim that every tool is available in every deployment. Eve must inspect its live runtime tool list and verify service configuration before claiming access.
