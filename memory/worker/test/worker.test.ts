@@ -1097,7 +1097,7 @@ describe("persistent quarantined resource catalog and owner review", () => {
     };
     expect((await request("/v1/resources", { method: "POST", body: JSON.stringify(candidate) })).status).toBe(201);
     const path = `/v1/owner/resources/${id}/decision`;
-    expect((await request(path, { method: "POST", body: JSON.stringify({ decision: "approve", review_evidence: ["Reviewed"] }) })).status).toBe(401);
+    expect((await request(path, { method: "POST", headers: { "cf-connecting-ip": "203.0.113.99" }, body: JSON.stringify({ decision: "approve", review_evidence: ["Reviewed"] }) })).status).toBe(401);
     expect((await request(path, { method: "POST", body: JSON.stringify({ decision: "approve" }) }, ownerToken)).status).toBe(400);
     const approved = await request(path, {
       method: "POST",
