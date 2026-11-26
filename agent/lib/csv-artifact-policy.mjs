@@ -65,7 +65,7 @@ export function validateCsvArtifact(input) {
     if (/^\s*[=@]/u.test(value) || (/^\s*[+-]/u.test(value) && !/^\s*[+-]?\d+(?:\.\d+)?\s*$/u.test(value))) return { valid: false, errors: ["CSV contains a spreadsheet formula-like cell. Prefix intentional text with an apostrophe before creating the artifact."] };
   }
   const safeName = input.name.trim().replace(/[^a-z0-9 _-]/gi, "").replace(/\s+/g, "-").slice(0, 48) || "eve-artifact";
-  const content = input.content.replace(/\r?\n/g, "\r\n");
+  const content = input.content.replace(/\r\n|\r|\n/g, "\r\n");
   return {
     valid: true,
     status: "artifact_validated_not_executed",
