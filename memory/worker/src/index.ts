@@ -290,6 +290,58 @@ export class MemoryStore extends DurableObject<Env> {
       return json({ id: candidate.id, trust_state: "quarantined", created: true }, 201);
     }
 
+    if (request.method === "POST" && url.pathname === "/v1/artifacts") {
+      const body = await readBody(request, MAX_ARTIFACT_REQUEST_BYTES);
+      if (!body || Object.keys(body).some(key => !["name", "content"].includes(key))) {
+        return json({ error: "Invalid artifact request." }, 400);
+      }
+      const validation = validateHtmlArtifact(body);
+      if (!validation.valid) return json({ error: "Artifact validation failed.", errors: validation.errors }, 400);
+      const artifact = validation.artifact;
+      const storedContent = artifact.previewHtml;
+      const storedBytes = new TextEncoder().encode(storedContent).byteLength;
+      const totals = this.ctx.storage.sql.exec<{ count: number; bytes: number }>(
+        "SELECT COUNT(*) AS count, COALESCE(SUM(bytes),0) AS bytes FROM artifacts"
+      ).one();
+      if (totals.count >= MAX_ARTIFACT_COUNT || totals.bytes + storedBytes > MAX_ARTIFACT_TOTAL_BYTES) {
+        return json({ error: "Artifact storage limit reached. Ask the owner to remove an existing artifact before saving another.", reason_code: "artifact_storage_limit_reached", max_artifacts: MAX_ARTIFACT_COUNT, max_total_bytes: MAX_ARTIFACT_TOTAL_BYTES }, 429);
+      }
+      const id = crypto.randomUUID();
+      this.ctx.storage.sql.exec(
+        "INSERT INTO artifacts (id,name,filename,media_type,content,bytes,created_at) VALUES (?,?,?,?,?,?,?)",
+        id, artifact.name, artifact.filename, artifact.mediaType, storedContent, storedBytes, now
+      );
+      return json({ stored: true, artifact: { id, name: artifact.name, filename: artifact.filename, media_type: artifact.mediaType, bytes: storedBytes, created_at: now } }, 201);
+    }
+
+    const artifactMatch = url.pathname.match(/^\/v1\/artifacts\/([0-9a-f-]{36})$/i);
+    if (request.method === "GET" && artifactMatch) {
+      const row = this.ctx.storage.sql.exec<ArtifactRow>("SELECT * FROM artifacts WHERE id=? LIMIT 1", artifactMatch[1]).toArray()[0];
+      return row ? json({ artifact: row }) : json({ error: "Artifact not found." }, 404);
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/owner/artifacts") {
+      const limit = boundedLimit(url.searchParams.get("limit"), 20);
+      const artifacts = this.ctx.storage.sql.exec<Omit<ArtifactRow, "content">>(
+        "SELECT id,name,filename,media_type,bytes,created_at FROM artifacts ORDER BY created_at DESC LIMIT ?", limit
+      ).toArray();
+      return json({ artifacts });
+    }
+
+    const ownerArtifactMatch = url.pathname.match(/^\/v1\/owner\/artifacts\/([0-9a-f-]{36})$/i);
+    if (request.method === "GET" && ownerArtifactMatch) {
+      const artifact = this.ctx.storage.sql.exec<ArtifactRow>("SELECT * FROM artifacts WHERE id=? LIMIT 1", ownerArtifactMatch[1]).toArray()[0];
+      return artifact ? json({ artifact }) : json({ error: "Artifact not found." }, 404);
+    }
+
+    const ownerArtifactDeleteMatch = url.pathname.match(/^\/v1\/owner\/artifacts\/([0-9a-f-]{36})\/delete$/i);
+    if (request.method === "POST" && ownerArtifactDeleteMatch) {
+      const deleted = this.ctx.storage.sql.exec<{ id: string }>(
+        "DELETE FROM artifacts WHERE id=? RETURNING id", ownerArtifactDeleteMatch[1]
+      ).toArray();
+      return deleted.length === 1 ? json({ id: ownerArtifactDeleteMatch[1], deleted: true }) : json({ error: "Artifact not found." }, 404);
+    }
+
     if (request.method === "POST" && ["/v1/tasks", "/v1/owner/tasks"].includes(url.pathname)) {
       const body = await readBody(request);
       const allowed = new Set(["idempotency_key", "task_type", "title", "goal", "approved_scope"]);
