@@ -395,26 +395,43 @@ export class MemoryStore extends DurableObject<Env> {
     }
     if (request.method === "POST" && url.pathname === "/v1/quota/settle") {
       const body = await readBody(request);
-      if (!body || Object.keys(body).some(k => !["reservation_id", "actual_neurons"].includes(k)) ||
+      const allowed = ["reservation_id", "actual_neurons", "input_tokens", "output_tokens", "accounting_source", "settlement_reason"];
+      const validToken = (value: unknown) => value === undefined || (Number.isSafeInteger(value) && Number(value) >= 0 && Number(value) <= 1_000_000_000);
+      const validReason = (value: unknown) => value === undefined || ["completed", "provider_error", "stream_interrupted", "cancelled", "completed_without_usage", "legacy_or_unknown"].includes(String(value));
+      if (!body || Object.keys(body).some(k => !allowed.includes(k)) ||
           typeof body.reservation_id !== "string" || !/^[0-9a-f-]{36}$/i.test(body.reservation_id) ||
-          (body.actual_neurons !== undefined && (typeof body.actual_neurons !== "number" || !Number.isFinite(body.actual_neurons) ||
-          body.actual_neurons < 0 || body.actual_neurons > 100000)))
+          (body.actual_neurons !== undefined && (typeof body.actual_neurons !== "number" || !Number.isFinite(body.actual_neurons) || body.actual_neurons < 0 || body.actual_neurons > 100000)) ||
+          !validToken(body.input_tokens) || !validToken(body.output_tokens) ||
+          (body.accounting_source !== undefined && !["provider_usage", "fallback"].includes(String(body.accounting_source))) ||
+          !validReason(body.settlement_reason) ||
+          (body.accounting_source === "provider_usage" && (!Number.isSafeInteger(body.input_tokens) || !Number.isSafeInteger(body.output_tokens))))
         return json({ error: "Invalid quota settlement." }, 400);
       const row = this.ctx.storage.sql.exec<{id:string;day:string;reserved_neurons:number}>(
         "SELECT * FROM quota_reservations WHERE id=? LIMIT 1", body.reservation_id
       ).toArray()[0];
       if (!row) return json({ error: "Reservation not found or already settled." }, 404);
-      // Provider-reported token usage is converted using the published model rates
-      // plus a 50% margin in the trusted server-side middleware. Missing usage
-      // settles to a conservative 200-neuron fallback.
       const charged = body.actual_neurons === undefined ? row.reserved_neurons : body.actual_neurons;
+      const accountingSource = body.accounting_source === "provider_usage" ? "provider_usage" : "fallback";
+      const settlementReason = String(body.settlement_reason ?? (accountingSource === "provider_usage" ? "completed" : "legacy_or_unknown"));
+      const inserted = this.ctx.storage.sql.exec<{reservation_id:string}>(
+        "INSERT OR IGNORE INTO quota_call_ledger (reservation_id,day,settled_at,model_id,input_tokens,output_tokens,estimated_neurons,accounting_source,settlement_reason) VALUES (?,?,?,?,?,?,?,?,?) RETURNING reservation_id",
+        row.id, row.day, now, "@cf/zai-org/glm-4.7-flash",
+        accountingSource === "provider_usage" ? Number(body.input_tokens) : null,
+        accountingSource === "provider_usage" ? Number(body.output_tokens) : null,
+        charged, accountingSource, settlementReason
+      ).toArray();
+      if (inserted.length !== 1) return json({ error: "Quota call already has an audit record; reservation retained." }, 409);
       const updated = this.ctx.storage.sql.exec<{day:string}>(
         "UPDATE quota_daily SET local_estimated_neurons=local_estimated_neurons+?,updated_at=? WHERE day=? RETURNING day",
         charged, now, row.day
       ).toArray();
-      if (updated.length !== 1) return json({ error: "Quota ledger unavailable; reservation retained." }, 503);
+      if (updated.length !== 1) {
+        this.ctx.storage.sql.exec("DELETE FROM quota_call_ledger WHERE reservation_id=?", row.id);
+        return json({ error: "Quota ledger unavailable; reservation retained." }, 503);
+      }
       this.ctx.storage.sql.exec("DELETE FROM quota_reservations WHERE id=?", row.id);
-      return json({ settled: true, charged_neurons: charged });
+      this.ctx.storage.sql.exec("DELETE FROM quota_call_ledger WHERE settled_at < ?", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+      return json({ settled: true, charged_neurons: charged, accounting_source: accountingSource, settlement_reason: settlementReason });
     }
     if (request.method === "POST" && url.pathname === "/v1/quota/circuit") {
       const body = await readBody(request);
