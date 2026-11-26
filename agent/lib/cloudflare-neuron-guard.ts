@@ -40,21 +40,10 @@ function logInputProfile(
     provider_output_tokens: usage?.outputTokens?.total ?? null,
   });
 }
-async function settle(
-  id: string,
-  usage?: { inputTokens?: { total?: number }; outputTokens?: { total?: number } },
-  settlementReason: "completed" | "provider_error" | "stream_interrupted" | "cancelled" = "completed",
-) {
-  const inputTokens = usage?.inputTokens?.total;
-  const outputTokens = usage?.outputTokens?.total;
-  const hasProviderUsage = Number.isSafeInteger(inputTokens) && Number.isSafeInteger(outputTokens) &&
-    Number(inputTokens) >= 0 && Number(outputTokens) >= 0;
+async function settle(id: string, usage?: { inputTokens?: { total?: number }; outputTokens?: { total?: number } }) {
   await memoryRequest("/v1/quota/settle", { method: "POST", body: {
     reservation_id: id,
-    actual_neurons: estimateGlm47FlashNeurons(inputTokens, outputTokens),
-    ...(hasProviderUsage ? { input_tokens: inputTokens, output_tokens: outputTokens } : {}),
-    accounting_source: hasProviderUsage ? "provider_usage" : "fallback",
-    settlement_reason: hasProviderUsage ? settlementReason : (settlementReason === "completed" ? "completed_without_usage" : settlementReason),
+    actual_neurons: estimateGlm47FlashNeurons(usage?.inputTokens?.total, usage?.outputTokens?.total),
   }});
 }
 async function circuit(id: string) {
@@ -77,7 +66,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
       const id = await reserve();
       let result;
       try { result = await doGenerate(); }
-      catch (error) { logInputProfile(params); if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id, undefined, "provider_error"); throw error; }
+      catch (error) { logInputProfile(params); if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id); throw error; }
       logInputProfile(params, result.usage);
       await settle(id, result.usage);
       return result;
@@ -86,7 +75,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
       const id = await reserve();
       let result;
       try { result = await doStream(); }
-      catch (error) { logInputProfile(params); if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id, undefined, "provider_error"); throw error; }
+      catch (error) { logInputProfile(params); if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id); throw error; }
       let settled = false;
       let profiled = false;
       const profileOnce = (usage?: { inputTokens?: { total?: number }; outputTokens?: { total?: number } }) => {
@@ -101,7 +90,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
             const next = await reader.read();
             if (next.done) {
               profileOnce();
-              if (!settled) { settled = true; await settle(id, undefined, "stream_interrupted"); }
+              if (!settled) { settled = true; await settle(id); }
               reader.releaseLock();
               controller.close();
               return;
@@ -120,7 +109,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
                 await handleStreamReadFailure({
                   error,
                   reservationId: id,
-                  settle: async (reservationId) => settle(reservationId, undefined, "stream_interrupted"),
+                  settle: async (reservationId) => settle(reservationId),
                   circuit: async (reservationId) => circuit(reservationId),
                   isQuotaError,
                   nonRetryableQuotaError,
@@ -137,7 +126,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
           try { await reader.cancel(reason); }
           finally {
             profileOnce();
-            if (!settled) { settled = true; await settle(id, undefined, "cancelled"); }
+            if (!settled) { settled = true; await settle(id); }
             try { reader.releaseLock(); } catch { /* Reader may already be released. */ }
           }
         },
