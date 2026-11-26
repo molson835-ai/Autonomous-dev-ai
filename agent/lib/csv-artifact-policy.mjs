@@ -62,7 +62,7 @@ export function validateCsvArtifact(input) {
   const headers = rows[0].map(value => value.trim().toLocaleLowerCase("en-US"));
   if (headers.some(value => !value) || new Set(headers).size !== headers.length) return { valid: false, errors: ["CSV headers must be non-empty and unique."] };
   for (const item of rows) for (const value of item) {
-    if (/^\s*[=+@-]/u.test(value)) return { valid: false, errors: ["CSV contains a spreadsheet formula-like cell. Prefix intentional text with an apostrophe before creating the artifact."] };
+    if (/^\s*[=@]/u.test(value) || (/^\s*[+-]/u.test(value) && !/^\s*[+-]?\d+(?:\.\d+)?\s*$/u.test(value))) return { valid: false, errors: ["CSV contains a spreadsheet formula-like cell. Prefix intentional text with an apostrophe before creating the artifact."] };
   }
   const safeName = input.name.trim().replace(/[^a-z0-9 _-]/gi, "").replace(/\s+/g, "-").slice(0, 48) || "eve-artifact";
   const content = input.content.replace(/\r?\n/g, "\r\n");
