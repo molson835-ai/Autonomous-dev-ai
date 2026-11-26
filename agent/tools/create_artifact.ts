@@ -5,7 +5,7 @@ import { memoryRequest } from "../lib/memory-client";
 import { canUseWriteTools } from "../lib/tool-access";
 
 const tool = defineTool({
-  description: "Create and persist one bounded standalone HTML artifact. Supply a complete responsive HTML5 document. The tool validates the file, stores it in the authenticated Durable Object artifact library, and returns a stable artifact ID plus the sandbox-preview HTML. The verified owner can list, download, or delete stored artifacts in the Owner Console. It does not write to a server filesystem, execute code, access the network except the authenticated memory Worker, install packages, commit, or deploy. Only one HTML file up to 64 KiB is accepted per call; external assets and scripts are prohibited.",
+  description: "Create and persist one bounded standalone HTML artifact. Supply a complete responsive HTML5 document. The tool validates the file, stores it in the authenticated Durable Object artifact library, and returns a stable artifact ID plus the sandbox-preview HTML. The verified owner can list, download, or delete stored artifacts in the Owner Console. Do not include credentials, secrets, private personal data, or sensitive financial/medical information. It does not write to a server filesystem, execute code, access the network except the authenticated memory Worker, install packages, commit, or deploy. Only one HTML file up to 64 KiB is accepted per call; external assets and scripts are prohibited.",
   inputSchema: z.object({ name: z.string().trim().min(1).max(80), content: z.string().min(1).max(65536) }).strict(),
   async execute(input) {
     const validated = validateHtmlArtifact(input);
