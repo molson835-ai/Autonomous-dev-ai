@@ -25,7 +25,7 @@ Allow Eve to preserve reusable HTML research reports and product deliverables be
 
 ## Approach
 
-Extend the existing MemoryStore SQLite schema with an additive artifacts table. The existing create_artifact tool validates the HTML and then submits the same name/content to the authenticated Worker; the Worker validates again before persistence. Add a read-only get_artifact tool. Extend the existing GitHub-owner-authenticated Owner Console proxy and UI with list, download, and explicit confirmed deletion.
+Extend the existing MemoryStore SQLite schema with an additive artifacts table. The existing create_artifact tool validates the HTML and submits name, content, and a stable UUID idempotency key to the authenticated Worker; the Worker validates again before persistence. The Worker hashes the stored CSP-injected content and verifies that hash on every detail read. Add a read-only get_artifact tool. Extend the existing GitHub-owner-authenticated Owner Console proxy and UI with list, download, and explicit confirmed deletion.
 
 ## Security and limits
 
@@ -39,4 +39,4 @@ Extend the existing MemoryStore SQLite schema with an additive artifacts table. 
 
 ## Verification
 
-Worker integration tests cover valid persistence, revalidation, owner-only list/detail/delete, agent retrieval, invalid HTML, body limits, row/aggregate caps, and duplicate/nonexistent IDs. Type-check and CI validate the Owner Console integration. Tests do not authorize Production deployment or Eve task execution.
+Worker integration tests cover valid persistence, revalidation, identical idempotent retries, conflicting idempotency-key reuse, SHA-256 read-back, owner-only list/detail/delete, agent retrieval, invalid HTML, body limits, row/aggregate caps, and duplicate/nonexistent IDs. Type-check and CI validate the Owner Console integration. Tests do not authorize Production deployment or Eve task execution.
