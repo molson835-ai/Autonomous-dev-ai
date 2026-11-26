@@ -19,7 +19,7 @@ test("latest user message excludes prior read-only instructions", () => {
 });
 
 test("source inventory is explicit and contains unique tool names", () => {
-  assert.equal(SOURCE_DEFINED_TOOL_NAMES.length, 26);
+  assert.equal(SOURCE_DEFINED_TOOL_NAMES.length, 27);
   assert.equal(new Set(SOURCE_DEFINED_TOOL_NAMES).size, SOURCE_DEFINED_TOOL_NAMES.length);
   assert.ok(SOURCE_DEFINED_TOOL_NAMES.includes("runtime_diagnostics"));
   assert.ok(SOURCE_DEFINED_TOOL_NAMES.includes("get_artifact"));
