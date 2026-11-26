@@ -17,11 +17,22 @@ const resource = z.object({
   id: z.string().min(1).max(160),
   name: z.string().min(1).max(240),
   summary: z.string().min(1).max(2000),
+  resource_type: z.string().min(1).max(80).optional(),
   skill_tags: z.array(z.string().min(1).max(100)).max(50),
   source_url: z.string().url().max(2000),
+  maintainer: z.string().max(300).optional(),
   license: z.string().min(1).max(300),
+  version_or_revision: z.string().max(300).optional(),
   cost_model: z.enum(["free_open_source", "free_tier_limited", "paid", "unknown"]),
   trust_state: z.enum(["discovered", "quarantined", "reviewed", "approved", "rejected", "stale"]),
+  cost_notes: z.string().max(2000).optional(),
+  dependencies: z.array(z.string().max(300)).max(100).optional(),
+  permissions: z.array(z.string().max(300)).max(100).optional(),
+  network_or_execution_requirements: z.array(z.string().max(300)).max(100).optional(),
+  security_notes: z.string().max(4000).optional(),
+  freshness_policy: z.string().max(1000).optional(),
+  retrieved_at: z.string().max(80).optional(),
+  last_verified_at: z.string().max(80).optional(),
   access_mode: z.enum(["public_read", "authenticated_read", "local_only", "owner_action_required"]).optional(),
   persistence: z.enum(["durable", "ephemeral", "unknown"]).optional(),
   execution: z.enum(["none", "browser_local", "server_runtime", "interactive_remote", "unknown"]).optional(),
@@ -39,7 +50,7 @@ const resource = z.object({
 });
 
 export default defineTool({
-  description: "Create a bounded task-to-skill plan from supplied requirements, skill evidence, and resource catalog metadata. Match exact normalized skill tags, identify evidence gaps, and list objective acceptance criteria. This is planning only: it does not search, verify sources, run tests, install resources, change skill status, or approve memories. Agent self-reports do not count as practice or demonstration.",
+  description: "Create a bounded task-to-skill plan from supplied requirements, skill evidence, and full resource metadata. Match normalized skill tags, identify evidence gaps, and return resource provenance, revision, license, cost, permissions, security, quota, and lifecycle gaps. This is planning only: it does not verify sources, run tests, install resources, change skill status, or approve memories. Agent self-reports do not count as practice or demonstration, and resources are never execution-ready from this tool.",
   inputSchema: z.object({
     task: z.string().trim().min(1).max(2000),
     requirements: z.array(requirement).min(1).max(30),
