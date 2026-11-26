@@ -1,8 +1,8 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { runRevenueResearchPipeline } from "../research/revenue-research-pipeline";
-import type { GdeltSearchResult } from "../research/gdelt";
-import { fetchPublicResearchPages } from "../research/sources";
+import { runRevenueResearchPipeline } from "../research/revenue-research-pipeline.ts";
+import type { GdeltSearchResult } from "../research/gdelt.ts";
+import { fetchPublicResearchPages } from "../research/sources.ts";
 
 export interface ResearchOpportunityEvidenceDependencies {
   search?: (query: string, options: { timespan: "1day" | "1week" | "1month"; maxRecords: number }) => Promise<GdeltSearchResult>;
