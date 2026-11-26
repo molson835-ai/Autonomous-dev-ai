@@ -1,4 +1,4 @@
-import { env, runDurableObjectAlarm } from "cloudflare:test";
+import { env, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { exports } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -86,6 +86,15 @@ describe("Durable Object task wake-up alarm", () => {
     const stub = env.MEMORY.get(env.MEMORY.idFromName("single-owner-memory"));
     const fired = await runDurableObjectAlarm(stub);
     expect(fired).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Simulate Cloudflare retrying an alarm after an ambiguous network failure.
+    // The durable attempt ledger must prevent a second Eve session dispatch.
+    await runInDurableObject(stub, async (_instance, state) => {
+      await state.storage.setAlarm(Date.now() + 1000);
+    });
+    const retried = await runDurableObjectAlarm(stub);
+    expect(retried).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     const stillWaiting = await request(`/v1/tasks/${task.id}`);
