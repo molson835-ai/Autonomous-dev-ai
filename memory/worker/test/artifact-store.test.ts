@@ -68,7 +68,9 @@ describe("durable owner-visible artifacts", () => {
     expect(denied.status).toBe(401);
     const list = await request("/v1/owner/artifacts", {}, ownerToken);
     expect(list.status).toBe(200);
-    expect(await list.json()).toMatchObject({ artifacts: [expect.objectContaining({ id: artifact.id, name: "Research report" })] });
+    const listed = await list.json();
+    expect(listed.artifacts).toContainEqual(expect.objectContaining({ id: artifact.id, name: "Research report" }));
+    expect(listed.artifacts[0]).not.toHaveProperty("content");
     const detail = await request("/v1/owner/artifacts/" + artifact.id, {}, ownerToken);
     expect(detail.status).toBe(200);
     expect(await detail.json()).toMatchObject({ artifact: { id: artifact.id, content: expect.stringContaining("Reusable report") } });
@@ -100,4 +102,27 @@ describe("durable owner-visible artifacts", () => {
     const missing = await request("/v1/owner/artifacts/" + artifact.id, {}, ownerToken);
     expect(missing.status).toBe(404);
   });
+});
+
+test("rejects an oversized request body while preserving the storage limit", async () => {
+  const oversized = html.replace("</main>", "<p>" + "x".repeat(100_000) + "</p></main>");
+  const response = await request("/v1/artifacts", { method: "POST", body: JSON.stringify({ name: "Too large", content: oversized }) });
+  expect(response.status).toBe(400);
+  const list = await request("/v1/owner/artifacts", {}, ownerToken);
+  expect((await list.json()).artifacts).toHaveLength(0);
+});
+
+test("enforces the one-megabyte aggregate content cap", async () => {
+  const largeHtml = html.replace("</main>", "<p>" + "x".repeat(60_000) + "</p></main>");
+  let stored = 0;
+  for (let i = 0; i < 25; i++) {
+    const response = await request("/v1/artifacts", { method: "POST", body: JSON.stringify({ name: "Large " + i, content: largeHtml }) });
+    if (response.status === 429) break;
+    expect(response.status).toBe(201);
+    stored++;
+  }
+  expect(stored).toBeGreaterThan(0);
+  expect(stored).toBeLessThan(25);
+  const blocked = await request("/v1/artifacts", { method: "POST", body: JSON.stringify({ name: "Aggregate overflow", content: largeHtml }) });
+  expect(blocked.status).toBe(429);
 });
