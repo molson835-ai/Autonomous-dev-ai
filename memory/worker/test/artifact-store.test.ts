@@ -22,7 +22,7 @@ afterEach(async () => {
   }
 });
 
-function request(path, init = {}, credential = token) {
+function request(path: string, init: RequestInit = {}, credential = token) {
   if (credential === ownerToken) {
     vi.stubGlobal("fetch", vi.fn(async (input) => {
       if (String(input).includes("/applications/local-owner-oauth-app/token")) return Response.json({ app: { client_id: "local-owner-oauth-app" } });
