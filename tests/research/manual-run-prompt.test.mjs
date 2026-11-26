@@ -28,6 +28,15 @@ test("manual owner run preserves task approval, scope, and bounded closeout requ
 test("manual owner run cannot treat one completed step as completion of the full approved task", () => {
   assert.match(prompt, /every material objective in both the task goal and approved_scope is demonstrably complete/);
   assert.match(prompt, /completing one bounded step, finding a lead, or merely attaching evidence does not establish completion/);
-  assert.match(prompt, /use waiting with a concise checkpoint/);
+  assert.match(prompt, /use waiting with resume_after_minutes: 1320/);
+  assert.match(prompt, /Use waiting without a resume time only when blocked on owner input or an external dependency/);
+  assert.match(prompt, /Never ask the owner to re-approve a task that is already individually owner-approved/);
   assert.match(prompt, /Evidence references must identify concrete supporting records/);
+});
+
+test("manual owner run preserves token and neuron efficiency safeguards", () => {
+  assert.match(prompt, /reuse recent verified evidence/);
+  assert.match(prompt, /avoid repeating diagnostics\/searches/);
+  assert.match(prompt, /do not make unchanged retries/);
+  assert.match(prompt, /Respect provider quota and local neuron guards/);
 });
