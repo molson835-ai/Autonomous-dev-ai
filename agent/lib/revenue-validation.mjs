@@ -87,9 +87,11 @@ export function assessRevenueExperiment({ evidence, acceptanceCriteria = [] } = 
       ? "verified_payment_recorded"
       : count("completed_user_test") > 0
         ? "user_test_completed"
-        : count("direct_buyer_problem_confirmation") > 0
-          ? "buyer_problem_confirmed"
-          : count("public_problem_signal") > 0
+        : count("stated_willingness_to_pay") > 0
+          ? "willingness_to_pay_stated"
+          : count("direct_buyer_problem_confirmation") > 0
+            ? "buyer_problem_confirmed"
+            : count("public_problem_signal") > 0
             ? "problem_signals_only"
             : "unvalidated";
 
