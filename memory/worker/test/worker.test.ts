@@ -188,7 +188,7 @@ describe("shared daily neuron quota coordinator", () => {
       quota: {
         target_neurons: 7000,
         requested_reservation_neurons: 200,
-        projected_neurons: 7000,
+        projected_neurons: 7200,
         remaining_to_target: 0,
       },
     });
