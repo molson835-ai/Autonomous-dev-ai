@@ -701,6 +701,12 @@ describe("persistent memory Worker HTTP contract", () => {
     const reclaimed = await request("/v1/tasks/claim-next", { method: "POST" });
     expect((await reclaimed.json<{ task: { status: string; attempt_count: number; step_count: number } }>()).task)
       .toMatchObject({ status: "running", attempt_count: 0, step_count: 2 });
+    const missingEvidence = await request(`/v1/tasks/${task.id}/transition`, {
+      method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Approval test completed" })
+    });
+    expect(missingEvidence.status).toBe(409);
+    const stillRunning = await request(`/v1/tasks/${task.id}`);
+    expect((await stillRunning.json<{ task: { status: string } }>()).task.status).toBe("running");
     const finish = await request(`/v1/tasks/${task.id}/transition`, {
       method: "POST", body: JSON.stringify({ status: "succeeded", result_summary: "Approval test completed", evidence_refs: ["test://approval-closeout"] })
     });
