@@ -14,8 +14,6 @@ Preserve validated research reports and HTML product deliverables beyond a singl
 - Limits: 64 KiB original HTML per artifact, 20 stored artifacts, and 1 MiB aggregate stored content. Oversized request bodies are rejected while streaming.
 - Every create request includes a UUID idempotency key. Retrying the same key with identical name/content returns the original artifact; reusing the key with different content returns HTTP 409.
 - The exact CSP-injected HTML is SHA-256 hashed. Agent and owner detail reads recompute and verify the hash before returning content; a mismatch fails closed. Legacy rows without a hash are hashed on first successful read.
-- Every create request includes a UUID idempotency key. Retrying the same key with identical name/content returns the original artifact; reusing the key with different content returns HTTP 409.
-- Store a SHA-256 hash of the exact CSP-injected HTML. Agent and owner detail reads recompute and verify the hash before returning content; a mismatch fails closed. Legacy rows without a hash are hashed on first successful read.
 - No public artifact links, filesystem access, arbitrary uploads, binary files, or code execution by the Worker.
 
 ## Owner experience
