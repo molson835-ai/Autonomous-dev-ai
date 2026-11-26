@@ -31,7 +31,7 @@ Extend the existing MemoryStore SQLite schema with an additive artifacts table. 
 - Owner list/detail/delete routes remain protected by GitHub owner verification and same-origin proxy checks.
 - Content is validated as a standalone HTML artifact and receives the existing preview CSP.
 - UUID identifiers only; all SQL is parameterized.
-- 64 KiB original HTML per artifact; 25 rows maximum; 1 MiB aggregate stored content maximum.
+- 64 KiB original HTML per artifact; 20 rows maximum; 1 MiB aggregate stored content maximum.
 - Request body cap is raised only for the artifact-create route; default 16 KiB limit remains unchanged elsewhere.
 - No public CORS route, external storage provider, new secret, paid service, or model call.
 
