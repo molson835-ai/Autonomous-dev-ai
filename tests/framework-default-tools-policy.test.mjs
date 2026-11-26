@@ -14,7 +14,7 @@ test("root Eve agent disables the framework root-copy delegation tool", () => {
 
 test("application-authored tools remain present when framework defaults are disabled", () => {
   for (const path of [
-    "../agent/tools/research_revenue_opportunity.ts",
+    "../agent/tools/research_opportunity_evidence.ts",\n    "../agent/tools/research_revenue_opportunity.ts",
     "../agent/tools/research_sources.ts",
     "../agent/tools/search_news.ts",
     "../agent/tools/task_claim_next.ts",
