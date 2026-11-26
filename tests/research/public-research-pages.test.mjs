@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fetchPublicResearchPages, PUBLIC_RESEARCH_HOSTS } from "../../agent/research/sources.ts";
+import { fetchPublicResearchPages, fetchResearchSources, PUBLIC_RESEARCH_HOSTS } from "../../agent/research/sources.ts";
 
 function html(title = "Small business inventory guidance", body = "Businesses should reconcile physical inventory records and investigate receiving differences.") {
   return "<!doctype html><html><head><title>" + title + "</title></head><body><main><h1>" + title + "</h1><p>" + body + "</p></main></body></html>";
@@ -115,4 +115,25 @@ test("publishes an explicit fixed allowlist", () => {
   assert.ok(PUBLIC_RESEARCH_HOSTS.includes("www.sba.gov"));
   assert.ok(PUBLIC_RESEARCH_HOSTS.includes("www.bls.gov"));
   assert.ok(!PUBLIC_RESEARCH_HOSTS.includes("attacker.example"));
+});
+
+test("keeps the technical-documentation allowlist separate", async () => {
+  let calls = 0;
+  const output = await fetchResearchSources(
+    ["https://www.sba.gov/business-guide"],
+    "technical documentation",
+    async () => { calls++; return response(html()); },
+  );
+  assert.equal(calls, 0);
+  assert.match(output[0].error, /allowlist/);
+});
+
+test("returns a bounded diagnostic for malformed URLs", async () => {
+  const output = await fetchPublicResearchPages(
+    ["not a URL"],
+    "business research",
+    async () => { throw new Error("must not fetch"); },
+  );
+  assert.equal(output[0].status, 0);
+  assert.match(output[0].error, /Invalid source URL/);
 });
