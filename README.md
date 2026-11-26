@@ -110,7 +110,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Standalone artifact creation
 
-Eve supports one standalone HTML artifact per `create_artifact` call. The web chat displays a sandboxed preview with mobile/desktop sizing and a browser-side download. Artifacts are returned to the browser and are not persisted on the server. The validator enforces a 64 KiB limit, complete HTML structure, a responsive viewport, no external scripts/assets, and a restrictive preview Content Security Policy. This is not a general filesystem, shell, image-generation, repository-write, or deployment capability. See `docs/artifact-creation.md`.
+Eve supports one standalone HTML artifact per `create_artifact` call. The tool displays a sandboxed preview and persists validated artifacts in the existing authenticated Durable Object store for agent read-back and owner-only download from the Owner Console. Creation requires a stable UUID idempotency key so identical retries do not create duplicate rows; stored CSP-injected HTML is SHA-256 hashed and verified on detail reads. Limits are 64 KiB original HTML per artifact, 20 stored artifacts, and 1 MiB aggregate content. External scripts/assets are prohibited. This is not a general filesystem, shell, image-generation, repository-write, or deployment capability. See `docs/artifact-creation.md` and `docs/phase-4h-durable-artifact-storage.md`.
 
 
 ## Keyless resource discovery
