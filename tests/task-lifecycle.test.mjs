@@ -166,3 +166,35 @@ test("agent-supplied metadata can never grant standing mission authorization", (
     approved_scope: "No external actions.",
   }, { now, missionAuthorized: true }), /Invalid mission-authorized task scope/);
 });
+
+test("the final stale-lease recovery exhausts retries, records failure time, and cannot be reclaimed", () => {
+  let task = transitionTask(queued({ id: "stale-final", idempotency_key: "stale-final" }), "running", { now });
+  task = transitionTask(task, "waiting", {
+    now: "2026-11-13T00:31:00.000Z",
+    countAttempt: true,
+    nextRunAt: "2026-11-13T00:31:00.000Z",
+    checkpointSummary: "Recovered after stale run 1"
+  });
+  task = transitionTask(task, "running", { now: "2026-11-13T00:31:00.000Z" });
+  task = transitionTask(task, "waiting", {
+    now: "2026-11-13T01:02:00.000Z",
+    countAttempt: true,
+    nextRunAt: "2026-11-13T01:02:00.000Z",
+    checkpointSummary: "Recovered after stale run 2"
+  });
+  task = transitionTask(task, "running", { now: "2026-11-13T01:02:00.000Z" });
+  const failedAt = "2026-11-13T01:33:00.000Z";
+  const failed = transitionTask(task, "failed", {
+    now: failedAt,
+    countAttempt: true,
+    resultSummary: "Execution lease expired on the final allowed attempt; no further retry."
+  });
+
+  assert.equal(failed.status, "failed");
+  assert.equal(failed.attempt_count, failed.max_attempts);
+  assert.equal(failed.max_attempts, 3);
+  assert.equal(failed.finished_at, failedAt);
+  assert.equal(failed.next_run_at, null);
+  assert.equal(selectNextTask([failed], { now: Date.parse(failedAt) + 60 * 60 * 1000 }), null);
+  assert.throws(() => transitionTask(failed, "running", { now: failedAt }), /invalid_task_transition/);
+});
