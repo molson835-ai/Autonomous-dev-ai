@@ -17,7 +17,7 @@ test("scheduled work claims exactly one individually owner-approved task and che
   assert.match(workLoop, /Mission-authorized tasks, standing mandates/);
   assert.match(workLoop, /fresh session/);
   assert.match(workLoop, /checkpoint with waiting/);
-  assert.match(workLoop, /resume_after_minutes >= 1320/);
+  assert.match(workLoop, /resume_after_seconds: 5/);
   assert.match(workLoop, /Process one task only/);
   assert.match(workLoop, /task_heartbeat at least every 10 minutes/);
 });
