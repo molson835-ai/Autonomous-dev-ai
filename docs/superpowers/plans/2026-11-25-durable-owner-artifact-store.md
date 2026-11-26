@@ -33,7 +33,7 @@
 ### Task 1: Add Worker integration tests
 
 **Files:**
-- Modify: memory/worker/test/worker.test.ts
+- Modify: memory/worker/test/artifact-store.test.ts
 
 **Interfaces:**
 - Produces the API contract for POST /v1/artifacts, GET /v1/artifacts/:uuid, GET /v1/owner/artifacts, GET /v1/owner/artifacts/:uuid, and POST /v1/owner/artifacts/:uuid/delete.
@@ -48,7 +48,7 @@
 - Modify: agent/tools/create_artifact.ts
 - Create: agent/tools/get_artifact.ts
 - Modify: agent/lib/runtime-diagnostics.mjs
-- Test: memory/worker/test/worker.test.ts
+- Test: memory/worker/test/artifact-store.test.ts
 
 **Interfaces:**
 - POST /v1/artifacts accepts {name, content}; returns artifact metadata and UUID.
