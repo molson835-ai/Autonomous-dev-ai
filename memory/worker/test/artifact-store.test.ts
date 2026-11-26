@@ -127,7 +127,7 @@ describe("durable owner-visible artifacts", () => {
 
 
   it("persists validated CSV and returns stable metadata with owner download", async () => {
-    const content = "sku,expected,actual,variance\\nA-1,10,8,-2\\nA-2,4,4,0";
+    const content = "sku,expected,actual,variance\nA-1,10,8,-2\nA-2,4,4,0";
     const payload = { name: "Cycle Count", content, idempotency_key: crypto.randomUUID() };
     const created = await request("/v1/artifacts/csv", { method: "POST", body: JSON.stringify(payload) });
     expect(created.status).toBe(201);
@@ -144,24 +144,26 @@ describe("durable owner-visible artifacts", () => {
 
   it("returns the original CSV for an identical retry and rejects conflicting reuse", async () => {
     const idempotency_key = crypto.randomUUID();
-    const payload = { name: "Retry CSV", content: "sku,count\\nA-1,2", idempotency_key };
+    const payload = { name: "Retry CSV", content: "sku,count\nA-1,2", idempotency_key };
     const first = await request("/v1/artifacts/csv", { method: "POST", body: JSON.stringify(payload) });
     const firstBody = await first.json();
     const retry = await request("/v1/artifacts/csv", { method: "POST", body: JSON.stringify(payload) });
     expect(retry.status).toBe(200);
     expect((await retry.json()).artifact.id).toBe(firstBody.artifact.id);
-    const conflict = await request("/v1/artifacts/csv", { method: "POST", body: JSON.stringify({ ...payload, content: "sku,count\\nA-1,3" }) });
+    const conflict = await request("/v1/artifacts/csv", { method: "POST", body: JSON.stringify({ ...payload, content: "sku,count\nA-1,3" }) });
     expect(conflict.status).toBe(409);
   });
 
   it("rejects unsafe CSV and enforces combined HTML and CSV storage caps", async () => {
-    const unsafe = await request("/v1/artifacts/csv", { method: "POST", body: JSON.stringify({ name: "Unsafe", content: "sku,note\\nA,=1+1", idempotency_key: crypto.randomUUID() }) });
+    const htmlSeed = await request("/v1/artifacts", { method: "POST", body: JSON.stringify({ name: "HTML seed", content: html, idempotency_key: crypto.randomUUID() }) });
+    expect(htmlSeed.status).toBe(201);
+    const unsafe = await request("/v1/artifacts/csv", { method: "POST", body: JSON.stringify({ name: "Unsafe", content: "sku,note\nA,=1+1", idempotency_key: crypto.randomUUID() }) });
     expect(unsafe.status).toBe(400);
     for (let i = 0; i < 19; i++) {
-      const response = await request("/v1/artifacts/csv", { method: "POST", body: JSON.stringify({ name: "CSV " + i, content: "sku,count\\nA-1,2", idempotency_key: crypto.randomUUID() }) });
+      const response = await request("/v1/artifacts/csv", { method: "POST", body: JSON.stringify({ name: "CSV " + i, content: "sku,count\nA-1,2", idempotency_key: crypto.randomUUID() }) });
       expect(response.status).toBe(201);
     }
-    const blocked = await request("/v1/artifacts/csv", { method: "POST", body: JSON.stringify({ name: "CSV overflow", content: "sku,count\\nA-1,2", idempotency_key: crypto.randomUUID() }) });
+    const blocked = await request("/v1/artifacts/csv", { method: "POST", body: JSON.stringify({ name: "CSV overflow", content: "sku,count\nA-1,2", idempotency_key: crypto.randomUUID() }) });
     expect(blocked.status).toBe(429);
   });
 
