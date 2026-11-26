@@ -16,7 +16,7 @@ export interface TaskCloseoutInput {
 export interface TaskCloseoutRecovery {
   readonly taskId: string;
   readonly status: "waiting" | "paused";
-  readonly resumeAfterMinutes?: 1320;
+  readonly resumeAfterSeconds?: 5;
   readonly checkpointSummary: string;
 }
 
