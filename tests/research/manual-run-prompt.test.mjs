@@ -29,6 +29,7 @@ test("manual owner run cannot treat one completed step as completion of the full
   assert.match(prompt, /every material objective in both the task goal and approved_scope is demonstrably complete/);
   assert.match(prompt, /completing one bounded step, finding a lead, or merely attaching evidence does not establish completion/);
   assert.match(prompt, /use waiting with resume_after_seconds: 5/);
+  assert.match(prompt, /If any substantive work tool failed, do not schedule a resume/);
   assert.match(prompt, /Use waiting without a resume time only when blocked on owner input or an external dependency/);
   assert.match(prompt, /Never ask the owner to re-approve a task that is already individually owner-approved/);
   assert.match(prompt, /Evidence references must identify concrete supporting records/);
