@@ -17,7 +17,8 @@ test("scheduled work claims exactly one individually owner-approved task and che
   assert.match(workLoop, /Mission-authorized tasks, standing mandates/);
   assert.match(workLoop, /fresh session/);
   assert.match(workLoop, /checkpoint with waiting/);
-  assert.match(workLoop, /task_transition now schedules the next invocation after five seconds by default/);\n  assert.match(workLoop, /hold_without_schedule: true only when blocked on owner input or an external dependency/);
+  assert.match(workLoop, /task_transition now schedules the next invocation after five seconds by default/);
+  assert.match(workLoop, /hold_without_schedule: true only when blocked on owner input or an external dependency/);
   assert.match(workLoop, /Process one task only/);
   assert.match(workLoop, /task_heartbeat at least every 10 minutes/);
 });
@@ -78,7 +79,8 @@ test("all active mission and owner-console instructions agree on per-task and ex
   assert.doesNotMatch(ownerConsole, /standing-mission authorized|standing mission mandate/i);
 });
 
-\ntest("waiting task transitions schedule five seconds by default unless explicitly held", async () => {
+
+test("waiting task transitions schedule five seconds by default unless explicitly held", async () => {
   const tool = await readFile(new URL("../../agent/tools/task_transition.ts", import.meta.url), "utf8");
   assert.match(tool, /hold_without_schedule: z\.boolean\(\)\.optional\(\)/);
   assert.match(tool, /body\.status === "waiting" \? 5_000 : null/);
