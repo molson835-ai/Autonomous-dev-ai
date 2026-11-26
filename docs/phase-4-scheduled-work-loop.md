@@ -8,13 +8,13 @@ This adds one Eve-native schedule at `agent/schedules/owner-approved-work-loop.t
 - Each invocation starts a fresh Eve session; it does not resume the prior chat.
 - The session claims at most one due task through `task_claim_next`, and only when it is individually owner-approved with `mission_authorized=0`. Standing mission authorization is disabled. Queue read/write tools are disabled outside Vercel Production; Preview schedule invocations return a no-op without contacting the Production task store.
 - It performs one bounded step, then records success, failure, or a checkpoint through `task_transition`.
-- A safe continuation is scheduled by setting `waiting` with `resume_after_minutes: 1320` (22 hours), leaving a two-hour margin before the next daily run; the tool computes `next_run_at`.
+- A safe continuation is scheduled by setting `waiting` with `resume_after_seconds: 5`; the task store persists `next_run_at` and the Cloudflare Durable Object alarm wakes the Production Eve endpoint when it is due. The existing daily Eve schedule remains a fallback for queued work and alarm-delivery failures.
 - A waiting task without a continuation time remains blocked for owner input or a capability change.
-- The task store's 30-minute stale-running lease recovers crashed or abandoned invocations, subject to the three-attempt limit.
+- The task store's 30-minute stale-running lease recovers crashed or abandoned invocations, subject to the three-attempt limit. Durable Object alarms are one-shot and are re-armed from persisted due tasks; alarm retries reuse Eve's stable `operationId` so an uncertain HTTP response cannot create duplicate sessions.
 
 ## Host behavior
 
-This Eve integration emits Vercel Cron Jobs, not the separate Vercel Schedules beta. The actual project deployment error is authoritative: Hobby allows only daily Cron Jobs. This schedule therefore runs once per day and requires no plan upgrade. Preview builds can also carry schedules, so the task tools fail closed outside Production.
+This Eve integration's daily fallback schedule runs once per day on the current Hobby deployment. Short continuations do not rely on Vercel Cron: the existing Cloudflare MemoryStore Durable Object uses its one-shot Alarms API to call a Production-only Vercel route after the persisted task deadline. That route validates the shared Worker credential, rechecks queue/task eligibility, obtains the Vercel-issued OIDC token from the Function request context, and starts Eve through its existing `vercelOidc()` channel. The session create request uses a stable `operationId` derived from task ID and deadline, making retries idempotent. Preview builds and non-Production routes fail closed.
 
 
 
@@ -23,6 +23,7 @@ Eve's schedule documentation confirms UTC execution, independent invocations, an
 Sources:
 - https://eve.dev/docs/schedules
 - https://vercel.com/docs/cron-jobs/usage-and-pricing
+- https://developers.cloudflare.com/durable-objects/api/alarms/
 
 ## Capability limits
 
