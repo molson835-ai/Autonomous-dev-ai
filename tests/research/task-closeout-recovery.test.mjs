@@ -43,7 +43,7 @@ test("automatically checkpoints a claimed approved task after useful completed w
 
   assert.equal(result.taskId, task.id);
   assert.equal(result.status, "waiting");
-  assert.equal(result.resumeAfterMinutes, 1320);
+  assert.equal(result.resumeAfterSeconds, 5);
   assert.match(result.checkpointSummary, /automatic safety checkpoint/i);
   assert.match(result.checkpointSummary, /not evidence of task completion/i);
   assert.match(result.checkpointSummary, /session-123/);
@@ -60,7 +60,7 @@ test("pauses instead of scheduling continuation when the turn did not complete",
   });
 
   assert.equal(result.status, "paused");
-  assert.equal(result.resumeAfterMinutes, undefined);
+  assert.equal(result.resumeAfterSeconds, undefined);
 });
 
 test("pauses when a claimed task has no completed substantive work", () => {
