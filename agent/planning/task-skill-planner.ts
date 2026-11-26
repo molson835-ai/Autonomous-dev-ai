@@ -77,29 +77,34 @@ function bestEvidenceStatus(skill: string, evidence: SkillEvidence[]): SkillStat
   return "untested";
 }
 
+function isUnknownText(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  return normalized === "" || normalized === "unknown";
+}
+
 function resourceReviewGaps(resource: PlannerResource): string[] {
   const quota = resource.quota_evidence;
   const gaps: string[] = [];
-  if (!resource.maintainer || resource.maintainer.trim().toLowerCase() === "unknown") gaps.push("maintainer");
-  if (!resource.version_or_revision || resource.version_or_revision.trim().toLowerCase() === "unknown") gaps.push("revision");
-  if (!resource.license || resource.license.trim().toLowerCase() === "unknown") gaps.push("license");
+  if (isUnknownText(resource.maintainer)) gaps.push("maintainer");
+  if (isUnknownText(resource.version_or_revision)) gaps.push("revision");
+  if (isUnknownText(resource.license)) gaps.push("license");
   if (!resource.security_notes || !resource.security_notes.trim()) gaps.push("security_notes");
   if (!resource.cost_notes || !resource.cost_notes.trim()) gaps.push("cost_notes");
   if (!resource.freshness_policy || !resource.freshness_policy.trim()) gaps.push("freshness_policy");
-  if (!resource.retrieved_at || resource.retrieved_at.trim().toLowerCase() === "unknown") gaps.push("retrieved_at");
+  if (isUnknownText(resource.retrieved_at)) gaps.push("retrieved_at");
   if (!Array.isArray(resource.dependencies)) gaps.push("dependencies");
   if (!Array.isArray(resource.permissions)) gaps.push("permissions");
   if (!Array.isArray(resource.network_or_execution_requirements)) gaps.push("network_or_execution_requirements");
-  if (!resource.last_verified_at || resource.last_verified_at.trim().toLowerCase() === "unknown") gaps.push("last_verified_at");
+  if (isUnknownText(resource.last_verified_at)) gaps.push("last_verified_at");
   if (!resource.access_mode || resource.access_mode !== "public_read") gaps.push("access_mode");
   if (!resource.persistence || resource.persistence === "unknown") gaps.push("persistence");
   if (!resource.execution || resource.execution === "unknown") gaps.push("execution");
   if (!resource.data_classes_allowed || resource.data_classes_allowed.length === 0) gaps.push("data_classes_allowed");
   if (!resource.commercial_use || resource.commercial_use !== "allowed") gaps.push("commercial_use");
-  if (!quota || quota.confidence !== "high" || quota.source_url === "unknown" ||
-      quota.checked_at === "unknown" || quota.limits === "unknown") gaps.push("quota_evidence");
+  if (!quota || quota.confidence !== "high" || isUnknownText(quota.source_url) ||
+      isUnknownText(quota.checked_at) || isUnknownText(quota.limits)) gaps.push("quota_evidence");
   if (!resource.failure_policy) gaps.push("failure_policy");
-  if (!resource.deletion_and_export || resource.deletion_and_export.trim().toLowerCase() === "unknown") gaps.push("deletion_and_export");
+  if (isUnknownText(resource.deletion_and_export)) gaps.push("deletion_and_export");
   if (!resource.adapter_status || !["tested", "enabled"].includes(resource.adapter_status)) gaps.push("adapter_status");
   if (!resource.trust_state || resource.trust_state !== "approved") gaps.push("owner_approval");
   if (resource.cost_model !== "free_open_source") gaps.push("cost_model");
@@ -158,7 +163,7 @@ export function planTaskSkills(input: TaskSkillPlanInput) {
           revision: resource.version_or_revision ?? "unknown",
           trustState: resource.trust_state,
           license: resource.license,
-          licenseKnown: resource.license.trim().toLowerCase() !== "unknown",
+          licenseKnown: !isUnknownText(resource.license),
           costModel: resource.cost_model,
           costNotes: resource.cost_notes ?? "unknown",
           dependencies: resource.dependencies ?? [],
