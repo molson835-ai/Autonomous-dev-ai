@@ -31,7 +31,7 @@ test("manual owner run cannot treat one completed step as completion of the full
   assert.match(prompt, /task_transition automatically schedules the next bounded invocation after five seconds/);
   assert.match(prompt, /hold_without_schedule: true only when blocked on owner input or an external dependency/);
   assert.match(prompt, /If any substantive work tool failed, do not schedule a resume/);
-  assert.match(prompt, /Use waiting without a resume time only when blocked on owner input or an external dependency/);
+  assert.match(prompt, /hold_without_schedule: true only when blocked on owner input or an external dependency/);
   assert.match(prompt, /Never ask the owner to re-approve a task that is already individually owner-approved/);
   assert.match(prompt, /Evidence references must identify concrete supporting records/);
 });
