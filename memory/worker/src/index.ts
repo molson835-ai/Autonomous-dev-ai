@@ -131,6 +131,8 @@ export class MemoryStore extends DurableObject<Env> {
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS quota_daily (day TEXT PRIMARY KEY, baseline_neurons REAL NOT NULL, observed_neurons REAL NOT NULL, observed_at TEXT NOT NULL, local_estimated_neurons REAL NOT NULL DEFAULT 0, circuit_open INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS quota_reservations (id TEXT PRIMARY KEY, day TEXT NOT NULL, reserved_neurons REAL NOT NULL, created_at TEXT NOT NULL)");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS quota_reservations_day ON quota_reservations(day)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS quota_call_ledger (reservation_id TEXT PRIMARY KEY, day TEXT NOT NULL, settled_at TEXT NOT NULL, model_id TEXT NOT NULL, input_tokens INTEGER, output_tokens INTEGER, estimated_neurons REAL NOT NULL, accounting_source TEXT NOT NULL CHECK (accounting_source IN ('provider_usage','fallback')), settlement_reason TEXT NOT NULL)");
+      ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS quota_call_ledger_day_settled ON quota_call_ledger(day, settled_at DESC)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS tavily_credit_monthly (month TEXT PRIMARY KEY, used_credits REAL NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS tavily_credit_reservations (id TEXT PRIMARY KEY, month TEXT NOT NULL, reserved_credits REAL NOT NULL, created_at TEXT NOT NULL)");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS tavily_credit_reservations_month ON tavily_credit_reservations(month)");
