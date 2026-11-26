@@ -28,7 +28,8 @@ test("manual owner run preserves task approval, scope, and bounded closeout requ
 test("manual owner run cannot treat one completed step as completion of the full approved task", () => {
   assert.match(prompt, /every material objective in both the task goal and approved_scope is demonstrably complete/);
   assert.match(prompt, /completing one bounded step, finding a lead, or merely attaching evidence does not establish completion/);
-  assert.match(prompt, /task_transition automatically schedules the next bounded invocation after five seconds/);\n  assert.match(prompt, /hold_without_schedule: true only when blocked on owner input or an external dependency/);
+  assert.match(prompt, /task_transition automatically schedules the next bounded invocation after five seconds/);
+  assert.match(prompt, /hold_without_schedule: true only when blocked on owner input or an external dependency/);
   assert.match(prompt, /If any substantive work tool failed, do not schedule a resume/);
   assert.match(prompt, /Use waiting without a resume time only when blocked on owner input or an external dependency/);
   assert.match(prompt, /Never ask the owner to re-approve a task that is already individually owner-approved/);
