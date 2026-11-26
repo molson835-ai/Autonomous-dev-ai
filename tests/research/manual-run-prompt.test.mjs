@@ -24,3 +24,10 @@ test("manual owner run preserves task approval, scope, and bounded closeout requ
   assert.match(prompt, /task_transition exactly once/);
   assert.match(prompt, /Process at most one task in this invocation/);
 });
+
+test("manual owner run cannot treat one completed step as completion of the full approved task", () => {
+  assert.match(prompt, /every material objective in both the task goal and approved_scope is demonstrably complete/);
+  assert.match(prompt, /completing one bounded step, finding a lead, or merely attaching evidence does not establish completion/);
+  assert.match(prompt, /use waiting with a concise checkpoint/);
+  assert.match(prompt, /Evidence references must identify concrete supporting records/);
+});

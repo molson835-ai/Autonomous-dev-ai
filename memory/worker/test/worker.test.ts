@@ -877,6 +877,37 @@ describe("persistent memory Worker HTTP contract", () => {
   });
 
 
+  it("rejects premature success without completion evidence and preserves the running task", async () => {
+    const create = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
+      idempotency_key: `TASK-PREMATURE-SUCCESS-${crypto.randomUUID()}`,
+      task_type: "verification", title: "Premature completion guard",
+      goal: "Verify all approved objectives before success",
+      approved_scope: "Isolated Worker integration test only"
+    }) });
+    expect(create.status).toBe(201);
+    const { task } = await create.json<{ task: { id: string } }>();
+    expect((await request(`/v1/tasks/${task.id}/approve`, { method: "POST" }, ownerToken)).status).toBe(200);
+    expect((await request("/v1/tasks/claim-next", { method: "POST" })).status).toBe(200);
+
+    const premature = await request(`/v1/tasks/${task.id}/transition`, {
+      method: "POST",
+      body: JSON.stringify({ status: "succeeded", result_summary: "One research step completed" })
+    });
+    expect(premature.status).toBe(409);
+    expect(await premature.json()).toMatchObject({ reason_code: "completion_evidence_required" });
+
+    const current = await request(`/v1/tasks/${task.id}`);
+    expect((await current.json<{ task: { status: string; result_summary: string | null } }>()).task)
+      .toMatchObject({ status: "running", result_summary: null });
+
+    const checkpoint = await request(`/v1/tasks/${task.id}/transition`, {
+      method: "POST",
+      body: JSON.stringify({ status: "waiting", checkpoint_summary: "One bounded step completed; remaining objectives require another step." })
+    });
+    expect(checkpoint.status).toBe(200);
+    expect((await checkpoint.json<{ task: { status: string } }>()).task.status).toBe("waiting");
+  });
+
   it("serializes concurrent claims so only one approved task can run", async () => {
     const tasks = [];
     for (const suffix of ["A", "B"]) {
