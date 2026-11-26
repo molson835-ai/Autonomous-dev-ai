@@ -16,7 +16,7 @@ interface Env {
   CLOUDFLARE_ANALYTICS_API_TOKEN?: string;
 }
 
-type ArtifactRow = { id: string; name: string; filename: string; media_type: string; content: string; bytes: number; created_at: string; };
+type ArtifactRow = { id: string; name: string; filename: string; media_type: string; content: string; bytes: number; created_at: string; idempotency_key: string | null; sha256: string | null; };
 const MAX_ARTIFACT_COUNT = 20;
 const MAX_ARTIFACT_TOTAL_BYTES = 1_048_576;
 const MAX_ARTIFACT_REQUEST_BYTES = 96_000;
@@ -136,7 +136,11 @@ export class MemoryStore extends DurableObject<Env> {
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS tasks_status_created ON tasks(status, created_at)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS resources (id TEXT PRIMARY KEY, resource_json TEXT NOT NULL, trust_state TEXT NOT NULL CHECK (trust_state IN ('quarantined','reviewed','approved','rejected','stale')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, reviewer TEXT, reviewed_at TEXT, review_evidence TEXT NOT NULL DEFAULT '[]')");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS resources_state_updated ON resources(trust_state, updated_at DESC)");
-      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, name TEXT NOT NULL, filename TEXT NOT NULL, media_type TEXT NOT NULL CHECK (media_type = 'text/html'), content TEXT NOT NULL, bytes INTEGER NOT NULL CHECK (bytes BETWEEN 1 AND 70000), created_at TEXT NOT NULL)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, name TEXT NOT NULL, filename TEXT NOT NULL, media_type TEXT NOT NULL CHECK (media_type = 'text/html'), content TEXT NOT NULL, bytes INTEGER NOT NULL CHECK (bytes BETWEEN 1 AND 70000), created_at TEXT NOT NULL, idempotency_key TEXT, sha256 TEXT)");
+      const artifactColumns = ctx.storage.sql.exec<{ name: string }>("PRAGMA table_info(artifacts)").toArray();
+      if (!artifactColumns.some(column => column.name === "idempotency_key")) ctx.storage.sql.exec("ALTER TABLE artifacts ADD COLUMN idempotency_key TEXT");
+      if (!artifactColumns.some(column => column.name === "sha256")) ctx.storage.sql.exec("ALTER TABLE artifacts ADD COLUMN sha256 TEXT");
+      ctx.storage.sql.exec("CREATE UNIQUE INDEX IF NOT EXISTS artifacts_idempotency_key ON artifacts(idempotency_key) WHERE idempotency_key IS NOT NULL");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS artifacts_created ON artifacts(created_at DESC)");
     });
   }
