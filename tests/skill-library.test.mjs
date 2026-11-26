@@ -40,7 +40,7 @@ test("catalog filters by exact category and capability without loading skill fil
   const category = listSkills({ category: "business-operations" });
   assert.ok(category.length >= 2);
   assert.ok(category.every((skill) => skill.category === "business-operations"));
-  const capability = listSkills({ capability: "unit-economics" });
+  const capability = listSkills({ capability: "inventory-accuracy" });
   assert.deepEqual(capability.map((skill) => skill.id), ["seller-operations"]);
   assert.deepEqual(listSkills({ category: "not-a-category" }), []);
 });
