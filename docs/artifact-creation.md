@@ -6,17 +6,19 @@ The first milestone supports one standalone HTML5 file per tool call for small a
 ## Lifecycle
 1. Eve composes a complete HTML5 document.
 2. `create_artifact` validates the name, UTF-8 content, 64 KiB maximum, complete document structure, and responsive viewport.
-3. The tool returns an artifact envelope; it does not write to the server filesystem or execute HTML.
-4. The web chat displays the content in a sandboxed iframe and provides a browser-side download.
-5. The owner can inspect the preview at mobile and desktop widths before downloading.
+3. The tool persists the validated, CSP-injected HTML in the existing authenticated Durable Object store; it does not write to a server filesystem or execute HTML.
+4. Each logical creation supplies a stable UUID idempotency key. Retrying the same key with identical content returns the original artifact; a conflicting payload returns HTTP 409.
+5. The tool returns the artifact UUID and SHA-256 hash. Agent and owner detail reads recompute and verify the hash before returning content.
+6. The web chat displays the content in a sandboxed iframe. The verified owner can list, download, or explicitly delete artifacts in the Owner Console.
 
 ## Security boundaries
 - One file per call; 64 KiB maximum.
 - HTML only; external scripts and remote asset URLs are rejected.
 - Preview uses an iframe sandbox with scripts only; no same-origin privilege, forms, popups, or top navigation.
 - A restrictive Content Security Policy blocks network connections, external assets, forms, frames, and objects.
-- No filesystem access, persistence, shell, package installation, network fetch, automatic execution by Eve, repository writes, commits, PRs, or deployment.
-- The download is created in the owner's browser from the tool result, not from durable server storage.
+- No filesystem access, shell, package installation, arbitrary network fetch, automatic execution by Eve, repository writes, commits, PRs, or deployment.
+- Durable storage is limited to 20 artifacts and 1 MiB aggregate content; each original HTML file remains limited to 64 KiB.
+- Owner list/download/delete routes require verified GitHub-owner authentication and same-origin proxy access.
 
 ## Verification limits
 The validator checks document structure and policy constraints. The iframe is the actual browser rendering surface. The owner can inspect the live preview; the tool does not claim automated screenshot comparison, browser-console inspection, or cross-browser QA. Those require a separately designed browser-test integration.
