@@ -155,6 +155,15 @@ export function transitionTask(task, nextStatus, {
   if (!TASK_STATUSES.includes(nextStatus) || !TRANSITIONS[task.status].has(nextStatus)) {
     throw new Error("invalid_task_transition");
   }
+  // Validate the state-machine transition first so illegal transitions retain
+  // their established error contract; evidence is an additional success guard.
+  if (nextStatus === "succeeded") {
+    const finalSummary = resultSummary !== undefined ? resultSummary : task.result_summary;
+    const finalEvidence = evidenceRefs !== undefined ? evidenceRefs : task.evidence_refs;
+    if (!nonEmpty(finalSummary) || !Array.isArray(finalEvidence) || finalEvidence.length === 0 || !finalEvidence.every(nonEmpty)) {
+      throw new Error("task_completion_evidence_required");
+    }
+  }
   if (task.status === "proposed" && nextStatus === "queued" && ownerApproved !== true) {
     throw new Error("owner_approval_required");
   }
