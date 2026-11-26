@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { compareOwnerClientId, diagnosticSharedSecretReason, ownerAuthConfigurationReason, verifyOwnerGithubToken, type OwnerAuthReasonCode } from "./owner-auth";
 import { isSafeMemoryText, normalizeMemoryQuery } from "../../../agent/lib/memory-policy.mjs";
+import { validateHtmlArtifact } from "../../../agent/lib/artifact-policy.mjs";
 import { prepareResourceCandidate } from "../../../agent/resources/intake.mjs";
 import { ensureExperienceExternalIdColumn, findExperienceByExternalId } from "../../../agent/lib/memory-schema.mjs";
 import { createTaskRecord, isMissionAuthorizedTask, isTaskLeaseExpired, selectNextTask, TASK_STATUS_VALUES, transitionTask } from "../../../agent/lib/task-lifecycle.mjs";
@@ -14,6 +15,11 @@ interface Env {
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_ANALYTICS_API_TOKEN?: string;
 }
+
+type ArtifactRow = { id: string; name: string; filename: string; media_type: string; content: string; bytes: number; created_at: string; idempotency_key: string | null; sha256: string | null; };
+const MAX_ARTIFACT_COUNT = 20;
+const MAX_ARTIFACT_TOTAL_BYTES = 1_048_576;
+const MAX_ARTIFACT_REQUEST_BYTES = 96_000;
 
 type MemoryRow = {
   id: string; kind: string; content: string; source: string;
@@ -42,11 +48,35 @@ function constantTimeEqual(left: string, right: string): boolean {
   return mismatch === 0;
 }
 
-async function readBody(request: Request): Promise<Record<string, unknown> | null> {
-  const raw = await request.text();
-  if (new TextEncoder().encode(raw).byteLength > 16_000) return null;
+async function readBody(request: Request, maxBytes = 16_000): Promise<Record<string, unknown> | null> {
+  if (!request.body) return null;
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
   try {
-    const value: unknown = JSON.parse(raw);
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (total + value.byteLength > maxBytes) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } catch {
+    return null;
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    const value: unknown = JSON.parse(new TextDecoder().decode(bytes));
     return value !== null && typeof value === "object" && !Array.isArray(value)
       ? value as Record<string, unknown>
       : null;
@@ -106,6 +136,12 @@ export class MemoryStore extends DurableObject<Env> {
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS tasks_status_created ON tasks(status, created_at)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS resources (id TEXT PRIMARY KEY, resource_json TEXT NOT NULL, trust_state TEXT NOT NULL CHECK (trust_state IN ('quarantined','reviewed','approved','rejected','stale')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, reviewer TEXT, reviewed_at TEXT, review_evidence TEXT NOT NULL DEFAULT '[]')");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS resources_state_updated ON resources(trust_state, updated_at DESC)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, name TEXT NOT NULL, filename TEXT NOT NULL, media_type TEXT NOT NULL CHECK (media_type = 'text/html'), content TEXT NOT NULL, bytes INTEGER NOT NULL CHECK (bytes BETWEEN 1 AND 70000), created_at TEXT NOT NULL, idempotency_key TEXT, sha256 TEXT)");
+      const artifactColumns = ctx.storage.sql.exec<{ name: string }>("PRAGMA table_info(artifacts)").toArray();
+      if (!artifactColumns.some(column => column.name === "idempotency_key")) ctx.storage.sql.exec("ALTER TABLE artifacts ADD COLUMN idempotency_key TEXT");
+      if (!artifactColumns.some(column => column.name === "sha256")) ctx.storage.sql.exec("ALTER TABLE artifacts ADD COLUMN sha256 TEXT");
+      ctx.storage.sql.exec("CREATE UNIQUE INDEX IF NOT EXISTS artifacts_idempotency_key ON artifacts(idempotency_key) WHERE idempotency_key IS NOT NULL");
+      ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS artifacts_created ON artifacts(created_at DESC)");
     });
   }
 
@@ -280,6 +316,70 @@ export class MemoryStore extends DurableObject<Env> {
         candidate.id, JSON.stringify(candidate), now, now
       );
       return json({ id: candidate.id, trust_state: "quarantined", created: true }, 201);
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/artifacts") {
+      const body = await readBody(request, MAX_ARTIFACT_REQUEST_BYTES);
+      if (!body || Object.keys(body).some(key => !["name", "content", "idempotency_key"].includes(key)) ||
+          typeof body.idempotency_key !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.idempotency_key)) {
+        return json({ error: "A valid UUID idempotency_key is required." }, 400);
+      }
+      const validation = validateHtmlArtifact({ name: body.name, content: body.content });
+      if (!validation.valid) return json({ error: "Artifact validation failed.", errors: validation.errors }, 400);
+      const artifact = validation.artifact;
+      const storedContent = artifact.previewHtml;
+      const storedBytes = new TextEncoder().encode(storedContent).byteLength;
+      const digest = await sha256Hex(storedContent);
+      const existing = this.ctx.storage.sql.exec<ArtifactRow>("SELECT * FROM artifacts WHERE idempotency_key=? LIMIT 1", body.idempotency_key).toArray()[0];
+      if (existing) {
+        if (existing.name !== artifact.name || existing.sha256 !== digest) {
+          return json({ error: "Idempotency key was already used for different artifact content.", reason_code: "artifact_idempotency_conflict" }, 409);
+        }
+        return json({ stored: true, duplicate: true, artifact: { id: existing.id, name: existing.name, filename: existing.filename, media_type: existing.media_type, bytes: existing.bytes, created_at: existing.created_at, sha256: existing.sha256 } });
+      }
+      const totals = this.ctx.storage.sql.exec<{ count: number; bytes: number }>("SELECT COUNT(*) AS count, COALESCE(SUM(bytes),0) AS bytes FROM artifacts").one();
+      if (totals.count >= MAX_ARTIFACT_COUNT || totals.bytes + storedBytes > MAX_ARTIFACT_TOTAL_BYTES) {
+        return json({ error: "Artifact storage limit reached. Ask the owner to remove an existing artifact before saving another.", reason_code: "artifact_storage_limit_reached", max_artifacts: MAX_ARTIFACT_COUNT, max_total_bytes: MAX_ARTIFACT_TOTAL_BYTES }, 429);
+      }
+      const id = crypto.randomUUID();
+      this.ctx.storage.sql.exec("INSERT INTO artifacts (id,name,filename,media_type,content,bytes,created_at,idempotency_key,sha256) VALUES (?,?,?,?,?,?,?,?,?)", id, artifact.name, artifact.filename, artifact.mediaType, storedContent, storedBytes, now, body.idempotency_key, digest);
+      return json({ stored: true, duplicate: false, artifact: { id, name: artifact.name, filename: artifact.filename, media_type: artifact.mediaType, bytes: storedBytes, created_at: now, sha256: digest } }, 201);
+    }
+
+    const artifactMatch = url.pathname.match(/^\/v1\/artifacts\/([0-9a-f-]{36})$/i);
+    if (request.method === "GET" && artifactMatch) {
+      const row = this.ctx.storage.sql.exec<ArtifactRow>("SELECT * FROM artifacts WHERE id=? LIMIT 1", artifactMatch[1]).toArray()[0];
+      if (!row) return json({ error: "Artifact not found." }, 404);
+      const digest = await sha256Hex(row.content);
+      if (row.sha256 && row.sha256 !== digest) return json({ error: "Stored artifact integrity check failed.", reason_code: "artifact_integrity_mismatch" }, 500);
+      if (!row.sha256) this.ctx.storage.sql.exec("UPDATE artifacts SET sha256=? WHERE id=?", digest, row.id);
+      return json({ artifact: { ...row, sha256: digest } });
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/owner/artifacts") {
+      const limit = boundedLimit(url.searchParams.get("limit"), 20);
+      const artifacts = this.ctx.storage.sql.exec<Omit<ArtifactRow, "content">>(
+        "SELECT id,name,filename,media_type,bytes,created_at,sha256 FROM artifacts ORDER BY created_at DESC LIMIT ?", limit
+      ).toArray();
+      return json({ artifacts });
+    }
+
+    const ownerArtifactMatch = url.pathname.match(/^\/v1\/owner\/artifacts\/([0-9a-f-]{36})$/i);
+    if (request.method === "GET" && ownerArtifactMatch) {
+      const artifact = this.ctx.storage.sql.exec<ArtifactRow>("SELECT * FROM artifacts WHERE id=? LIMIT 1", ownerArtifactMatch[1]).toArray()[0];
+      if (!artifact) return json({ error: "Artifact not found." }, 404);
+      const digest = await sha256Hex(artifact.content);
+      if (artifact.sha256 && artifact.sha256 !== digest) return json({ error: "Stored artifact integrity check failed.", reason_code: "artifact_integrity_mismatch" }, 500);
+      if (!artifact.sha256) this.ctx.storage.sql.exec("UPDATE artifacts SET sha256=? WHERE id=?", digest, artifact.id);
+      return json({ artifact: { ...artifact, sha256: digest } });
+    }
+
+    const ownerArtifactDeleteMatch = url.pathname.match(/^\/v1\/owner\/artifacts\/([0-9a-f-]{36})\/delete$/i);
+    if (request.method === "POST" && ownerArtifactDeleteMatch) {
+      const deleted = this.ctx.storage.sql.exec<{ id: string }>(
+        "DELETE FROM artifacts WHERE id=? RETURNING id", ownerArtifactDeleteMatch[1]
+      ).toArray();
+      return deleted.length === 1 ? json({ id: ownerArtifactDeleteMatch[1], deleted: true }) : json({ error: "Artifact not found." }, 404);
     }
 
     if (request.method === "POST" && ["/v1/tasks", "/v1/owner/tasks"].includes(url.pathname)) {
@@ -745,10 +845,12 @@ export default {
     const ownerControlRoute = request.method === "POST" && /^\/v1\/tasks\/[0-9a-f-]{36}\/owner-control$/i.test(url.pathname);
     const ownerMemoryDecisionRoute = request.method === "POST" && /^\/v1\/proposals\/[0-9a-f-]{36}\/decision$/i.test(url.pathname);
     const ownerResourceDecisionRoute = request.method === "POST" && /^\/v1\/owner\/resources\/[a-z0-9][a-z0-9._:-]{0,159}\/decision$/.test(url.pathname);
-    const ownerReadRoute = request.method === "GET" && ["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status", "/v1/owner/resources", "/v1/owner/quota/status", "/v1/owner/research/credits/status"].includes(url.pathname);
+    const ownerArtifactDeleteRoute = request.method === "POST" && /^\/v1\/owner\/artifacts\/[0-9a-f-]{36}\/delete$/i.test(url.pathname);
+    const ownerArtifactReadRoute = request.method === "GET" && (/^\/v1\/owner\/artifacts$/i.test(url.pathname) || /^\/v1\/owner\/artifacts\/[0-9a-f-]{36}$/i.test(url.pathname));
+    const ownerReadRoute = request.method === "GET" && (["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status", "/v1/owner/resources", "/v1/owner/quota/status", "/v1/owner/research/credits/status"].includes(url.pathname) || ownerArtifactReadRoute);
     const ownerQueueControlRoute = request.method === "POST" && url.pathname === "/v1/owner/control";
     const ownerTaskCreateRoute = request.method === "POST" && url.pathname === "/v1/owner/tasks";
-    const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute || ownerMemoryDecisionRoute || ownerResourceDecisionRoute || ownerReadRoute || ownerQueueControlRoute || ownerTaskCreateRoute;
+    const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute || ownerMemoryDecisionRoute || ownerResourceDecisionRoute || ownerArtifactDeleteRoute || ownerReadRoute || ownerQueueControlRoute || ownerTaskCreateRoute;
     const ownerOrigin = "https://autonomous-dev-ai.vercel.app";
     const origin = request.headers.get("origin");
     const withOwnerCors = (response: Response) => {

@@ -31,6 +31,8 @@ type Proposal = {
 };
 
 type Resource = { id: string; resource: Record<string, unknown> | null; trust_state: string; created_at: string; reviewer: string | null; reviewed_at: string | null; review_evidence: string[] };
+type ArtifactSummary = { id: string; name: string; filename: string; media_type: string; bytes: number; created_at: string };
+type ArtifactDetail = ArtifactSummary & { content: string };
 type QueueStatus = { queue_paused: boolean; reason: string | null; running_tasks: number; queued_tasks: number; updated_at: string };
 type TavilyCreditStatus = {
   month: string;
@@ -130,6 +132,8 @@ export default function OwnerConsole() {
   const [selectedTaskScopes, setSelectedTaskScopes] = useState<Record<string, string>>({});
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
+  const [artifacts, setArtifacts] = useState<ArtifactSummary[]>([]);
+  const [artifactStoreAvailable, setArtifactStoreAvailable] = useState(true);
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const [quotaStatus, setQuotaStatus] = useState<QuotaStatus | null>(null);
   const [tavilyCreditStatus, setTavilyCreditStatus] = useState<TavilyCreditStatus | null>(null);
@@ -147,17 +151,20 @@ export default function OwnerConsole() {
     setBusy("load");
     setMessage("");
     try {
-      const [taskData, proposalData, statusData, resourceData, quotaData, tavilyData] = await Promise.all([
+      const [taskData, proposalData, statusData, resourceData, artifactData, quotaData, tavilyData] = await Promise.all([
         ownerRequest<{ tasks: Task[] }>("/v1/owner/tasks?limit=30"),
         ownerRequest<{ proposals: Proposal[] }>("/v1/owner/proposals?limit=30"),
         ownerRequest<QueueStatus>("/v1/owner/status"),
         ownerRequest<{ resources: Resource[] }>("/v1/owner/resources?limit=50"),
+        ownerRequest<{ artifacts: ArtifactSummary[] }>("/v1/owner/artifacts?limit=20").catch(() => null),
         ownerRequest<QuotaStatus>("/v1/owner/quota/status").catch(() => null),
         ownerRequest<TavilyCreditStatus>("/v1/owner/research/credits/status").catch(() => null),
       ]);
       setTasks(taskData.tasks);
       setProposals(proposalData.proposals);
       setResources(resourceData.resources);
+      setArtifacts(artifactData?.artifacts ?? []);
+      setArtifactStoreAvailable(artifactData !== null);
       setQueueStatus(statusData);
       setQuotaStatus(quotaData);
       setTavilyCreditStatus(tavilyData);
@@ -272,6 +279,33 @@ export default function OwnerConsole() {
     }
   }
 
+  async function downloadArtifact(id: string) {
+    setBusy("artifact-download");
+    setMessage("");
+    try {
+      const result = await ownerRequest<{ artifact: ArtifactDetail }>("/v1/owner/artifacts/" + encodeURIComponent(id));
+      const blob = new Blob([result.artifact.content], { type: result.artifact.media_type });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.artifact.filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setMessage("Artifact download started: " + result.artifact.filename);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not download artifact.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function deleteArtifact(id: string, name: string) {
+    if (!window.confirm("Permanently delete the stored artifact “" + name + "”? This cannot be undone.")) return;
+    await perform(id, "/v1/owner/artifacts/" + encodeURIComponent(id) + "/delete", "POST");
+  }
+
   async function createTaskProposal() {
     setBusy("create-task");
     setMessage("");
@@ -300,6 +334,8 @@ export default function OwnerConsole() {
     setTasks([]);
     setProposals([]);
     setResources([]);
+    setArtifacts([]);
+    setArtifactStoreAvailable(true);
     setQueueStatus(null);
     setQuotaStatus(null);
     setTavilyCreditStatus(null);
@@ -576,6 +612,33 @@ export default function OwnerConsole() {
                       </button>
                     </>
                   )}
+                </div>
+              </article>
+            ))}
+          </section>
+
+          <section className="space-y-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="text-xl font-semibold">Durable artifacts</h2>
+              <span className="text-sm text-muted-foreground">{artifacts.length} stored</span>
+            </div>
+            <p className="text-sm text-muted-foreground">Validated HTML deliverables saved by Eve. Only the verified owner can list, download, or delete them; there are no public artifact links.</p>
+            {!artifactStoreAvailable && <p role="status" className="rounded-lg border bg-muted p-3 text-sm">Artifact storage is not available from the Worker yet. Deploy the matching Worker update before using this section. Other Owner Console controls remain available.</p>}
+            {artifacts.length === 0 && <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">No stored artifacts yet.</p>}
+            {artifacts.map(artifact => (
+              <article key={artifact.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4">
+                <div className="min-w-0 space-y-1">
+                  <h3 className="font-semibold">{artifact.name}</h3>
+                  <p className="text-xs text-muted-foreground">{artifact.filename} · {artifact.bytes.toLocaleString()} bytes · {new Date(artifact.created_at).toLocaleString()}</p>
+                  <p className="break-all text-xs text-muted-foreground">ID {artifact.id}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" disabled={busy !== null} onClick={() => void downloadArtifact(artifact.id)} className="rounded-lg border px-3 py-2 text-sm font-medium disabled:opacity-50">
+                    {busy === "artifact-download" ? "Preparing…" : "Download"}
+                  </button>
+                  <button type="button" disabled={busy !== null} onClick={() => void deleteArtifact(artifact.id, artifact.name)} className="rounded-lg border border-destructive px-3 py-2 text-sm font-medium text-destructive disabled:opacity-50">
+                    Delete
+                  </button>
                 </div>
               </article>
             ))}
