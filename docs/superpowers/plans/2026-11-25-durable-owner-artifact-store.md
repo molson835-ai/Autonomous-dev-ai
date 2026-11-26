@@ -27,6 +27,8 @@
 - Owner routes must reject non-owner credentials and must never appear in public CORS.
 - Stored content must be the validator-produced CSP-injected HTML, not unvalidated input.
 - Aggregate-cap and item-cap checks must be enforced before insertion and must not overwrite existing rows.
+- Artifact creation requires a stable UUID idempotency key; exact retries return the original row.
+- Persist SHA-256 of stored CSP-injected HTML and verify it on every detail read.
 
 ---
 
@@ -51,17 +53,17 @@
 - Test: memory/worker/test/artifact-store.test.ts
 
 **Interfaces:**
-- POST /v1/artifacts accepts {name, content}; returns artifact metadata and UUID.
+- POST /v1/artifacts accepts {name, content, idempotency_key}; returns artifact metadata, UUID, and SHA-256.
 - GET /v1/artifacts/:uuid returns stored artifact content to the authenticated agent service.
 - GET /v1/owner/artifacts returns metadata only.
 - GET /v1/owner/artifacts/:uuid returns owner-download content.
 - POST /v1/owner/artifacts/:uuid/delete deletes only the exact UUID after owner authorization.
 
-- [ ] Add artifacts table and indexes without changing existing tables.
-- [ ] Add a route-specific 96 KiB body limit for artifact creation.
-- [ ] Validate HTML at the Worker boundary, enforce 64 KiB/20-item/1 MiB caps, and persist CSP-injected HTML.
-- [ ] Make create_artifact persist after validation and return the durable artifact ID.
-- [ ] Add read-only get_artifact with UUID input validation.
+- [x] Add artifacts table, idempotency index, and SHA-256 column without changing existing tables.
+- [x] Add a route-specific 96 KiB body limit for artifact creation.
+- [x] Validate HTML at the Worker boundary, enforce 64 KiB/20-item/1 MiB caps, persist CSP-injected HTML, and hash it.
+- [x] Make create_artifact persist after validation and return the durable artifact ID with idempotency protection.
+- [x] Add read-only get_artifact with UUID input validation and integrity verification.
 - [ ] Add get_artifact to the source-defined tool inventory.
 - [ ] Run Worker Vitest suite, npm test, typecheck, and Eve build.
 
