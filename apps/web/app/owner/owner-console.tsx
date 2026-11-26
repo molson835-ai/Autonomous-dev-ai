@@ -133,6 +133,7 @@ export default function OwnerConsole() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
   const [artifacts, setArtifacts] = useState<ArtifactSummary[]>([]);
+  const [artifactStoreAvailable, setArtifactStoreAvailable] = useState(true);
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const [quotaStatus, setQuotaStatus] = useState<QuotaStatus | null>(null);
   const [tavilyCreditStatus, setTavilyCreditStatus] = useState<TavilyCreditStatus | null>(null);
@@ -155,14 +156,15 @@ export default function OwnerConsole() {
         ownerRequest<{ proposals: Proposal[] }>("/v1/owner/proposals?limit=30"),
         ownerRequest<QueueStatus>("/v1/owner/status"),
         ownerRequest<{ resources: Resource[] }>("/v1/owner/resources?limit=50"),
-        ownerRequest<{ artifacts: ArtifactSummary[] }>("/v1/owner/artifacts?limit=20"),
+        ownerRequest<{ artifacts: ArtifactSummary[] }>("/v1/owner/artifacts?limit=20").catch(() => null),
         ownerRequest<QuotaStatus>("/v1/owner/quota/status").catch(() => null),
         ownerRequest<TavilyCreditStatus>("/v1/owner/research/credits/status").catch(() => null),
       ]);
       setTasks(taskData.tasks);
       setProposals(proposalData.proposals);
       setResources(resourceData.resources);
-      setArtifacts(artifactData.artifacts);
+      setArtifacts(artifactData?.artifacts ?? []);
+      setArtifactStoreAvailable(artifactData !== null);
       setQueueStatus(statusData);
       setQuotaStatus(quotaData);
       setTavilyCreditStatus(tavilyData);
@@ -333,6 +335,7 @@ export default function OwnerConsole() {
     setProposals([]);
     setResources([]);
     setArtifacts([]);
+    setArtifactStoreAvailable(true);
     setQueueStatus(null);
     setQuotaStatus(null);
     setTavilyCreditStatus(null);
@@ -620,6 +623,7 @@ export default function OwnerConsole() {
               <span className="text-sm text-muted-foreground">{artifacts.length} stored</span>
             </div>
             <p className="text-sm text-muted-foreground">Validated HTML deliverables saved by Eve. Only the verified owner can list, download, or delete them; there are no public artifact links.</p>
+            {!artifactStoreAvailable && <p role="status" className="rounded-lg border bg-muted p-3 text-sm">Artifact storage is not available from the Worker yet. Deploy the matching Worker update before using this section. Other Owner Console controls remain available.</p>}
             {artifacts.length === 0 && <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">No stored artifacts yet.</p>}
             {artifacts.map(artifact => (
               <article key={artifact.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4">
