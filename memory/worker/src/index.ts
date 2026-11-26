@@ -92,11 +92,8 @@ function boundedLimit(value: string | null, fallback = 8): number {
 }
 
 export class MemoryStore extends DurableObject<Env> {
-  private readonly env: Env;
-
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    this.env = env;
     ctx.blockConcurrencyWhile(async () => {
       ctx.storage.sql.exec(
         "CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, kind TEXT NOT NULL, content TEXT NOT NULL, source TEXT NOT NULL, confidence REAL NOT NULL, status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
