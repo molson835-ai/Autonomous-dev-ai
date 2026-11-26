@@ -32,7 +32,8 @@ test("stated willingness to pay remains separate from a transaction", () => {
   assert.equal(result.status, "willingness_to_pay_stated");
   assert.equal(result.verifiedPayments.length, 0);
 });
-\ntest("completed user test is recorded without implying payment", () => {
+
+test("completed user test is recorded without implying payment", () => {
   const result = assessRevenueExperiment({
     evidence: [{ id: "t1", type: "completed_user_test", statement: "User completed count workflow", observedAt: at }],
   });
