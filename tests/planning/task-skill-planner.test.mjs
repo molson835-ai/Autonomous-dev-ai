@@ -180,3 +180,17 @@ test("intake does not accept high-confidence quota claims without dated official
     quota_evidence: { source_url: "unknown", checked_at: "unknown", limits: "unknown", confidence: "high" }
   }), /High-confidence quota evidence/);
 });
+
+test("planner treats whitespace-only provenance as missing evidence", () => {
+  const report = planTaskSkills({
+    task: "Inspect incomplete metadata",
+    requirements: [{ skill: "typescript", requiredStatus: "untested", acceptanceCriteria: criteria }],
+    skillEvidence: [],
+    resources: [resource({ maintainer: " ", version_or_revision: " ", license: " " })],
+  });
+  const selected = report.skills[0].matchingResources[0];
+  assert.equal(selected.licenseKnown, false);
+  assert.ok(selected.missingReviewEvidence.includes("maintainer"));
+  assert.ok(selected.missingReviewEvidence.includes("revision"));
+  assert.ok(selected.missingReviewEvidence.includes("license"));
+});
