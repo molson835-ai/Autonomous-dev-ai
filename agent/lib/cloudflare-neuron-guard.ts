@@ -1,6 +1,6 @@
 import type { LanguageModelV4Middleware } from "@ai-sdk/provider";
 import { memoryRequest } from "./memory-client";
-import { estimateGlm47FlashNeurons } from "./neuron-budget.mjs";
+import { buildQuotaSettlement } from "./neuron-budget.mjs";
 import { handleStreamReadFailure } from "./stream-quota-error.mjs";
 import { summarizeModelInput } from "./model-input-profile.mjs";
 const MODEL_ID = "@cf/zai-org/glm-4.7-flash";
@@ -40,11 +40,15 @@ function logInputProfile(
     provider_output_tokens: usage?.outputTokens?.total ?? null,
   });
 }
-async function settle(id: string, usage?: { inputTokens?: { total?: number }; outputTokens?: { total?: number } }) {
-  await memoryRequest("/v1/quota/settle", { method: "POST", body: {
-    reservation_id: id,
-    actual_neurons: estimateGlm47FlashNeurons(usage?.inputTokens?.total, usage?.outputTokens?.total),
-  }});
+async function settle(
+  id: string,
+  usage?: { inputTokens?: { total?: number }; outputTokens?: { total?: number } },
+  reason: "completed" | "provider_error" | "stream_interrupted" | "cancelled" = "stream_interrupted",
+) {
+  await memoryRequest("/v1/quota/settle", {
+    method: "POST",
+    body: { reservation_id: id, ...buildQuotaSettlement(usage, reason) },
+  });
 }
 async function circuit(id: string) {
   try { await memoryRequest("/v1/quota/circuit", { method: "POST", body: {
@@ -53,7 +57,7 @@ async function circuit(id: string) {
 }
 function isQuotaError(error: unknown) {
   const e = error as any;
-  return /\b4006\b|daily free allocation|neurons? (?:allocation|limit|quota|exhausted)/i
+  return /\\b4006\\b|daily free allocation|neurons? (?:allocation|limit|quota|exhausted)/i
     .test([e?.code,e?.message,e?.cause?.code,e?.cause?.message].join(" "));
 }
 export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
@@ -66,16 +70,16 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
       const id = await reserve();
       let result;
       try { result = await doGenerate(); }
-      catch (error) { logInputProfile(params); if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id); throw error; }
+      catch (error) { logInputProfile(params); if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id, undefined, "provider_error"); throw error; }
       logInputProfile(params, result.usage);
-      await settle(id, result.usage);
+      await settle(id, result.usage, "completed");
       return result;
     },
     wrapStream: async ({ doStream, params }) => {
       const id = await reserve();
       let result;
       try { result = await doStream(); }
-      catch (error) { logInputProfile(params); if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id); throw error; }
+      catch (error) { logInputProfile(params); if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id, undefined, "provider_error"); throw error; }
       let settled = false;
       let profiled = false;
       const profileOnce = (usage?: { inputTokens?: { total?: number }; outputTokens?: { total?: number } }) => {
@@ -90,7 +94,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
             const next = await reader.read();
             if (next.done) {
               profileOnce();
-              if (!settled) { settled = true; await settle(id); }
+              if (!settled) { settled = true; await settle(id, undefined, "completed"); }
               reader.releaseLock();
               controller.close();
               return;
@@ -98,7 +102,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
             if (next.value.type === "finish" && !settled) {
               settled = true;
               profileOnce(next.value.usage);
-              await settle(id, next.value.usage);
+              await settle(id, next.value.usage, "completed");
             }
             controller.enqueue(next.value);
           } catch (error) {
@@ -109,7 +113,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
                 await handleStreamReadFailure({
                   error,
                   reservationId: id,
-                  settle: async (reservationId) => settle(reservationId),
+                  settle: async (reservationId) => settle(reservationId, undefined, "stream_interrupted"),
                   circuit: async (reservationId) => circuit(reservationId),
                   isQuotaError,
                   nonRetryableQuotaError,
@@ -126,7 +130,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
           try { await reader.cancel(reason); }
           finally {
             profileOnce();
-            if (!settled) { settled = true; await settle(id); }
+            if (!settled) { settled = true; await settle(id, undefined, "cancelled"); }
             try { reader.releaseLock(); } catch { /* Reader may already be released. */ }
           }
         },
