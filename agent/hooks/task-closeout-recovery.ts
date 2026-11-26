@@ -17,9 +17,9 @@ export default defineHook({
 
       try {
         assertProductionTaskRuntime();
-        const next_run_at = recovery.resumeAfterMinutes === undefined
+        const next_run_at = recovery.resumeAfterSeconds === undefined
           ? undefined
-          : new Date(ctx.now.getTime() + recovery.resumeAfterMinutes * 60_000).toISOString();
+          : new Date(ctx.now.getTime() + recovery.resumeAfterSeconds * 1000).toISOString();
         await memoryRequest(`v1/tasks/${encodeURIComponent(recovery.taskId)}/transition`, {
           method: "POST",
           body: {

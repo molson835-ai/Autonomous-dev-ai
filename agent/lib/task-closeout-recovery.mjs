@@ -56,7 +56,7 @@ export function recoverableTaskCloseout({
   return {
     taskId: task.id,
     status,
-    ...(canContinue ? { resumeAfterMinutes: 1320 } : {}),
+    ...(canContinue ? { resumeAfterSeconds: 5 } : {}),
     checkpointSummary,
   };
 }

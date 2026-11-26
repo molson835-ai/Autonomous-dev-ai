@@ -135,6 +135,8 @@ export class MemoryStore extends DurableObject<Env> {
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS tavily_credit_reservations (id TEXT PRIMARY KEY, month TEXT NOT NULL, reserved_credits REAL NOT NULL, created_at TEXT NOT NULL)");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS tavily_credit_reservations_month ON tavily_credit_reservations(month)");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS tasks_status_created ON tasks(status, created_at)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS task_wakeup_attempts (operation_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, next_run_at TEXT NOT NULL, attempted_at TEXT NOT NULL)");
+      ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS task_wakeup_attempts_task ON task_wakeup_attempts(task_id, next_run_at)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS resources (id TEXT PRIMARY KEY, resource_json TEXT NOT NULL, trust_state TEXT NOT NULL CHECK (trust_state IN ('quarantined','reviewed','approved','rejected','stale')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, reviewer TEXT, reviewed_at TEXT, review_evidence TEXT NOT NULL DEFAULT '[]')");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS resources_state_updated ON resources(trust_state, updated_at DESC)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, name TEXT NOT NULL, filename TEXT NOT NULL, media_type TEXT NOT NULL CHECK (media_type = 'text/html'), content TEXT NOT NULL, bytes INTEGER NOT NULL CHECK (bytes BETWEEN 1 AND 70000), created_at TEXT NOT NULL, idempotency_key TEXT, sha256 TEXT)");
@@ -146,14 +148,110 @@ export class MemoryStore extends DurableObject<Env> {
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS csv_artifacts (id TEXT PRIMARY KEY, name TEXT NOT NULL, filename TEXT NOT NULL, media_type TEXT NOT NULL CHECK (media_type = 'text/csv; charset=utf-8'), content TEXT NOT NULL, bytes INTEGER NOT NULL CHECK (bytes BETWEEN 1 AND 65536), created_at TEXT NOT NULL, idempotency_key TEXT, sha256 TEXT)");
       ctx.storage.sql.exec("CREATE UNIQUE INDEX IF NOT EXISTS csv_artifacts_idempotency_key ON csv_artifacts(idempotency_key) WHERE idempotency_key IS NOT NULL");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS csv_artifacts_created ON csv_artifacts(created_at DESC)");
+      await this.scheduleTaskWakeup();
     });
+  }
+
+  private async scheduleTaskWakeup(): Promise<void> {
+    const control = this.ctx.storage.sql.exec<{ queue_paused: number }>("SELECT queue_paused FROM task_control WHERE id=1").one();
+    const running = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='running'").one().count;
+    if (control.queue_paused === 1 || running > 0) {
+      await this.ctx.storage.deleteAlarm();
+      return;
+    }
+    const next = this.ctx.storage.sql.exec<{ next_run_at: string }>(
+      "SELECT MIN(t.next_run_at) AS next_run_at FROM tasks t WHERE t.status='waiting' AND t.owner_approved=1 AND t.mission_authorized=0 AND t.attempt_count<t.max_attempts AND t.step_count<t.max_steps AND t.next_run_at IS NOT NULL AND NOT EXISTS (SELECT 1 FROM task_wakeup_attempts w WHERE w.task_id=t.id AND w.next_run_at=t.next_run_at)"
+    ).toArray()[0];
+    if (!next?.next_run_at) {
+      await this.ctx.storage.deleteAlarm();
+      return;
+    }
+    const dueAt = Date.parse(next.next_run_at);
+    if (!Number.isFinite(dueAt)) {
+      await this.ctx.storage.deleteAlarm();
+      return;
+    }
+    await this.ctx.storage.setAlarm(Math.max(Date.now() + 1000, dueAt));
+  }
+
+  async alarm(): Promise<void> {
+    const now = new Date().toISOString();
+    const control = this.ctx.storage.sql.exec<{ queue_paused: number }>("SELECT queue_paused FROM task_control WHERE id=1").one();
+    const running = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='running'").one().count;
+    if (control.queue_paused === 1 || running > 0) {
+      await this.scheduleTaskWakeup();
+      return;
+    }
+    const due = this.ctx.storage.sql.exec<TaskRow>(
+      "SELECT t.* FROM tasks t WHERE t.status='waiting' AND t.owner_approved=1 AND t.mission_authorized=0 AND t.attempt_count<t.max_attempts AND t.step_count<t.max_steps AND t.next_run_at IS NOT NULL AND t.next_run_at<=? AND NOT EXISTS (SELECT 1 FROM task_wakeup_attempts w WHERE w.task_id=t.id AND w.next_run_at=t.next_run_at) ORDER BY t.next_run_at ASC LIMIT 1",
+      now
+    ).toArray()[0];
+    if (!due) {
+      await this.scheduleTaskWakeup();
+      return;
+    }
+    if (!this.env.MEMORY_API_TOKEN) throw new Error("Task wake-up credential is not configured.");
+    const operationId = `eve-task-${due.id}-${Date.parse(due.next_run_at ?? now)}`;
+    const recorded = this.ctx.storage.sql.exec<{ operation_id: string }>(
+      "INSERT OR IGNORE INTO task_wakeup_attempts (operation_id,task_id,next_run_at,attempted_at) VALUES (?,?,?,?) RETURNING operation_id",
+      operationId, due.id, due.next_run_at ?? now, now
+    ).toArray();
+    if (recorded.length !== 1) {
+      await this.scheduleTaskWakeup();
+      return;
+    }
+    const response = await fetch("https://autonomous-dev-ai.vercel.app/api/internal/task-wakeup", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer " + this.env.MEMORY_API_TOKEN,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ task_id: due.id, next_run_at: due.next_run_at, operation_id: operationId }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (response.status >= 500 || response.status === 429) {
+      throw new Error("Task wake-up endpoint returned a retryable server response.");
+    }
+    if (!response.ok) {
+      console.error("Eve task wake-up was rejected; the daily schedule remains the fallback.", {
+        taskId: due.id,
+        status: response.status,
+      });
+      return;
+    }
+    const payload: unknown = await response.json().catch(() => null);
+    if (payload && typeof payload === "object" && "accepted" in payload && payload.accepted === false && "skipped" in payload && payload.skipped === true) {
+      // No session was started. Release the one-shot guard so a later owner
+      // resume can schedule this checkpoint again.
+      this.ctx.storage.sql.exec("DELETE FROM task_wakeup_attempts WHERE operation_id=?", operationId);
+      await this.scheduleTaskWakeup();
+      return;
+    }
+    if (!payload || typeof payload !== "object" || !("accepted" in payload) || payload.accepted !== true) {
+      await this.scheduleTaskWakeup();
+    }
   }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const now = new Date().toISOString();
 
-
+    if (request.method === "GET" && url.pathname === "/v1/internal/wakeup-status") {
+      const taskId = url.searchParams.get("task_id") ?? "";
+      const expectedNextRunAt = url.searchParams.get("next_run_at") ?? "";
+      if (!/^[0-9a-f-]{36}$/i.test(taskId) || !Number.isFinite(Date.parse(expectedNextRunAt))) {
+        return json({ error: "Invalid wake-up status query." }, 400);
+      }
+      const control = this.ctx.storage.sql.exec<{ queue_paused: number }>("SELECT queue_paused FROM task_control WHERE id=1").one();
+      const running = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='running'").one().count;
+      const row = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE id=? LIMIT 1", taskId).toArray()[0];
+      const task = row ? taskFromRow(row) : null;
+      const eligible = control.queue_paused === 0 && running === 0 && !!task &&
+        task.status === "waiting" && task.owner_approved === true && task.mission_authorized === false &&
+        task.attempt_count < task.max_attempts && task.step_count < task.max_steps &&
+        task.next_run_at === expectedNextRunAt && Date.parse(expectedNextRunAt) <= Date.parse(now);
+      return json({ eligible, queue_paused: control.queue_paused === 1, running_tasks: running });
+    }
 
     if (request.method === "POST" && url.pathname === "/v1/research/credits/reserve") {
       const body = await readBody(request);
@@ -455,6 +553,7 @@ export class MemoryStore extends DurableObject<Env> {
         paused ? 1 : 0, paused ? (body.reason ?? "Paused by owner") : null, now
       ).toArray();
       if (updated.length !== 1) return json({ error: "Owner control state unavailable." }, 503);
+      await this.scheduleTaskWakeup();
       return json({ queue_paused: paused, reason: paused ? (body.reason ?? "Paused by owner") : null });
     }
 
@@ -594,6 +693,7 @@ export class MemoryStore extends DurableObject<Env> {
       const claimed = transitionTask(selected, "running", { now });
       const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status='running', step_count=?, updated_at=?, started_at=COALESCE(started_at,?), next_run_at=NULL WHERE id=? AND status=? AND owner_approved=1 AND mission_authorized=0 AND attempt_count<max_attempts AND step_count<max_steps RETURNING id", claimed.step_count, now, now, selected.id, selected.status).toArray();
       if (updated.length !== 1) return json({ error: "Task claim state conflict." }, 409);
+      await this.scheduleTaskWakeup();
       return json({ task: claimed });
     }
 
@@ -627,6 +727,7 @@ export class MemoryStore extends DurableObject<Env> {
       catch { return json({ error: "Invalid task state transition." }, 409); }
       const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status=?, owner_approved=?, updated_at=?, next_run_at=NULL, finished_at=? WHERE id=? AND status=? RETURNING id", next.status, next.owner_approved ? 1 : 0, now, next.finished_at ?? null, current.id, current.status).toArray();
       if (updated.length !== 1) return json({ error: "Task state conflict." }, 409);
+      await this.scheduleTaskWakeup();
       return json({ task: next });
     }
 
@@ -671,6 +772,7 @@ export class MemoryStore extends DurableObject<Env> {
       }
       const update = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status=?,owner_approved=?,updated_at=?,attempt_count=?,next_run_at=?,checkpoint_summary=?,result_summary=?,evidence_refs=?,started_at=?,finished_at=? WHERE id=? AND status=? RETURNING id", next.status, next.owner_approved ? 1 : 0, next.updated_at, next.attempt_count, next.next_run_at, next.checkpoint_summary, next.result_summary, JSON.stringify(next.evidence_refs), next.started_at ?? null, next.finished_at ?? null, current.id, current.status).toArray();
       if (update.length !== 1) return json({ error: "The task state changed before the transition could be saved.", reason_code: "task_state_conflict" }, 409);
+      await this.scheduleTaskWakeup();
       return json({ task: next });
     }
 
