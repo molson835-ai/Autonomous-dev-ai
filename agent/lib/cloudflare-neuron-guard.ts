@@ -2,6 +2,7 @@ import type { LanguageModelV4Middleware } from "@ai-sdk/provider";
 import { memoryRequest } from "./memory-client";
 import { estimateGlm47FlashNeurons } from "./neuron-budget.mjs";
 import { handleStreamReadFailure } from "./stream-quota-error.mjs";
+import { summarizeModelInput } from "./model-input-profile.mjs";
 const MODEL_ID = "@cf/zai-org/glm-4.7-flash";
 const MAX_OUTPUT_TOKENS = 1024;
 const RESERVATION_NEURONS = 200;
@@ -27,6 +28,18 @@ async function reserve() {
   if (!result?.reservation_id) return stop("Shared quota reservation was not issued.");
   return result.reservation_id;
 }
+function logInputProfile(
+  params: { prompt?: unknown[]; tools?: unknown[] },
+  usage?: { inputTokens?: { total?: number }; outputTokens?: { total?: number } },
+) {
+  console.info("EVE_MODEL_INPUT_PROFILE", {
+    model: MODEL_ID,
+    environment: process.env.VERCEL_ENV ?? "unknown",
+    ...summarizeModelInput(params as Parameters<typeof summarizeModelInput>[0]),
+    provider_input_tokens: usage?.inputTokens?.total ?? null,
+    provider_output_tokens: usage?.outputTokens?.total ?? null,
+  });
+}
 async function settle(id: string, usage?: { inputTokens?: { total?: number }; outputTokens?: { total?: number } }) {
   await memoryRequest("/v1/quota/settle", { method: "POST", body: {
     reservation_id: id,
@@ -49,26 +62,34 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
     transformParams: async ({ params }) => ({
       ...params, maxOutputTokens: Math.min(params.maxOutputTokens ?? MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS),
     }),
-    wrapGenerate: async ({ doGenerate }) => {
+    wrapGenerate: async ({ doGenerate, params }) => {
       const id = await reserve();
       let result;
       try { result = await doGenerate(); }
-      catch (error) { if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id); throw error; }
+      catch (error) { logInputProfile(params); if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id); throw error; }
+      logInputProfile(params, result.usage);
       await settle(id, result.usage);
       return result;
     },
-    wrapStream: async ({ doStream }) => {
+    wrapStream: async ({ doStream, params }) => {
       const id = await reserve();
       let result;
       try { result = await doStream(); }
-      catch (error) { if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id); throw error; }
+      catch (error) { logInputProfile(params); if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id); throw error; }
       let settled = false;
+      let profiled = false;
+      const profileOnce = (usage?: { inputTokens?: { total?: number }; outputTokens?: { total?: number } }) => {
+        if (profiled) return;
+        profiled = true;
+        logInputProfile(params, usage);
+      };
       const reader = result.stream.getReader();
       const stream = new ReadableStream({
         async pull(controller) {
           try {
             const next = await reader.read();
             if (next.done) {
+              profileOnce();
               if (!settled) { settled = true; await settle(id); }
               reader.releaseLock();
               controller.close();
@@ -76,12 +97,14 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
             }
             if (next.value.type === "finish" && !settled) {
               settled = true;
+              profileOnce(next.value.usage);
               await settle(id, next.value.usage);
             }
             controller.enqueue(next.value);
           } catch (error) {
             if (!settled) {
               settled = true;
+              profileOnce();
               try {
                 await handleStreamReadFailure({
                   error,
@@ -102,6 +125,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
         async cancel(reason) {
           try { await reader.cancel(reason); }
           finally {
+            profileOnce();
             if (!settled) { settled = true; await settle(id); }
             try { reader.releaseLock(); } catch { /* Reader may already be released. */ }
           }
