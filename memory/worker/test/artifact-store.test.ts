@@ -155,7 +155,7 @@ test("enforces the one-megabyte aggregate content cap", async () => {
     stored++;
   }
   expect(stored).toBeGreaterThan(0);
-  expect(stored).toBeLessThan(25);
+  expect(stored).toBeLessThan(20);
   const blocked = await request("/v1/artifacts", { method: "POST", body: JSON.stringify({ name: "Aggregate overflow", content: largeHtml }) });
   expect(blocked.status).toBe(429);
 });
