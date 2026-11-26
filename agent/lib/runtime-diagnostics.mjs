@@ -4,6 +4,7 @@ export const SOURCE_DEFINED_TOOL_NAMES = Object.freeze([
   "data_workbench",
   "discover_resources",
   "evaluate_opportunity",
+  "get_artifact",
   "memory_decide",
   "memory_propose",
   "memory_recall",
