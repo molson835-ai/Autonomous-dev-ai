@@ -307,6 +307,16 @@ export class MemoryStore extends DurableObject<Env> {
       this.ctx.storage.sql.exec("DELETE FROM tavily_credit_reservations WHERE id=?", reservation.id);
       return json({ settled: true, month: reservation.month, charged_credits: charged });
     }
+    if (request.method === "GET" && url.pathname === "/v1/owner/quota/calls") {
+      const limit = boundedLimit(url.searchParams.get("limit"), 50);
+      const day = url.searchParams.get("day") ?? now.slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return json({ error: "Invalid quota ledger day." }, 400);
+      const calls = this.ctx.storage.sql.exec<{
+        reservation_id:string; day:string; settled_at:string; model_id:string; input_tokens:number|null;
+        output_tokens:number|null; estimated_neurons:number; accounting_source:string; settlement_reason:string;
+      }>("SELECT reservation_id,day,settled_at,model_id,input_tokens,output_tokens,estimated_neurons,accounting_source,settlement_reason FROM quota_call_ledger WHERE day=? ORDER BY settled_at DESC LIMIT ?", day, limit).toArray();
+      return json({ day, source: "eve_durable_object_per_call_estimate_ledger_not_provider_account_telemetry", retention_days: 30, count: calls.length, calls });
+    }
     if (request.method === "GET" && ["/v1/quota/status", "/v1/owner/quota/status"].includes(url.pathname)) {
       const day = now.slice(0, 10);
       const daily = this.ctx.storage.sql.exec<{
@@ -1012,7 +1022,7 @@ export default {
     const ownerResourceDecisionRoute = request.method === "POST" && /^\/v1\/owner\/resources\/[a-z0-9][a-z0-9._:-]{0,159}\/decision$/.test(url.pathname);
     const ownerArtifactDeleteRoute = request.method === "POST" && /^\/v1\/owner\/artifacts\/[0-9a-f-]{36}\/delete$/i.test(url.pathname);
     const ownerArtifactReadRoute = request.method === "GET" && (/^\/v1\/owner\/artifacts$/i.test(url.pathname) || /^\/v1\/owner\/artifacts\/[0-9a-f-]{36}$/i.test(url.pathname));
-    const ownerReadRoute = request.method === "GET" && (["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status", "/v1/owner/resources", "/v1/owner/quota/status", "/v1/owner/research/credits/status"].includes(url.pathname) || ownerArtifactReadRoute);
+    const ownerReadRoute = request.method === "GET" && (["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status", "/v1/owner/resources", "/v1/owner/quota/status", "/v1/owner/quota/calls", "/v1/owner/research/credits/status"].includes(url.pathname) || ownerArtifactReadRoute);
     const ownerQueueControlRoute = request.method === "POST" && url.pathname === "/v1/owner/control";
     const ownerTaskCreateRoute = request.method === "POST" && url.pathname === "/v1/owner/tasks";
     const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute || ownerMemoryDecisionRoute || ownerResourceDecisionRoute || ownerArtifactDeleteRoute || ownerReadRoute || ownerQueueControlRoute || ownerTaskCreateRoute;
