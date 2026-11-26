@@ -10,7 +10,7 @@ const tool = defineTool({
   async execute(input) {
     const validated = validateHtmlArtifact({ name: input.name, content: input.content });
     if (!validated.valid) return validated;
-    const stored = await memoryRequest<{ stored: boolean; artifact: { id: string; name: string; filename: string; media_type: string; bytes: number; created_at: string; sha256: string } }>(
+    const stored = await memoryRequest<{ stored: boolean; duplicate: boolean; artifact: { id: string; name: string; filename: string; media_type: string; bytes: number; created_at: string; sha256: string } }>(
       "v1/artifacts",
       { method: "POST", body: input },
     );
