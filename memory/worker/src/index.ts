@@ -376,7 +376,8 @@ export class MemoryStore extends DurableObject<Env> {
 
     const artifactMatch = url.pathname.match(/^\/v1\/artifacts\/([0-9a-f-]{36})$/i);
     if (request.method === "GET" && artifactMatch) {
-      const row = this.ctx.storage.sql.exec<ArtifactRow>("SELECT * FROM artifacts WHERE id=? LIMIT 1", artifactMatch[1]).toArray()[0];
+      const row = this.ctx.storage.sql.exec<ArtifactRow>("SELECT * FROM artifacts WHERE id=? LIMIT 1", artifactMatch[1]).toArray()[0]
+        ?? this.ctx.storage.sql.exec<ArtifactRow>("SELECT * FROM csv_artifacts WHERE id=? LIMIT 1", artifactMatch[1]).toArray()[0];
       if (!row) return json({ error: "Artifact not found." }, 404);
       const digest = await sha256Hex(row.content);
       if (row.sha256 && row.sha256 !== digest) return json({ error: "Stored artifact integrity check failed.", reason_code: "artifact_integrity_mismatch" }, 500);
