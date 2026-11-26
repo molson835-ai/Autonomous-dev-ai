@@ -314,7 +314,7 @@ export class MemoryStore extends DurableObject<Env> {
       const calls = this.ctx.storage.sql.exec<{
         reservation_id:string; day:string; settled_at:string; model_id:string; input_tokens:number|null;
         output_tokens:number|null; estimated_neurons:number; accounting_source:string; settlement_reason:string;
-      }>("SELECT reservation_id,day,settled_at,model_id,input_tokens,output_tokens,estimated_neurons,accounting_source,settlement_reason FROM quota_call_ledger WHERE day=? ORDER BY settled_at DESC LIMIT ?", day, limit).toArray();
+      }>("SELECT reservation_id,day,settled_at,model_id,input_tokens,output_tokens,estimated_neurons,accounting_source,settlement_reason FROM quota_call_ledger WHERE day=? ORDER BY settled_at DESC, rowid DESC LIMIT ?", day, limit).toArray();
       return json({ day, source: "eve_durable_object_per_call_estimate_ledger_not_provider_account_telemetry", retention_days: 30, count: calls.length, calls });
     }
     if (request.method === "GET" && ["/v1/quota/status", "/v1/owner/quota/status"].includes(url.pathname)) {
