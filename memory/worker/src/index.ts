@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { compareOwnerClientId, diagnosticSharedSecretReason, ownerAuthConfigurationReason, verifyOwnerGithubToken, type OwnerAuthReasonCode } from "./owner-auth";
 import { isSafeMemoryText, normalizeMemoryQuery } from "../../../agent/lib/memory-policy.mjs";
+import { validateHtmlArtifact } from "../../../agent/lib/artifact-policy.mjs";
 import { prepareResourceCandidate } from "../../../agent/resources/intake.mjs";
 import { ensureExperienceExternalIdColumn, findExperienceByExternalId } from "../../../agent/lib/memory-schema.mjs";
 import { createTaskRecord, isMissionAuthorizedTask, isTaskLeaseExpired, selectNextTask, TASK_STATUS_VALUES, transitionTask } from "../../../agent/lib/task-lifecycle.mjs";
@@ -14,6 +15,11 @@ interface Env {
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_ANALYTICS_API_TOKEN?: string;
 }
+
+type ArtifactRow = { id: string; name: string; filename: string; media_type: string; content: string; bytes: number; created_at: string; };
+const MAX_ARTIFACT_COUNT = 25;
+const MAX_ARTIFACT_TOTAL_BYTES = 1_048_576;
+const MAX_ARTIFACT_REQUEST_BYTES = 96_000;
 
 type MemoryRow = {
   id: string; kind: string; content: string; source: string;
@@ -42,9 +48,9 @@ function constantTimeEqual(left: string, right: string): boolean {
   return mismatch === 0;
 }
 
-async function readBody(request: Request): Promise<Record<string, unknown> | null> {
+async function readBody(request: Request, maxBytes = 16_000): Promise<Record<string, unknown> | null> {
   const raw = await request.text();
-  if (new TextEncoder().encode(raw).byteLength > 16_000) return null;
+  if (new TextEncoder().encode(raw).byteLength > maxBytes) return null;
   try {
     const value: unknown = JSON.parse(raw);
     return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -106,6 +112,8 @@ export class MemoryStore extends DurableObject<Env> {
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS tasks_status_created ON tasks(status, created_at)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS resources (id TEXT PRIMARY KEY, resource_json TEXT NOT NULL, trust_state TEXT NOT NULL CHECK (trust_state IN ('quarantined','reviewed','approved','rejected','stale')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, reviewer TEXT, reviewed_at TEXT, review_evidence TEXT NOT NULL DEFAULT '[]')");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS resources_state_updated ON resources(trust_state, updated_at DESC)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, name TEXT NOT NULL, filename TEXT NOT NULL, media_type TEXT NOT NULL CHECK (media_type = 'text/html'), content TEXT NOT NULL, bytes INTEGER NOT NULL CHECK (bytes BETWEEN 1 AND 70000), created_at TEXT NOT NULL)");
+      ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS artifacts_created ON artifacts(created_at DESC)");
     });
   }
 
