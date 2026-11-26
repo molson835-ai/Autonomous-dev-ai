@@ -20,7 +20,7 @@ interface Env {
 type ArtifactRow = { id: string; name: string; filename: string; media_type: string; content: string; bytes: number; created_at: string; idempotency_key: string | null; sha256: string | null; };
 const MAX_ARTIFACT_COUNT = 20;
 const MAX_ARTIFACT_TOTAL_BYTES = 1_048_576;
-const MAX_ARTIFACT_REQUEST_BYTES = 96_000;
+const MAX_ARTIFACT_REQUEST_BYTES = 160_000;
 
 type MemoryRow = {
   id: string; kind: string; content: string; source: string;
