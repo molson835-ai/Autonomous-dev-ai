@@ -805,10 +805,12 @@ export default {
     const ownerControlRoute = request.method === "POST" && /^\/v1\/tasks\/[0-9a-f-]{36}\/owner-control$/i.test(url.pathname);
     const ownerMemoryDecisionRoute = request.method === "POST" && /^\/v1\/proposals\/[0-9a-f-]{36}\/decision$/i.test(url.pathname);
     const ownerResourceDecisionRoute = request.method === "POST" && /^\/v1\/owner\/resources\/[a-z0-9][a-z0-9._:-]{0,159}\/decision$/.test(url.pathname);
-    const ownerReadRoute = request.method === "GET" && ["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status", "/v1/owner/resources", "/v1/owner/quota/status", "/v1/owner/research/credits/status"].includes(url.pathname);
+    const ownerArtifactDeleteRoute = request.method === "POST" && /^\/v1\/owner\/artifacts\/[0-9a-f-]{36}\/delete$/i.test(url.pathname);
+    const ownerArtifactReadRoute = request.method === "GET" && (/^\/v1\/owner\/artifacts$/i.test(url.pathname) || /^\/v1\/owner\/artifacts\/[0-9a-f-]{36}$/i.test(url.pathname));
+    const ownerReadRoute = request.method === "GET" && (["/v1/owner/tasks", "/v1/owner/proposals", "/v1/owner/status", "/v1/owner/resources", "/v1/owner/quota/status", "/v1/owner/research/credits/status"].includes(url.pathname) || ownerArtifactReadRoute);
     const ownerQueueControlRoute = request.method === "POST" && url.pathname === "/v1/owner/control";
     const ownerTaskCreateRoute = request.method === "POST" && url.pathname === "/v1/owner/tasks";
-    const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute || ownerMemoryDecisionRoute || ownerResourceDecisionRoute || ownerReadRoute || ownerQueueControlRoute || ownerTaskCreateRoute;
+    const ownerOnlyRoute = ownerApprovalRoute || ownerControlRoute || ownerMemoryDecisionRoute || ownerResourceDecisionRoute || ownerArtifactDeleteRoute || ownerReadRoute || ownerQueueControlRoute || ownerTaskCreateRoute;
     const ownerOrigin = "https://autonomous-dev-ai.vercel.app";
     const origin = request.headers.get("origin");
     const withOwnerCors = (response: Response) => {
