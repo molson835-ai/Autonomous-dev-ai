@@ -11,7 +11,7 @@ Allow Eve to preserve reusable HTML research reports and product deliverables be
 - Keep agent writes behind the existing canUseWriteTools gate.
 - Allow Eve to retrieve artifacts by UUID through a read-only tool.
 - Expose owner-authenticated list, detail/download, and explicit delete controls.
-- Bound each artifact to 64 KiB original HTML, at most 25 stored items, and 1 MiB aggregate stored content.
+- Bound each artifact to 64 KiB original HTML, at most 20 stored items, and 1 MiB aggregate stored content.
 - Preserve task, memory, quota, and resource records unchanged.
 
 ## Non-goals
