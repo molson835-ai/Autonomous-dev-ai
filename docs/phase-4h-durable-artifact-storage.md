@@ -22,4 +22,4 @@ The Owner Console lists stored artifacts with name, filename, size, creation tim
 
 ## Verification boundary
 
-Worker integration tests cover persistence, agent read-back, owner-only listing/download/delete, invalid HTML, request bounds, item caps, and aggregate storage limits. CI type-checks the Owner Console and agent tools. Deployment of the Vercel app and Worker is separately gated; this feature does not authorize either deployment or any Eve task run.
+Worker integration tests cover persistence, agent read-back and SHA-256 verification, identical idempotent retries, conflicting key reuse, owner-only listing/download/delete, invalid HTML, request bounds, item caps, and aggregate storage limits. CI type-checks the Owner Console and agent tools. Deployment of the Vercel app and Worker is separately gated; this feature does not authorize either deployment or any Eve task run.
