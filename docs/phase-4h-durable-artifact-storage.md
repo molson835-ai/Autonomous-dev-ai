@@ -11,7 +11,7 @@ Preserve validated research reports and HTML product deliverables beyond a singl
 - get_artifact is read-only and retrieves one stored artifact by UUID.
 - Worker validates every write again and stores only the validator-produced CSP-injected HTML.
 - Owner routes list metadata, retrieve full content for download, and delete one exact UUID. They are protected by GitHub owner verification and the same-origin Vercel proxy.
-- Limits: 64 KiB original HTML per artifact, 25 stored artifacts, and 1 MiB aggregate stored content. Oversized request bodies are rejected while streaming.
+- Limits: 64 KiB original HTML per artifact, 20 stored artifacts, and 1 MiB aggregate stored content. Oversized request bodies are rejected while streaming.
 - No public artifact links, filesystem access, arbitrary uploads, binary files, or code execution by the Worker.
 
 ## Owner experience
