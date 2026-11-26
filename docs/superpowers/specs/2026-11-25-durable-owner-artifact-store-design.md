@@ -12,6 +12,8 @@ Allow Eve to preserve reusable HTML research reports and product deliverables be
 - Allow Eve to retrieve artifacts by UUID through a read-only tool.
 - Expose owner-authenticated list, detail/download, and explicit delete controls.
 - Bound each artifact to 64 KiB original HTML, at most 20 stored items, and 1 MiB aggregate stored content.
+- Require a stable UUID idempotency key for each logical create operation; identical retries return the original row, while conflicting payload reuse returns HTTP 409.
+- Persist SHA-256 for the exact CSP-injected content and verify it on agent and owner detail reads.
 - Preserve task, memory, quota, and resource records unchanged.
 
 ## Non-goals
