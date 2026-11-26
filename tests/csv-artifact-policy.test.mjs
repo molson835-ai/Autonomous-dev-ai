@@ -34,6 +34,7 @@ test("enforces name, size, row, column and control-character limits", () => {
   assert.equal(validateCsvArtifact({ name: "", content: valid }).valid, false);
   assert.equal(validateCsvArtifact({ name: "big", content: "a\n" + "x".repeat(64 * 1024) }).valid, false);
   assert.equal(validateCsvArtifact({ name: "rows", content: "a\n" + Array.from({length:500},(_,i)=>i).join("\n") }).valid, false);
+  assert.equal(validateCsvArtifact({ name: "columns", content: Array.from({length:51},(_,i)=>"c"+i).join(",") }).valid, false);
   assert.equal(validateCsvArtifact({ name: "control", content: "a\nb\u0001" }).valid, false);
   assert.equal(validateCsvArtifact({ name: "bom", content: "\uFEFFa\nb" }).valid, false);
 });
