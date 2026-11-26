@@ -86,7 +86,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
       const id = await reserve();
       let result;
       try { result = await doStream(); }
-      catch (error) { logInputProfile(params); if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id); throw error; }
+      catch (error) { logInputProfile(params); if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id, undefined, "provider_error"); throw error; }
       let settled = false;
       let profiled = false;
       const profileOnce = (usage?: { inputTokens?: { total?: number }; outputTokens?: { total?: number } }) => {
