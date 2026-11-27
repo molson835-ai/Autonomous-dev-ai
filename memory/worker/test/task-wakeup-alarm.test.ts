@@ -107,4 +107,48 @@ describe("Durable Object task wake-up alarm", () => {
     });
     expect(paused.status).toBe(200);
   });
+
+  it("claims and schedules an eBay goal task without individual owner approval", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2042-07-19T12:00:00.000Z"));
+    const created = await request("/v1/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        idempotency_key: `TASK-GOAL-ALARM-${crypto.randomUUID()}`,
+        task_type: "development",
+        title: "Continue eBay inventory-audit development",
+        goal: "Improve the eBay inventory audit utility",
+        approved_scope: "Modify and test files only under products/ebay-inventory-audit/.",
+        goal_id: "ebay-inventory-audit-development",
+      }),
+    });
+    expect(created.status).toBe(201);
+    const { task } = await created.json<{ task: { id: string; status: string; owner_approved: boolean; mission_authorized: boolean } }>();
+    expect(task).toMatchObject({ status: "queued", owner_approved: false, mission_authorized: false });
+
+    const claimed = await request("/v1/tasks/claim-next", { method: "POST" });
+    expect(claimed.status).toBe(200);
+    expect((await claimed.json<{ task: { id: string; owner_approved: boolean } }>()).task)
+      .toMatchObject({ id: task.id, owner_approved: false });
+
+    const dueAt = new Date(Date.now() - 1000).toISOString();
+    const checkpoint = await request(`/v1/tasks/${task.id}/transition`, {
+      method: "POST",
+      body: JSON.stringify({ status: "waiting", checkpoint_summary: "Goal-scoped checkpoint", next_run_at: dueAt }),
+    });
+    expect(checkpoint.status).toBe(200);
+
+    const eligible = await request(
+      `/v1/internal/wakeup-status?task_id=${task.id}&next_run_at=${encodeURIComponent(dueAt)}`,
+    );
+    expect(eligible.status).toBe(200);
+    expect(await eligible.json()).toMatchObject({ eligible: true, queue_paused: false, running_tasks: 0 });
+
+    const paused = await request(`/v1/tasks/${task.id}/transition`, {
+      method: "POST",
+      body: JSON.stringify({ status: "paused", checkpoint_summary: "Test cleanup" }),
+    });
+    expect(paused.status).toBe(200);
+  });
+
 });
