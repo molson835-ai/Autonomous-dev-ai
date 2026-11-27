@@ -1,38 +1,28 @@
-# Phase 4 — task lifecycle and owner-control primitives
+# Phase 4 — durable task lifecycle and owner-control primitives
 
-## Scope
+## Authorization model
 
-This milestone defines pure, testable task metadata and state-transition rules. It does not add a database, API, Eve schedule, workflow dispatch, UI, or live background execution.
+- Tasks outside an active owner-approved goal remain `proposed` with `owner_approved=false` until the owner approves them through the owner-only control path.
+- The initial server-owned approved-goal registry contains exactly one goal: `ebay-inventory-audit-development`, scoped to `products/ebay-inventory-audit/` and the `ebay_inventory_audit_development` scope.
+- Tasks linked to that exact goal may be created as `queued` with `owner_approved=false`. The Worker validates the goal ID, allowed task type, scope ID, and project path at creation and revalidates them at claim, heartbeat, and scheduled wake-up.
+- Agent-supplied metadata cannot create a new goal, change the registry, select an arbitrary scope ID, or enable legacy `mission_authorized` authority. Legacy mission-authorized records are revoked during Worker initialization.
+- Goal authorization is limited to internal research, planning, development, testing, documentation, and maintenance for the eBay inventory-audit project. It does not authorize customer contact, outreach, publication, purchases, payments, paid services, account changes, Production deployment, protected-branch merge, or work outside the approved project path.
+- Every task remains traceable through an idempotency key, goal ID (when applicable), task type, checkpoint, result, and evidence references. The owner can inspect, pause, resume, or cancel tasks through the Owner Console.
 
-## Safety properties
-
-- New tasks start as `proposed` and unapproved.
-- Every task requires explicit owner approval. Standing mission authorization is disabled until a trusted owner-controlled delegation mechanism is designed, authenticated, and tested.
-- The agent-facing task proposal API does not accept `scope_id`; any attempt to submit one is rejected.
-- Customer discovery involving contact, customer outreach, offer publication, purchases, payments, and external side effects always require explicit owner approval.
-- Existing mission-authorized tasks are revoked during Worker initialization. Unapproved nonterminal tasks are returned to `proposed`; owner-approved tasks retain their state. Historical task metadata is preserved.
-- Only approved queued tasks are eligible for selection.
-- The selector returns at most one task and refuses to select another while any task is running.
-- Idempotency keys allow a future persistent store to return an existing task instead of inserting a duplicate.
-- Attempt count is bounded (maximum three attempts).
-- Terminal states cannot be reopened.
-- State transitions require an expected prior state; the eventual storage layer must enforce this with an atomic compare-and-swap/update.
-- Task metadata remains separate from the existing approved-memory and experience store.
-
-## State machine
+## State machine and execution
 
 `proposed → queued → running → waiting → queued`
 
-A running task may instead become `paused`, `succeeded`, `failed`, or `cancelled`. Queued/waiting tasks may be paused or cancelled. Paused tasks may resume to the queued state or be cancelled. Terminal states are immutable.
+A running task may instead become `paused`, `succeeded`, `failed`, or `cancelled`. Queued/waiting tasks may be paused or cancelled. Paused tasks require owner control to resume. Terminal states are immutable.
 
-## Limits
-
-- Three attempts maximum.
 - One active task at a time.
-- No agent self-approval or self-authorization. Automatic queueing from agent-created task proposals is disabled; owner approval is mandatory. Task creation remains bounded and idempotent.
-- No secrets should be placed in task metadata, checkpoints, or summaries.
-- The helper functions do not persist state or make transitions atomic; these are mandatory responsibilities of the next storage/API layer.
+- Three stale-run attempts maximum.
+- Ten progress steps maximum per task.
+- At most one task is claimed per scheduled invocation.
+- Waiting tasks resume only when their persisted checkpoint time is due; the Worker alarm and daily schedule both revalidate eligibility.
+- Task completion requires a result summary and concrete evidence references.
+- No secrets belong in task metadata, checkpoints, or summaries.
 
 ## Verification
 
-Run `node --test tests/task-lifecycle.test.mjs` and the full repository CI. These tests validate only the pure state machine and selection policy; they do not prove a deployed queue or scheduler.
+Pure lifecycle tests validate goal authorization and state transitions. Worker integration tests validate task creation, rejection of out-of-scope goals, claim, and scheduled wake-up eligibility. CI remains the required full verification before merge. No production behavior changes until a separately approved Worker deployment.
