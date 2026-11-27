@@ -89,7 +89,7 @@ test("writes reject paths outside the product and path traversal before network 
 
 test("file write uses expected head, Git Data API, and a non-force ref update", async () => {
   const { fetchImpl, calls } = mockFetch((url, options) => {
-    if (url.endsWith("/git/ref/heads/" + BRANCH)) return response({ object: { sha: SHA } });
+    if (url.endsWith("/git/ref/heads/" + BRANCH) && options.method === "GET") return response({ object: { sha: SHA } });
     if (url.endsWith("/git/commits/" + SHA)) return response({ tree: { sha: TREE } });
     if (url.endsWith("/git/blobs")) {
       const body = JSON.parse(options.body);
@@ -111,13 +111,6 @@ test("file write uses expected head, Git Data API, and a non-force ref update", 
       return response({ sha: COMMIT }, 201);
     }
     if (url.endsWith("/git/ref/heads/" + BRANCH) && options.method === "PATCH") {
-      const body = JSON.parse(options.body);
-      assert.equal(body.sha, COMMIT);
-      assert.equal(body.force, false);
-      return response({ object: { sha: COMMIT } });
-    }
-    if (url.endsWith("/git/ref/heads/" + BRANCH) && options.method === "PATCH") return response({});
-    if (options.method === "PATCH") {
       const body = JSON.parse(options.body);
       assert.equal(body.force, false);
       return response({ object: { sha: COMMIT } });
