@@ -190,7 +190,7 @@ export async function runRepositoryReadOnly(input, fetchImpl = fetch) {
     if (action === "commit" && input.commitSha) {
       const repository = await getJson("", fetchImpl);
       assertPublicRepository(repository);
-      const commit = await getJson(\`/commits/\${encodeURIComponent(input.commitSha)}\`, fetchImpl);
+      const commit = await getJson(`/commits/${encodeURIComponent(input.commitSha)}`, fetchImpl);
       return { repository: repository.full_name, commit: safeCommit(commit) };
     }
 
@@ -216,7 +216,7 @@ export async function runRepositoryReadOnly(input, fetchImpl = fetch) {
       return { repository: repository.full_name, commitSha: sha, files };
     }
 
-    const tree = await getJson(\`/git/trees/\${encodeURIComponent(treeSha)}?recursive=1\`, fetchImpl);
+    const tree = await getJson(`/git/trees/${encodeURIComponent(treeSha)}?recursive=1`, fetchImpl);
     if (!Array.isArray(tree.tree)) throw new RepositoryReadError("tree-unavailable");
     return {
       repository: repository.full_name,
