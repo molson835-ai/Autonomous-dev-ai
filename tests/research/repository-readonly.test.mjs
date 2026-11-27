@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { runRepositoryReadOnly, REPOSITORY_READONLY_LIMITS } from "../agent/lib/repository-readonly.mjs";
+import { runRepositoryReadOnly, REPOSITORY_READONLY_LIMITS } from "../../agent/lib/repository-readonly.mjs";
 
 const SHA = "a".repeat(40);
 const TREE_SHA = "b".repeat(40);
