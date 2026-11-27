@@ -19,7 +19,7 @@ function mockFetch(handler) {
     calls.push({ url: String(url), options });
     assert.equal(new URL(url).hostname, "api.github.com");
     assert.equal(options.redirect, "error");
-    assert.equal(options.headers.authorization, "Bearer test-token");
+    assert.equal(options.headers.authorization, "Bearer test-token-for-unit-tests-123456");
     return handler(String(url), options);
   };
   return { fetchImpl, calls };
@@ -56,18 +56,18 @@ test("branch creation only accepts the dedicated prefix and exact current main S
   };
   const ok = await runEbayProjectWrite({
     action: "create_branch", branchName: BRANCH, expectedBaseSha: SHA,
-  }, "test-token", fetchImpl);
+  }, "test-token-for-unit-tests-123456", fetchImpl);
   assert.equal(ok.status, "branch_created");
   assert.equal(calls, 2);
 
   const bad = await runEbayProjectWrite({
     action: "create_branch", branchName: "feature/unrestricted", expectedBaseSha: SHA,
-  }, "test-token", async () => { throw new Error("must not fetch"); });
+  }, "test-token-for-unit-tests-123456", async () => { throw new Error("must not fetch"); });
   assert.equal(bad.error, "branch-outside-project-scope");
 
   const stale = await runEbayProjectWrite({
     action: "create_branch", branchName: BRANCH, expectedBaseSha: "f".repeat(40),
-  }, "test-token", async () => response({ object: { sha: SHA } }));
+  }, "test-token-for-unit-tests-123456", async () => response({ object: { sha: SHA } }));
   assert.equal(stale.error, "base-branch-moved");
 });
 
@@ -82,7 +82,7 @@ test("writes reject paths outside the product and path traversal before network 
     const result = await runEbayProjectWrite({
       action: "write_file", branchName: BRANCH, path, content: "x",
       message: "test update", expectedHeadSha: SHA,
-    }, "test-token", async () => { throw new Error("must not fetch"); });
+    }, "test-token-for-unit-tests-123456", async () => { throw new Error("must not fetch"); });
     assert.ok(result.error, path);
   }
 });
@@ -122,11 +122,11 @@ test("file write uses expected head, Git Data API, and a non-force ref update", 
     path: "products/ebay-inventory-audit/index.html",
     content: "<h1>Local audit</h1>", message: "Improve local audit page",
     expectedHeadSha: SHA,
-  }, "test-token", fetchImpl);
+  }, "test-token-for-unit-tests-123456", fetchImpl);
   assert.equal(result.status, "file_committed");
   assert.equal(result.commitSha, COMMIT);
   assert.equal(calls.length, 6);
-  assert.ok(calls.every(call => call.options.headers.authorization === "Bearer test-token"));
+  assert.ok(calls.every(call => call.options.headers.authorization === "Bearer test-token-for-unit-tests-123456"));
 });
 
 test("stale branch head prevents any Git Data API writes", async () => {
@@ -136,7 +136,7 @@ test("stale branch head prevents any Git Data API writes", async () => {
     path: "products/ebay-inventory-audit/index.html",
     content: "<h1>Test</h1>", message: "Update page",
     expectedHeadSha: SHA,
-  }, "test-token", async (url, options) => {
+  }, "test-token-for-unit-tests-123456", async (url, options) => {
     if (options.method !== "GET") writes += 1;
     return response({ object: { sha: "f".repeat(40) } });
   });
@@ -164,7 +164,7 @@ test("pull request creation checks every changed path and opens a draft to main 
   const result = await runEbayProjectWrite({
     action: "open_pull_request", branchName: BRANCH, expectedHeadSha: SHA,
     title: "Improve eBay audit tool", body: "Implementation notes.",
-  }, "test-token", fetchImpl);
+  }, "test-token-for-unit-tests-123456", fetchImpl);
   assert.equal(result.status, "draft_pull_request_opened");
   assert.equal(result.draft, true);
   assert.equal(calls.length, 3);
@@ -172,7 +172,7 @@ test("pull request creation checks every changed path and opens a draft to main 
   const outside = await runEbayProjectWrite({
     action: "open_pull_request", branchName: BRANCH, expectedHeadSha: SHA,
     title: "Outside path change",
-  }, "test-token", async (url, options) => {
+  }, "test-token-for-unit-tests-123456", async (url, options) => {
     if (url.endsWith("/git/ref/heads/" + BRANCH)) return response({ object: { sha: SHA } });
     if (url.includes("/compare/main...")) return response({
       ahead_by: 1, files: [{ filename: "agent/agent.ts" }],
@@ -186,7 +186,7 @@ test("PR creation fails closed when compare results are incomplete or have too m
   const result = await runEbayProjectWrite({
     action: "open_pull_request", branchName: BRANCH, expectedHeadSha: SHA,
     title: "Open bounded draft",
-  }, "test-token", async (url) => {
+  }, "test-token-for-unit-tests-123456", async (url) => {
     if (url.endsWith("/git/ref/heads/" + BRANCH)) return response({ object: { sha: SHA } });
     return response({ ahead_by: 1, files: Array.from({ length: 300 }, () => ({ filename: "products/ebay-inventory-audit/a.csv" })) });
   });
