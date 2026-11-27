@@ -131,6 +131,9 @@ describe("Durable Object task wake-up alarm", () => {
     expect((await claimed.json<{ task: { id: string; owner_approved: boolean } }>()).task)
       .toMatchObject({ id: task.id, owner_approved: false });
 
+    const heartbeat = await request(`/v1/tasks/${task.id}/heartbeat`, { method: "POST", body: "{}" });
+    expect(heartbeat.status).toBe(200);
+
     const dueAt = new Date(Date.now() - 1000).toISOString();
     const checkpoint = await request(`/v1/tasks/${task.id}/transition`, {
       method: "POST",
