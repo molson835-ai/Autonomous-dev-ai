@@ -169,28 +169,28 @@ async function readOneFile(path, sha, fetchImpl) {
 }
 
 export async function runRepositoryReadOnly(input, fetchImpl = fetch) {
-  const action = input?.action;
-  if (!["metadata", "tree", "read_files", "commit"].includes(action)) {
-    throw new RepositoryReadError("unsupported-action");
-  }
-
-  if (action === "commit" && input.commitSha !== undefined &&
-      (typeof input.commitSha !== "string" || !/^[a-f0-9]{40}$/i.test(input.commitSha))) {
-    throw new RepositoryReadError("invalid-commit-sha");
-  }
-
-  if (action === "read_files") {
-    if (!Array.isArray(input.paths) || input.paths.length < 1 || input.paths.length > 5) {
-      throw new RepositoryReadError("file-count-limit");
-    }
-    input.paths.forEach(validatePath);
-  }
-
   try {
+    const action = input?.action;
+    if (!["metadata", "tree", "read_files", "commit"].includes(action)) {
+      throw new RepositoryReadError("unsupported-action");
+    }
+
+    if (action === "commit" && input.commitSha !== undefined &&
+        (typeof input.commitSha !== "string" || !/^[a-f0-9]{40}$/i.test(input.commitSha))) {
+      throw new RepositoryReadError("invalid-commit-sha");
+    }
+
+    if (action === "read_files") {
+      if (!Array.isArray(input.paths) || input.paths.length < 1 || input.paths.length > 5) {
+        throw new RepositoryReadError("file-count-limit");
+      }
+      input.paths.forEach(validatePath);
+    }
+
     if (action === "commit" && input.commitSha) {
       const repository = await getJson("", fetchImpl);
       assertPublicRepository(repository);
-      const commit = await getJson(`/commits/${encodeURIComponent(input.commitSha)}`, fetchImpl);
+      const commit = await getJson(\`/commits/\${encodeURIComponent(input.commitSha)}\`, fetchImpl);
       return { repository: repository.full_name, commit: safeCommit(commit) };
     }
 
@@ -212,11 +212,11 @@ export async function runRepositoryReadOnly(input, fetchImpl = fetch) {
 
     if (action === "read_files") {
       const files = [];
-      for (const path of input.paths) files.push(await readOneFile(path, sha, fetchImpl));
+      for (const filePath of input.paths) files.push(await readOneFile(filePath, sha, fetchImpl));
       return { repository: repository.full_name, commitSha: sha, files };
     }
 
-    const tree = await getJson(`/git/trees/${encodeURIComponent(treeSha)}?recursive=1`, fetchImpl);
+    const tree = await getJson(\`/git/trees/\${encodeURIComponent(treeSha)}?recursive=1\`, fetchImpl);
     if (!Array.isArray(tree.tree)) throw new RepositoryReadError("tree-unavailable");
     return {
       repository: repository.full_name,
