@@ -1,3 +1,5 @@
+import { isTaskAuthorized } from "./task-lifecycle.mjs";
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const NON_WORK_TOOLS = new Set([
@@ -65,7 +67,7 @@ export function recoverableTaskCloseout({
 
   const task = claims[0].output?.task;
   if (!task || !UUID.test(task.id ?? "") || task.status !== "running" ||
-      task.owner_approved !== true || task.mission_authorized !== false ||
+      !isTaskAuthorized(task) || task.mission_authorized !== false ||
       !Number.isInteger(task.step_count) || !Number.isInteger(task.max_steps) ||
       !Number.isInteger(task.attempt_count) || !Number.isInteger(task.max_attempts)) {
     return null;
