@@ -56,7 +56,7 @@ async function circuit(id: string) {
 }
 function isQuotaError(error: unknown) {
   const e = error as any;
-  return /\\b4006\\b|daily free allocation|neurons? (?:allocation|limit|quota|exhausted)/i
+  return /\b4006\b|daily free allocation|neurons? (?:allocation|limit|quota|exhausted)/i
     .test([e?.code,e?.message,e?.cause?.code,e?.cause?.message].join(" "));
 }
 export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
