@@ -1179,6 +1179,18 @@ describe("owner-approved goal task authorization", () => {
     expect(invalidPath.status).toBe(403);
     expect(await invalidPath.json()).toMatchObject({ reason_code: "goal_scope_mismatch" });
 
+    const invalidType = await request("/v1/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        idempotency_key: `TASK-GOAL-TYPE-${crypto.randomUUID()}`,
+        task_type: "outreach", title: "Attempt external outreach",
+        goal: "Contact customers", approved_scope: "products/ebay-inventory-audit/ only",
+        goal_id: "ebay-inventory-audit-development",
+      }),
+    });
+    expect(invalidType.status).toBe(403);
+    expect(await invalidType.json()).toMatchObject({ reason_code: "goal_scope_mismatch" });
+
     const created = await request("/v1/tasks", {
       method: "POST",
       body: JSON.stringify({
