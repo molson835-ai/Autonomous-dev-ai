@@ -85,5 +85,8 @@ test("waiting task transitions schedule five seconds by default unless explicitl
   assert.match(tool, /hold_without_schedule: z\.boolean\(\)\.optional\(\)/);
   assert.match(tool, /body\.status === "waiting" \? 5_000 : null/);
   assert.match(tool, /hold_without_schedule === true \? null/);
+  assert.match(tool, /Scheduling controls have meaning only for waiting tasks/);
+  assert.match(tool, /if \(body\.status === "waiting" && resume_after_seconds !== undefined && resume_after_minutes !== undefined\)/);
+  assert.doesNotMatch(tool, /Resume scheduling controls are only valid when status is waiting/);
   assert.match(tool, /A held waiting task cannot also have a resume delay/);
 });
