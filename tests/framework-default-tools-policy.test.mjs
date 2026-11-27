@@ -18,6 +18,7 @@ test("application-authored tools remain present when framework defaults are disa
     "../agent/tools/research_opportunity_evidence.ts",
     "../agent/tools/research_revenue_opportunity.ts",
     "../agent/tools/research_sources.ts",
+    "../agent/tools/repository_readonly.ts",
     "../agent/tools/search_news.ts",
     "../agent/tools/task_claim_next.ts",
     "../agent/tools/task_transition.ts",

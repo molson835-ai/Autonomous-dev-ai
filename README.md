@@ -30,7 +30,7 @@ The research capability is read-only. It does not write to the repository, execu
 - Web interface: official Eve Web Chat scaffold using Next.js and React, located in `apps/web/`.
 - Sessions: Eve client wiring with URL-addressed session routes under `/s/` and `/s/[sessionId]/`.
 - Model provider: Cloudflare Workers AI direct API using `@cf/zai-org/glm-4.7-flash`.
-- Research tools: `agent/tools/research_sources.ts` retrieves supplied approved documentation URLs; `agent/tools/search_news.ts` discovers limited recent news leads via the free GDELT DOC 2.0 API; the proposed `agent/tools/discover_resources.ts` searches GitHub, Hugging Face, and npm and submits inert metadata to the existing quarantined resource registry. Live invocation and Production persistence of the new resource tool still require verification.
+- Research tools: `agent/tools/repository_readonly.ts` provides bounded, unauthenticated read-only access to this public repository; `agent/tools/research_sources.ts` retrieves supplied approved documentation URLs; `agent/tools/search_news.ts` discovers limited recent news leads via the free GDELT DOC 2.0 API; the proposed `agent/tools/discover_resources.ts` searches GitHub, Hugging Face, and npm and submits inert metadata to the existing quarantined resource registry. Live invocation and Production persistence of the new resource tool still require verification.
 - Research implementation: `agent/research/sources.ts`.
 - Opportunity evaluator: `agent/research/opportunity-evaluator.ts`; Eve tool: `agent/tools/evaluate_opportunity.ts`; scoring policy and limitations: `docs/opportunity-evaluation.md`.
 - Approved source hosts: `developer.mozilla.org`, `tc39.es`, `owasp.org`, `developers.cloudflare.com`, and `vercel.com`.
