@@ -91,3 +91,16 @@ Add opt-in, privacy-safe prompt-size instrumentation at the model boundary, with
 First verify the framework exposes these components before implementing. If it does not, instrument only the safe aggregate fields that are actually available and document the limitation. Do not add raw prompt capture. Add tests proving that instrumentation excludes content and secrets. Keep all quota/session ceilings and the neuron guard unchanged. Do not invoke Eve to generate a baseline while the local quota guard is paused.
 
 This proposal is not implemented. No runtime code or production telemetry configuration was changed.
+
+## Privacy-safe model-boundary instrumentation implementation
+
+Implemented on isolated branch `feat/privacy-safe-model-usage-instrumentation` after owner authorization; not merged or deployed.
+
+- Extended the existing model-input profile with character-count aggregates by message role: system, developer, user, assistant, tool-result, and other.
+- Added normalized numeric provider-usage fields for total input/output tokens, cache-read input tokens, cache-write input tokens, uncached input tokens, and reasoning output tokens where the installed AI SDK/provider exposes them.
+- Missing cache/usage fields remain `null`; they are never silently treated as zero. A separate boolean indicates whether any cache metric was actually reported.
+- Logs contain only model/environment identifiers and numeric aggregate measurements. No prompt text, message bodies, tool arguments, tool descriptions, schemas, secrets, or memory contents are logged.
+- Added tests for role aggregation, redaction, alternate SDK usage shapes, and missing metadata.
+- The existing quota reservation, settlement calculation, neuron target, reserve, session caps, Worker, and runtime behavior are unchanged. The new fields are observational only and are not used to calculate or settle neurons.
+- The AI SDK/provider may omit cache details; the instrumentation reports that absence rather than inferring cache behavior. Provider usage values are still provider-reported token metrics, not Cloudflare neuron telemetry.
+- Tests have been authored but have not yet been executed in a repository CI run. No PR, merge, Production deployment, or Eve model call was performed.
