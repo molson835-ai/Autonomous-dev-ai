@@ -544,7 +544,7 @@ export default function OwnerConsole() {
               <div className="space-y-1">
                 <p className="font-semibold">Background task queue: {queueStatus.queue_paused ? "Paused" : "Active"}</p>
                 <p className="text-sm text-muted-foreground">
-                  {queueStatus.running_tasks} running · {queueStatus.queued_tasks} queued (owner-approved)
+                  {queueStatus.running_tasks} running · {queueStatus.queued_tasks} queued (owner-approved or approved-goal)
                   {queueStatus.reason ? " · " + queueStatus.reason : ""}
                 </p>
                 <p className="text-xs text-muted-foreground">Pausing prevents new claims; an already-running invocation may finish its current bounded step.</p>
