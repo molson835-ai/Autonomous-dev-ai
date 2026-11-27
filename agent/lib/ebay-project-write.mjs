@@ -36,8 +36,28 @@ function validatePath(path) {
 async function boundedJson(response) {
   const length = Number(response.headers.get("content-length"));
   if (Number.isFinite(length) && length > MAX_RESPONSE_BYTES) throw new WriteError("github-response-too-large");
-  const text = await response.text();
-  if (new TextEncoder().encode(text).byteLength > MAX_RESPONSE_BYTES) throw new WriteError("github-response-too-large");
+  if (!response.body) return {};
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_RESPONSE_BYTES) {
+        await reader.cancel();
+        throw new WriteError("github-response-too-large");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  const text = new TextDecoder().decode(bytes);
   try { return text ? JSON.parse(text) : {}; }
   catch { throw new WriteError("github-invalid-response"); }
 }
@@ -136,7 +156,8 @@ async function openPullRequest(input, token, fetchImpl) {
   if (ref.object?.sha !== input.expectedHeadSha) throw new WriteError("branch-head-moved");
 
   const compare = await request(token, "/compare/main..." + branch.split("/").map(encodeURIComponent).join("/"), {}, fetchImpl);
-  if (!Array.isArray(compare.files) || compare.files.length === 0) throw new WriteError("no-verifiable-project-changes");
+  if (!Number.isInteger(compare.ahead_by) || compare.ahead_by < 1 ||
+      !Array.isArray(compare.files) || compare.files.length === 0) throw new WriteError("no-verifiable-project-changes");
   if (compare.files.length >= 300 || compare.files.some(file =>
     typeof file.filename !== "string" || !file.filename.startsWith(PRODUCT_PATH) ||
     file.filename.includes("\\") || file.filename.split("/").some(part => part === ".." || part === ".git")
