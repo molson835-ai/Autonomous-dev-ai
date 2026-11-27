@@ -48,7 +48,7 @@ test("manual owner run cannot treat one completed step as completion of the full
 test("manual owner run preserves token and neuron efficiency safeguards", () => {
   for (const required of [
     "reusing recent verified evidence",
-    "avoiding repeated diagnostics/searches",
+    "avoid repeating diagnostics/searches",
     "unchanged retries",
     "provider quota and local neuron guards",
     "task_heartbeat",
