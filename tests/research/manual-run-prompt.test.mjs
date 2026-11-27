@@ -11,6 +11,7 @@ test("manual owner run attempts the approved task claim before diagnostics or ot
   assert.match(prompt, /FIRST tool call must be task_claim_next, exactly once/);
   assert.match(prompt, /Do not call task_list, runtime_diagnostics, memory tools, or any other tool before attempting that claim/);
   assert.match(prompt, /If no task is returned, stop immediately/);
+  assert.ok(prompt.length < 2_000, `manual prompt too large: ${prompt.length}`);
 });
 
 test("manual claim instruction does not accidentally suppress stateful task tools", () => {
@@ -21,7 +22,7 @@ test("manual owner run preserves task approval, scope, and bounded closeout requ
   assert.match(prompt, /owner_approved exactly true/);
   assert.match(prompt, /goal_id exactly ebay-inventory-audit-development/);
   assert.match(prompt, /scope_id exactly ebay_inventory_audit_development/);
-  assert.match(prompt, /products\/ebay-inventory-audit\//);
+  assert.match(prompt, /products\\/ebay-inventory-audit\\//);
   assert.match(prompt, /mission_authorized is not true/);
   assert.match(prompt, /strictly within that task's approved_scope/);
   assert.match(prompt, /task_transition exactly once/);
@@ -34,14 +35,14 @@ test("manual owner run cannot treat one completed step as completion of the full
   assert.match(prompt, /task_transition automatically schedules the next bounded invocation after five seconds/);
   assert.match(prompt, /hold_without_schedule: true only when blocked on owner input or an external dependency/);
   assert.match(prompt, /If any substantive work tool failed, do not schedule a resume/);
-  assert.match(prompt, /hold_without_schedule: true only when blocked on owner input or an external dependency/);
   assert.match(prompt, /Never ask the owner to re-approve a task that is already individually owner-approved or authorized by the exact active goal registry/);
   assert.match(prompt, /Evidence references must identify concrete supporting records/);
 });
 
 test("manual owner run preserves token and neuron efficiency safeguards", () => {
-  assert.match(prompt, /reuse recent verified evidence/);
-  assert.match(prompt, /avoid repeating diagnostics\/searches/);
-  assert.match(prompt, /do not make unchanged retries/);
-  assert.match(prompt, /Respect provider quota and local neuron guards/);
+  assert.match(prompt, /Reuse recent verified evidence/);
+  assert.match(prompt, /avoid repeating diagnostics\\/searches/);
+  assert.match(prompt, /unchanged retries/);
+  assert.match(prompt, /provider quota and local neuron guards/);
+  assert.match(prompt, /task_heartbeat/);
 });
