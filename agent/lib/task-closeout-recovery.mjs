@@ -79,7 +79,7 @@ export function recoverableTaskCloseout({
 
   const status = canContinue ? "waiting" : "paused";
   const checkpointSummary = [
-    "Automatic safety checkpoint: the Eve turn settled after claiming this individually owner-approved task but before calling task_transition.",
+    "Automatic safety checkpoint: the Eve turn settled after claiming this individually owner-approved or server-authorized goal task but before calling task_transition.",
     "This is not evidence of task completion and does not certify the preceding work; inspect the prior tool results before continuing.",
     `Recovery trace: session ${sessionId}, turn ${turnId}.`,
     recoveryDiagnostics(turnCalls, outcome),
