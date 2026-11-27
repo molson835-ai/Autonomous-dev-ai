@@ -121,6 +121,7 @@ async function writeFile(input, token, fetchImpl) {
   if (message.length < 5) throw new WriteError("commit-message-required");
 
   const refPath = "/git/ref/heads/" + branch.split("/").map(encodeURIComponent).join("/");
+  const updateRefPath = "/git/refs/heads/" + branch.split("/").map(encodeURIComponent).join("/");
   const ref = await request(token, refPath, {}, fetchImpl);
   if (ref.object?.sha !== input.expectedHeadSha) throw new WriteError("branch-head-moved");
   const parent = await request(token, "/git/commits/" + input.expectedHeadSha, {}, fetchImpl);
@@ -144,7 +145,7 @@ async function writeFile(input, token, fetchImpl) {
 
   // Non-force ref update only accepts a fast-forward. A concurrent branch update
   // makes this commit non-fast-forward and prevents overwriting the newer head.
-  await request(token, refPath, { method: "PATCH", body: { sha: commit.sha, force: false } }, fetchImpl);
+  await request(token, updateRefPath, { method: "PATCH", body: { sha: commit.sha, force: false } }, fetchImpl);
   return { status: "file_committed", branch, path, previousHeadSha: input.expectedHeadSha, commitSha: commit.sha };
 }
 
