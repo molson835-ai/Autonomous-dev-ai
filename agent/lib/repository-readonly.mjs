@@ -57,7 +57,7 @@ async function readBoundedText(response) {
 }
 
 async function getJson(path, fetchImpl) {
-  const url = new URL(path, API_ROOT);
+  const suffix = path ? (path.startsWith("/") ? path : `/${path}`) : "";\n  const url = new URL(`${API_ROOT}${suffix}`);
   if (url.protocol !== "https:" || url.hostname !== API_HOST || url.username || url.password) {
     throw new RepositoryReadError("blocked-url");
   }
@@ -78,7 +78,7 @@ async function getJson(path, fetchImpl) {
   }
   if (!response.ok) throw new RepositoryReadError(`github-http-${response.status}`, response.status);
   const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.toLowerCase().includes("application/json")) {
+  if (!/application\\/(?:vnd\\.github\\+)?json/i.test(contentType)) {
     throw new RepositoryReadError("unexpected-content-type");
   }
   const text = await readBoundedText(response);
