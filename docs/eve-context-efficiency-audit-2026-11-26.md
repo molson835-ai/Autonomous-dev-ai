@@ -104,3 +104,28 @@ Implemented on isolated branch `feat/privacy-safe-model-usage-instrumentation` a
 - The existing quota reservation, settlement calculation, neuron target, reserve, session caps, Worker, and runtime behavior are unchanged. The new fields are observational only and are not used to calculate or settle neurons.
 - The AI SDK/provider may omit cache details; the instrumentation reports that absence rather than inferring cache behavior. Provider usage values are still provider-reported token metrics, not Cloudflare neuron telemetry.
 - Tests have been authored but have not yet been executed in a repository CI run. No PR, merge, Production deployment, or Eve model call was performed.
+
+
+## Follow-up prompt-efficiency and caching review — 2026-11-27
+
+### New evidence
+
+- The Production deployment containing numeric-only model-input instrumentation is READY. No Production Agent Runs were returned in the first hour after this deployment, and no matching `EVE_MODEL_INPUT_PROFILE` runtime logs were found in the most recent 30-minute window. Eve remains paused, so the new instrumentation has not yet produced a live model-call sample.
+- The instrumentation normalizes AI SDK cache-read fields such as `inputTokenDetails.cacheReadTokens` and preserves missing cache values as null. It does not infer a cache miss when the provider omits cache metadata.
+- Cloudflare's Workers AI prompt-caching documentation says prefix caching is enabled by default for selected models, requires matching prompt prefixes, recommends stable `x-session-affinity`, and says cache-read counts appear in provider usage. The GLM-4.7-Flash model page does not currently mention prompt-caching compatibility. Therefore support for this exact model is unverified; no affinity header or provider configuration was changed.
+- The static scheduled work-loop prompt was 11,084 characters; the manual-run prompt was 2,982 characters. Both repeated policies already present in the permanent instructions and had grown into large, mostly static request prefixes.
+
+### Changes proposed in the isolated prompt-efficiency branch
+
+- Correct stale capability wording so Eve's instructions accurately describe the bounded `ebay_project_write` tool and its exact eBay project path.
+- Align the earned-growth skill and permanent instructions with the already deployed goal-level authorization policy: traceable internal tasks may run autonomously only inside the active server-enforced eBay goal; work outside it still requires individual owner approval.
+- Replace duplicated scheduled/manual prompts with concise static workflow instructions while retaining first-call claim order, exact authorization checks, scope restrictions, untrusted-task-data handling, one substantive work step, closeout semantics, evidence requirements, heartbeat/attempt limits, and all external-action, financial, and quota safeguards.
+- Add regression assertions for those safeguards and explicit prompt-size ceilings. No task budgets, neuron guard, quota ledger, provider, model, session limit, tool registration, Worker, Vercel setting, or deployment is changed.
+
+### Caching decision
+
+Keep the model and provider configuration unchanged. Do not add `x-session-affinity` until Cloudflare confirms compatibility for GLM-4.7-Flash and the request path/header propagation are verified. After the next separately authorized model call, compare provider-reported cache-read tokens across two requests with the same stable prefix; the first call may be cold. If the provider does not report cache metadata, leave the value unknown rather than treating it as zero.
+
+### Expected benefit and limits
+
+The prompt rewrite removes repeated static instructions from the schedule payload. Its exact token savings must be measured from provider usage after Eve is permitted to run; character reduction is not a token/neuron measurement. The historical zero-cache Agent Runs fields remain observability evidence, not proof that Cloudflare prompt caching is unsupported.
