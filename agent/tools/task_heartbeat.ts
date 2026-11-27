@@ -6,7 +6,7 @@ import { canUseWriteTools } from "../lib/tool-access";
 
 const tool = defineTool({
   description:
-    "Refresh the execution lease for a task that is actively running and individually approved by the owner. Call periodically during long-running work (at least every 10 minutes). This does not approve, resume, or change the scope of a task.",
+    "Refresh the execution lease for a task that is actively running and either individually owner-approved or authorized by the server's exact active goal registry. Call periodically during long-running work (at least every 10 minutes). This does not approve, resume, or change the scope of a task.",
   inputSchema: z.object({ id: z.string().uuid() }),
   async execute({ id }) {
     assertProductionTaskRuntime();
