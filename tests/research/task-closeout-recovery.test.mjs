@@ -192,3 +192,23 @@ test("pauses at exhausted progress or stale-attempt budget", () => {
     assert.equal(result.resumeAfterSeconds, undefined);
   }
 });
+
+test("automatically checkpoints a claimed approved-goal task without individual owner approval", () => {
+  const goalTask = {
+    ...task,
+    owner_approved: false,
+    task_type: "development",
+    goal_id: "ebay-inventory-audit-development",
+    scope_id: "ebay_inventory_audit_development",
+    approved_scope: "Internal work only under products/ebay-inventory-audit/.",
+  };
+  const result = scenario({
+    calls: [
+      call("task_claim_next", { output: { task: goalTask } }),
+      call("repository_readonly", { output: { content: "verified source" } }),
+    ],
+  });
+  assert.equal(result.taskId, goalTask.id);
+  assert.equal(result.status, "waiting");
+  assert.equal(result.resumeAfterSeconds, 5);
+});
