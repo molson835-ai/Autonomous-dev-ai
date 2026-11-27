@@ -1,7 +1,7 @@
 import { validateTaskRecord, isTaskAuthorized } from "./task-lifecycle.mjs";
 import { evaluateProviderExecutionPreflight } from "./provider-execution-preflight.mjs";
 
-// Only owner-defined scopes with no external side effects may enter a provider preflight.
+// Only owner-defined or exact approved-goal scopes with no external side effects may enter a provider preflight.
 const PROVIDER_ELIGIBLE_SCOPES = new Set([
   "product_development",
   "testing",
