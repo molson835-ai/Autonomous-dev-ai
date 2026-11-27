@@ -1151,3 +1151,51 @@ describe("persistent quarantined resource catalog and owner review", () => {
       .toMatchObject({ status: "paused", step_count: 10, attempt_count: 0, max_steps: 10 });
   });
 });
+
+describe("owner-approved goal task authorization", () => {
+  it("creates an eligible eBay goal task without individual owner approval and rejects scope expansion", async () => {
+    const invalidGoal = await request("/v1/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        idempotency_key: `TASK-GOAL-UNKNOWN-${crypto.randomUUID()}`,
+        task_type: "development", title: "Attempt unknown goal",
+        goal: "Attempt to use a non-approved goal",
+        approved_scope: "products/ebay-inventory-audit/",
+        goal_id: "general-revenue-mission",
+      }),
+    });
+    expect(invalidGoal.status).toBe(403);
+    expect(await invalidGoal.json()).toMatchObject({ reason_code: "goal_not_approved" });
+
+    const invalidPath = await request("/v1/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        idempotency_key: `TASK-GOAL-PATH-${crypto.randomUUID()}`,
+        task_type: "development", title: "Attempt path expansion",
+        goal: "Modify unrelated files", approved_scope: "Modify the whole repository",
+        goal_id: "ebay-inventory-audit-development",
+      }),
+    });
+    expect(invalidPath.status).toBe(403);
+    expect(await invalidPath.json()).toMatchObject({ reason_code: "goal_scope_mismatch" });
+
+    const created = await request("/v1/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        idempotency_key: `TASK-GOAL-EBAY-${crypto.randomUUID()}`,
+        task_type: "development", title: "Improve eBay CSV reconciliation",
+        goal: "Improve the eBay inventory audit utility",
+        approved_scope: "Research, modify, and test files only under products/ebay-inventory-audit/.",
+        goal_id: "ebay-inventory-audit-development",
+      }),
+    });
+    expect(created.status).toBe(201);
+    const { task } = await created.json<{ task: { id: string; status: string; owner_approved: boolean; mission_authorized: boolean; goal_id: string; scope_id: string } }>();
+    expect(task).toMatchObject({
+      status: "queued", owner_approved: false, mission_authorized: false,
+      goal_id: "ebay-inventory-audit-development", scope_id: "ebay_inventory_audit_development",
+    });
+    const stored = await request(`/v1/tasks/${task.id}`);
+    expect((await stored.json()).task).toMatchObject({ goal_id: "ebay-inventory-audit-development", owner_approved: false });
+  });
+});
