@@ -60,6 +60,18 @@ type QuotaStatus = {
   model_calls_allowed: boolean;
   updated_at: string | null;
 };
+type QuotaCall = {
+  reservation_id: string;
+  day: string;
+  settled_at: string;
+  model_id: string;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  estimated_neurons: number;
+  accounting_source: string;
+  settlement_reason: string;
+};
+type QuotaCalls = { day: string; source: string; retention_days: number; count: number; calls: QuotaCall[] };
 type MemoryProbe = {
   name: string;
   status: number | null;
@@ -136,6 +148,7 @@ export default function OwnerConsole() {
   const [artifactStoreAvailable, setArtifactStoreAvailable] = useState(true);
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const [quotaStatus, setQuotaStatus] = useState<QuotaStatus | null>(null);
+  const [quotaCalls, setQuotaCalls] = useState<QuotaCalls | null>(null);
   const [tavilyCreditStatus, setTavilyCreditStatus] = useState<TavilyCreditStatus | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -151,13 +164,14 @@ export default function OwnerConsole() {
     setBusy("load");
     setMessage("");
     try {
-      const [taskData, proposalData, statusData, resourceData, artifactData, quotaData, tavilyData] = await Promise.all([
+      const [taskData, proposalData, statusData, resourceData, artifactData, quotaData, quotaCallData, tavilyData] = await Promise.all([
         ownerRequest<{ tasks: Task[] }>("/v1/owner/tasks?limit=30"),
         ownerRequest<{ proposals: Proposal[] }>("/v1/owner/proposals?limit=30"),
         ownerRequest<QueueStatus>("/v1/owner/status"),
         ownerRequest<{ resources: Resource[] }>("/v1/owner/resources?limit=50"),
         ownerRequest<{ artifacts: ArtifactSummary[] }>("/v1/owner/artifacts?limit=20").catch(() => null),
         ownerRequest<QuotaStatus>("/v1/owner/quota/status").catch(() => null),
+        ownerRequest<QuotaCalls>("/v1/owner/quota/calls?limit=50").catch(() => null),
         ownerRequest<TavilyCreditStatus>("/v1/owner/research/credits/status").catch(() => null),
       ]);
       setTasks(taskData.tasks);
@@ -167,6 +181,7 @@ export default function OwnerConsole() {
       setArtifactStoreAvailable(artifactData !== null);
       setQueueStatus(statusData);
       setQuotaStatus(quotaData);
+      setQuotaCalls(quotaCallData);
       setTavilyCreditStatus(tavilyData);
       setLoaded(true);
       setMessage("Owner review data loaded. Your GitHub identity is verified server-side.");
@@ -465,6 +480,44 @@ export default function OwnerConsole() {
         <>
           {quotaStatus && (
             <section className="space-y-2 rounded-xl border bg-card p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-semibold">Workers AI neuron budget</h2>
+                <span className="text-xs font-medium">{quotaStatus.circuit_open ? "Provider circuit open" : quotaStatus.model_calls_allowed ? "Model calls permitted by local ledger" : "Paused by local quota guard"}</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {quotaStatus.local_estimated_neurons.toLocaleString()} locally estimated · {quotaStatus.active_reserved_neurons.toLocaleString()} reserved · {quotaStatus.remaining_to_target.toLocaleString()} remaining to Eve's {quotaStatus.target_neurons.toLocaleString()} target
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Source: local model estimate, not Cloudflare's live account meter. The target leaves a {quotaStatus.protected_reserve_neurons.toLocaleString()}-neuron buffer below the published free allocation; other account usage is not included. UTC day: {quotaStatus.day}.
+              </p>
+              {quotaStatus.updated_at && <p className="text-xs text-muted-foreground">Last local ledger update: {new Date(quotaStatus.updated_at).toLocaleString()}</p>}
+              {quotaStatus.circuit_open && <p className="text-sm">A confirmed provider quota error opened the safety circuit. This cannot be cleared by changing local estimates.</p>}
+              <div className="space-y-2 border-t pt-3">
+                <h3 className="text-sm font-semibold">Settled model calls · {quotaCalls?.day ?? quotaStatus.day}</h3>
+                {quotaCalls ? (
+                  <>
+                    <p className="text-xs text-muted-foreground">{quotaCalls.count} recorded call(s) · up to {quotaCalls.retention_days} days retained. Per-call estimates are not provider telemetry.</p>
+                    {quotaCalls.calls.length > 0 ? (
+                      <div className="space-y-2">
+                        {quotaCalls.calls.map(call => (
+                          <div key={call.reservation_id} className="rounded-lg border p-3 text-xs">
+                            <div className="flex flex-wrap justify-between gap-2">
+                              <span className="font-medium">{new Date(call.settled_at).toLocaleString()}</span>
+                              <span className="font-semibold">{call.estimated_neurons.toLocaleString()} estimated neurons</span>
+                            </div>
+                            <p className="mt-1 text-muted-foreground">{call.model_id} · input {call.input_tokens?.toLocaleString() ?? "unknown"} / output {call.output_tokens?.toLocaleString() ?? "unknown"} tokens</p>
+                            <p className="mt-1 break-words text-muted-foreground">Accounting: {call.accounting_source} · {call.settlement_reason}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : <p className="text-xs text-muted-foreground">No settled calls recorded for this UTC day.</p>}
+                    <p className="text-xs text-muted-foreground">Ledger source: {quotaCalls.source}</p>
+                  </>
+                ) : <p className="text-xs text-muted-foreground">Quota call history is currently unavailable. Refresh reviews to retry.</p>}
+              </div>
+            </section>
+          )}
+          <section className="space-y-2 rounded-xl border bg-card p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="font-semibold">Workers AI neuron budget</h2>
                 <span className="text-xs font-medium">{quotaStatus.circuit_open ? "Provider circuit open" : quotaStatus.model_calls_allowed ? "Model calls permitted by local ledger" : "Paused by local quota guard"}</span>
