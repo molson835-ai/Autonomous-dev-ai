@@ -19,11 +19,11 @@ const tool = defineTool({
   }),
   async execute({ id, resume_after_seconds, resume_after_minutes, hold_without_schedule, ...body }) {
     assertProductionTaskRuntime();
-    if (resume_after_seconds !== undefined && resume_after_minutes !== undefined) {
+    // Scheduling controls have meaning only for waiting tasks. Models can
+    // accidentally include them with paused/terminal closeouts; ignore those
+    // irrelevant fields rather than rejecting the checkpoint itself.
+    if (body.status === "waiting" && resume_after_seconds !== undefined && resume_after_minutes !== undefined) {
       throw new Error("Choose either resume_after_seconds or resume_after_minutes, not both.");
-    }
-    if ((resume_after_seconds !== undefined || resume_after_minutes !== undefined || hold_without_schedule === true) && body.status !== "waiting") {
-      throw new Error("Resume scheduling controls are only valid when status is waiting.");
     }
     if (hold_without_schedule === true && (resume_after_seconds !== undefined || resume_after_minutes !== undefined)) {
       throw new Error("A held waiting task cannot also have a resume delay.");
