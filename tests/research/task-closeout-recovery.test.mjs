@@ -87,12 +87,26 @@ test("pauses when a substantive work call failed, even if another work call comp
   assert.equal(result.resumeAfterSeconds, undefined);
 });
 
-test("does not retry closeout when task_transition was already attempted, even if it failed", () => {
+test("recovers a failed task_transition attempt after completed work", () => {
   const result = scenario({
     calls: [
       call("task_claim_next", { output: { task } }),
       call("research_revenue_opportunity"),
       call("task_transition", { state: "failed" }),
+    ],
+  });
+
+  assert.equal(result.taskId, task.id);
+  assert.equal(result.status, "waiting");
+  assert.equal(result.resumeAfterSeconds, 5);
+});
+
+test("does not recover when task_transition completed successfully", () => {
+  const result = scenario({
+    calls: [
+      call("task_claim_next", { output: { task } }),
+      call("research_revenue_opportunity"),
+      call("task_transition", { state: "completed" }),
     ],
   });
 

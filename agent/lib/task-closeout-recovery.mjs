@@ -24,7 +24,10 @@ export function recoverableTaskCloseout({
       typeof turnId !== "string" || !turnId) return null;
 
   const turnCalls = calls.filter(call => call?.turnId === turnId && call?.kind === "tool");
-  if (turnCalls.some(call => call.name === "task_transition")) return null;
+  // A successful transition is authoritative. A failed transition is not:
+  // recover it after the turn settles so one malformed closeout cannot strand
+  // a claimed task until its stale lease expires.
+  if (turnCalls.some(call => call.name === "task_transition" && call.state === "completed")) return null;
 
   const claims = turnCalls.filter(call => call.name === "task_claim_next");
   if (claims.length !== 1 || claims[0].state !== "completed") return null;
