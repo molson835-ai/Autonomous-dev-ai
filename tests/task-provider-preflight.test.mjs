@@ -87,3 +87,29 @@ test("malformed inputs and unknown top-level fields fail closed", () => {
   assert.equal(evaluateTaskProviderPreflight(null).status, "blocked");
   assert.equal(evaluateTaskProviderPreflight({ ...input(), unexpected: true }).status, "blocked");
 });
+
+test("an active approved-goal task can pass provider preflight without gaining execution authority", () => {
+  const proposed = createTaskRecord({
+    id: "task-provider-goal-001", idempotency_key: "provider-goal-preflight-001",
+    task_type: "development", title: "Test eBay inventory-audit provider preflight",
+    goal: "Assess a no-cost provider for the eBay project",
+    approved_scope: "Internal provider assessment for products/ebay-inventory-audit/ only.",
+    scope_id: "ebay_inventory_audit_development", goal_id: "ebay-inventory-audit-development",
+  }, { now });
+  const task = transitionTask(proposed, "running", { now });
+  const result = evaluateTaskProviderPreflight(input({ task }));
+  assert.equal(result.valid, true);
+  assert.equal(result.activationAllowed, false);
+  assert.equal(result.executionAllowed, false);
+});
+
+test("a goal task cannot use provider preflight outside the approved project scope", () => {
+  const proposed = createTaskRecord({
+    id: "task-provider-goal-002", idempotency_key: "provider-goal-preflight-002",
+    task_type: "development", title: "Test invalid project scope", goal: "Assess a provider",
+    approved_scope: "Internal work only under products/ebay-inventory-audit/.",
+    scope_id: "ebay_inventory_audit_development", goal_id: "ebay-inventory-audit-development",
+  }, { now });
+  const task = transitionTask(proposed, "running", { now });
+  assert.equal(evaluateTaskProviderPreflight(input({ task: { ...task, approved_scope: "Whole repository access" } })).status, "blocked");
+});
