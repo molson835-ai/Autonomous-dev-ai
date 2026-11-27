@@ -518,21 +518,6 @@ export default function OwnerConsole() {
             </section>
           )}
           <section className="space-y-2 rounded-xl border bg-card p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="font-semibold">Workers AI neuron budget</h2>
-                <span className="text-xs font-medium">{quotaStatus.circuit_open ? "Provider circuit open" : quotaStatus.model_calls_allowed ? "Model calls permitted by local ledger" : "Paused by local quota guard"}</span>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {quotaStatus.local_estimated_neurons.toLocaleString()} locally estimated · {quotaStatus.active_reserved_neurons.toLocaleString()} reserved · {quotaStatus.remaining_to_target.toLocaleString()} remaining to Eve's {quotaStatus.target_neurons.toLocaleString()} target
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Source: local model estimate, not Cloudflare's live account meter. The target leaves a {quotaStatus.protected_reserve_neurons.toLocaleString()}-neuron buffer below the published free allocation; other account usage is not included. UTC day: {quotaStatus.day}.
-              </p>
-              {quotaStatus.updated_at && <p className="text-xs text-muted-foreground">Last local ledger update: {new Date(quotaStatus.updated_at).toLocaleString()}</p>}
-              {quotaStatus.circuit_open && <p className="text-sm">A confirmed provider quota error opened the safety circuit. This cannot be cleared by changing local estimates.</p>}
-            </section>
-          )}
-          <section className="space-y-2 rounded-xl border bg-card p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="font-semibold">Tavily monthly research credits</h2>
               <span className="text-xs font-medium">{tavilyCreditStatus ? tavilyCreditStatus.month : "Status unavailable"}</span>
