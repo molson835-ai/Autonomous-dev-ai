@@ -142,3 +142,18 @@ The current development branch adds structured metadata to the seven bundled ski
 The task-to-skill planner now returns the resource's provenance, revision, maintainer, license, cost notes, dependencies, permissions, security notes, freshness policy, quota evidence, and lifecycle fields. It explicitly lists missing review evidence. A resource is never marked execution-ready by this planner. Review completeness requires owner approval, a known open-source cost model, explicit commercial-use permission, dated high-confidence quota evidence, and complete access/persistence/execution/security/lifecycle metadata.
 
 The test command now includes `tests/planning/*.test.mjs`; previously the nested planner suite was not included by the package test script. No Worker schema, endpoint, binding, secret, or deployment is changed by this catalog slice.
+
+
+## Designated eBay project write capability — implementation branch
+
+The branch `feat/eve-ebay-project-write-tool` adds the proposed `ebay_project_write` tool. It is limited in code to:
+- Repository `molson835-ai/Autonomous-dev-AI`
+- Branch prefix `eve/ebay-inventory-audit/`
+- File path prefix `products/ebay-inventory-audit/`
+- Small regular text files with an explicit extension allowlist and 64 KiB per-file cap
+- Exact expected-base/head SHA checks and non-force Git ref updates
+- Draft pull requests to `main` only after a bounded compare verifies every changed path is inside the product directory
+
+The tool is dynamically gated by the existing stateful-tool authorization policy. It cannot write `main`, delete files, force-push, merge, deploy, run shell commands, or change other repository paths. The PAT is read only from the environment variable `EVE_GITHUB_REPO_TOKEN`; no token has been connected to Vercel at this stage. The PAT itself remains repository-wide, so the path and branch boundary is enforced by Eve's tool code rather than by GitHub token permissions. See `docs/eve-ebay-project-write-access.md`.
+
+**Verification boundary:** this branch is implementation code, not a live capability grant. A green CI run is required before merge. Merge and Production deployment still need separate owner approval. Adding the PAT as a Vercel secret and performing a bounded live acceptance test are separate owner-controlled steps. Until those steps are completed, Eve must not claim it can write to GitHub.
