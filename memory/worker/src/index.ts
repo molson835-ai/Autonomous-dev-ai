@@ -165,7 +165,7 @@ export class MemoryStore extends DurableObject<Env> {
       return;
     }
     const next = this.ctx.storage.sql.exec<{ next_run_at: string }>(
-      "SELECT MIN(t.next_run_at) AS next_run_at FROM tasks t WHERE t.status='waiting' AND t.mission_authorized=0 AND (t.owner_approved=1 OR (t.goal_id='ebay-inventory-audit-development' AND t.scope_id='ebay_inventory_audit_development')) AND t.attempt_count<t.max_attempts AND t.step_count<t.max_steps AND t.next_run_at IS NOT NULL AND NOT EXISTS (SELECT 1 FROM task_wakeup_attempts w WHERE w.task_id=t.id AND w.next_run_at=t.next_run_at)"
+      "SELECT MIN(t.next_run_at) AS next_run_at FROM tasks t WHERE t.status='waiting' AND t.mission_authorized=0 AND (t.owner_approved=1 OR (t.goal_id='ebay-inventory-audit-development' AND t.scope_id='ebay_inventory_audit_development' AND t.task_type IN ('research','planning','development','testing','documentation','maintenance') AND t.approved_scope LIKE '%products/ebay-inventory-audit/%')) AND t.attempt_count<t.max_attempts AND t.step_count<t.max_steps AND t.next_run_at IS NOT NULL AND NOT EXISTS (SELECT 1 FROM task_wakeup_attempts w WHERE w.task_id=t.id AND w.next_run_at=t.next_run_at)"
     ).toArray()[0];
     if (!next?.next_run_at) {
       await this.ctx.storage.deleteAlarm();
@@ -188,7 +188,7 @@ export class MemoryStore extends DurableObject<Env> {
       return;
     }
     const due = this.ctx.storage.sql.exec<TaskRow>(
-      "SELECT t.* FROM tasks t WHERE t.status='waiting' AND t.mission_authorized=0 AND (t.owner_approved=1 OR (t.goal_id='ebay-inventory-audit-development' AND t.scope_id='ebay_inventory_audit_development')) AND t.attempt_count<t.max_attempts AND t.step_count<t.max_steps AND t.next_run_at IS NOT NULL AND t.next_run_at<=? AND NOT EXISTS (SELECT 1 FROM task_wakeup_attempts w WHERE w.task_id=t.id AND w.next_run_at=t.next_run_at) ORDER BY t.next_run_at ASC LIMIT 1",
+      "SELECT t.* FROM tasks t WHERE t.status='waiting' AND t.mission_authorized=0 AND (t.owner_approved=1 OR (t.goal_id='ebay-inventory-audit-development' AND t.scope_id='ebay_inventory_audit_development' AND t.task_type IN ('research','planning','development','testing','documentation','maintenance') AND t.approved_scope LIKE '%products/ebay-inventory-audit/%')) AND t.attempt_count<t.max_attempts AND t.step_count<t.max_steps AND t.next_run_at IS NOT NULL AND t.next_run_at<=? AND NOT EXISTS (SELECT 1 FROM task_wakeup_attempts w WHERE w.task_id=t.id AND w.next_run_at=t.next_run_at) ORDER BY t.next_run_at ASC LIMIT 1",
       now
     ).toArray()[0];
     if (!due) {
