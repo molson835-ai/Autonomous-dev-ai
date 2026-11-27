@@ -205,7 +205,7 @@ The resource ecosystem extends 4B–4F. It is a discovery, verification, and orc
 | Memory | Existing Cloudflare Durable Object memory/task system | Fix and verify current runtime recall; append-only evidence; resource metadata | Preserve existing records; owner approval for memory decisions |
 | Document creation | Local-first generation | Markdown, HTML, CSV, JSON, print-ready output | No paid conversion service; export only after successful creation and validation |
 | Images and media | Local/open-source and procedural tools | SVG, image conversion, audio/video utilities where installed and licensed | Do not assume a free hosted generator or compute quota |
-| Scheduling | Existing scheduled task infrastructure | Verify claim/checkpoint/resume/closed-chat execution | One owner-approved task per invocation; never self-approve |
+| Scheduling | Existing scheduled task infrastructure | Verify claim/checkpoint/resume/closed-chat execution | One individually owner-approved or exact server-authorized goal task per invocation; never self-approve or expand an approved goal |
 | AI inference | Existing Workers AI within verified limits; evaluate local models | Deterministic-first dispatcher and local model benchmark | No paid fallback; no local hardware purchase until separately approved |
 
 ### Resource ecosystem design

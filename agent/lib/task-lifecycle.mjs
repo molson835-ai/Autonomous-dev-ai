@@ -14,8 +14,37 @@ export const OWNER_DEFINED_SCOPE_IDS = Object.freeze({
   documentation: "documentation_only",
 });
 const OWNER_REVIEW_SCOPE_ID = "owner_review_required";
-// Standing mission authorization is disabled until a trusted owner-controlled
-// delegation mechanism exists. Agent-supplied task metadata is never authority.
+
+// Server-owned registry: only this exact owner-approved goal can authorize
+// autonomous task creation and execution. It is intentionally narrow.
+export const APPROVED_GOALS = Object.freeze({
+  "ebay-inventory-audit-development": Object.freeze({
+    id: "ebay-inventory-audit-development",
+    scope_id: "ebay_inventory_audit_development",
+    project_path: "products/ebay-inventory-audit/",
+    allowed_task_types: Object.freeze(["research", "planning", "development", "testing", "documentation", "maintenance"])
+  })
+});
+export function getApprovedGoal(goalId) {
+  return typeof goalId === "string" ? APPROVED_GOALS[goalId] ?? null : null;
+}
+export function isApprovedGoalTaskInput(input) {
+  const goal = getApprovedGoal(input?.goal_id);
+  return !!goal && input.scope_id === goal.scope_id &&
+    goal.allowed_task_types.includes(input.task_type) &&
+    typeof input.approved_scope === "string" && input.approved_scope.includes(goal.project_path);
+}
+export function isGoalAuthorizedTask(task) {
+  const goal = getApprovedGoal(task?.goal_id);
+  return !!goal && task.scope_id === goal.scope_id &&
+    goal.allowed_task_types.includes(task.task_type) &&
+    typeof task.approved_scope === "string" && task.approved_scope.includes(goal.project_path) &&
+    task.mission_authorized === false;
+}
+export function isTaskAuthorized(task) {
+  return task?.owner_approved === true || isGoalAuthorizedTask(task);
+}
+// Legacy standing mission authorization remains disabled.
 export function isMissionAuthorizedTask(_input) { return false; }
 const TRANSITIONS = Object.freeze({
   proposed: new Set(["queued", "cancelled"]),
@@ -65,9 +94,8 @@ export function validateTaskRecord(task) {
   if (task.step_count > task.max_steps) return { valid: false, reason: "step_budget_exceeded" };
   if (typeof task.mission_authorized !== "boolean") return { valid: false, reason: "missing_mission_authorization_state" };
   if (task.mission_authorized === true && !isMissionAuthorizedTask(task)) return { valid: false, reason: "invalid_mission_authorized_scope" };
-  if (task.status !== "proposed" && task.owner_approved !== true && task.mission_authorized !== true) {
-    return { valid: false, reason: "unapproved_task_cannot_be_active" };
-  }
+  if (task.goal_id !== undefined && task.goal_id !== null && !isGoalAuthorizedTask(task)) return { valid: false, reason: "invalid_approved_goal_scope" };
+  if (task.status !== "proposed" && !isTaskAuthorized(task)) return { valid: false, reason: "unapproved_task_cannot_be_active" };
   if (task.next_run_at != null && !validTimestamp(task.next_run_at)) {
     return { valid: false, reason: "invalid_next_run_at" };
   }
@@ -87,7 +115,8 @@ export function createTaskRecord(input, { now = new Date().toISOString(), maxAtt
     goal: input.goal,
     approved_scope: input.approved_scope,
     scope_id: input.scope_id ?? OWNER_REVIEW_SCOPE_ID,
-    status: missionAuthorized === true ? "queued" : "proposed",
+    goal_id: input.goal_id ?? null,
+    status: "proposed",
     owner_approved: false,
     mission_authorized: missionAuthorized === true,
     created_at: now,
@@ -102,6 +131,10 @@ export function createTaskRecord(input, { now = new Date().toISOString(), maxAtt
     evidence_refs: []
   };
   if (missionAuthorized === true && !isMissionAuthorizedTask(record)) throw new TypeError("Invalid mission-authorized task scope");
+  if (record.goal_id !== null) {
+    if (!isApprovedGoalTaskInput(record)) throw new TypeError("Invalid approved-goal task scope");
+    record.status = "queued";
+  }
   const validation = validateTaskRecord(record);
   if (!validation.valid) throw new TypeError(`Invalid task record: ${validation.reason}`);
   return Object.freeze(record);
@@ -127,7 +160,7 @@ export function selectNextTask(tasks, { now = Date.now() } = {}) {
     const dueQueued = task.status === "queued" && (!task.next_run_at || Date.parse(task.next_run_at) <= now);
     const dueWaiting = task.status === "waiting" && task.next_run_at !== null && task.next_run_at !== undefined && Date.parse(task.next_run_at) <= now;
     if (!dueQueued && !dueWaiting) return false;
-    if (task.owner_approved !== true && task.mission_authorized !== true) return false;
+    if (!isTaskAuthorized(task)) return false;
     if (task.attempt_count >= task.max_attempts || task.step_count >= task.max_steps) return false;
     return true;
   });
@@ -167,7 +200,7 @@ export function transitionTask(task, nextStatus, {
   if (task.status === "proposed" && nextStatus === "queued" && ownerApproved !== true) {
     throw new Error("owner_approval_required");
   }
-  if (nextStatus === "queued" && task.owner_approved !== true && ownerApproved !== true && !(task.status === "waiting" && task.mission_authorized === true)) {
+  if (nextStatus === "queued" && !isTaskAuthorized(task) && ownerApproved !== true) {
     throw new Error("owner_approval_required");
   }
   if (nextStatus === "running" && task.attempt_count >= task.max_attempts) {

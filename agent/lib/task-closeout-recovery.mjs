@@ -1,3 +1,5 @@
+import { isTaskAuthorized } from "./task-lifecycle.mjs";
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const NON_WORK_TOOLS = new Set([
@@ -65,7 +67,7 @@ export function recoverableTaskCloseout({
 
   const task = claims[0].output?.task;
   if (!task || !UUID.test(task.id ?? "") || task.status !== "running" ||
-      task.owner_approved !== true || task.mission_authorized !== false ||
+      !isTaskAuthorized(task) || task.mission_authorized !== false ||
       !Number.isInteger(task.step_count) || !Number.isInteger(task.max_steps) ||
       !Number.isInteger(task.attempt_count) || !Number.isInteger(task.max_attempts)) {
     return null;
@@ -79,7 +81,7 @@ export function recoverableTaskCloseout({
 
   const status = canContinue ? "waiting" : "paused";
   const checkpointSummary = [
-    "Automatic safety checkpoint: the Eve turn settled after claiming this individually owner-approved task but before calling task_transition.",
+    "Automatic safety checkpoint: the Eve turn settled after claiming this individually owner-approved or server-authorized goal task but before calling task_transition.",
     "This is not evidence of task completion and does not certify the preceding work; inspect the prior tool results before continuing.",
     `Recovery trace: session ${sessionId}, turn ${turnId}.`,
     recoveryDiagnostics(turnCalls, outcome),

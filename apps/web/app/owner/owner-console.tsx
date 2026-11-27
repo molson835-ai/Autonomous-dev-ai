@@ -9,6 +9,7 @@ type Task = {
   goal: string;
   approved_scope: string;
   scope_id: string;
+  goal_id: string | null;
   status: string;
   owner_approved: boolean;
   mission_authorized: boolean;
@@ -543,7 +544,7 @@ export default function OwnerConsole() {
               <div className="space-y-1">
                 <p className="font-semibold">Background task queue: {queueStatus.queue_paused ? "Paused" : "Active"}</p>
                 <p className="text-sm text-muted-foreground">
-                  {queueStatus.running_tasks} running · {queueStatus.queued_tasks} queued (owner-approved)
+                  {queueStatus.running_tasks} running · {queueStatus.queued_tasks} queued (owner-approved or approved-goal)
                   {queueStatus.reason ? " · " + queueStatus.reason : ""}
                 </p>
                 <p className="text-xs text-muted-foreground">Pausing prevents new claims; an already-running invocation may finish its current bounded step.</p>
@@ -614,7 +615,7 @@ export default function OwnerConsole() {
                   </section>
                 )}
                 {task.result_summary && <p className="text-sm text-muted-foreground">Result: {task.result_summary}</p>}
-                <p className="text-xs text-muted-foreground">Steps: {task.step_count}/{task.max_steps} · stale retries: {task.attempt_count}/{task.max_attempts} · {task.mission_authorized ? "Blocked: legacy authorization" : task.owner_approved ? "Owner approved" : "Awaiting owner approval"} · ID {task.id}</p>
+                <p className="text-xs text-muted-foreground">Steps: {task.step_count}/{task.max_steps} · stale retries: {task.attempt_count}/{task.max_attempts} · {task.mission_authorized ? "Blocked: legacy authorization" : task.owner_approved ? "Owner approved" : task.goal_id === "ebay-inventory-audit-development" && task.scope_id === "ebay_inventory_audit_development" ? "Approved goal: eBay inventory-audit development" : "Awaiting owner approval"} · ID {task.id}</p>
                 <div className="flex flex-wrap gap-2">
                   {task.status === "proposed" && (
                     <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-end">
@@ -643,12 +644,12 @@ export default function OwnerConsole() {
                       Pause
                     </button>
                   )}
-                  {task.status === "waiting" && task.owner_approved && !task.mission_authorized && (
+                  {task.status === "waiting" && !task.mission_authorized && (task.owner_approved || (task.goal_id === "ebay-inventory-audit-development" && task.scope_id === "ebay_inventory_audit_development")) && (
                     <button
                       type="button"
                       disabled={busy !== null}
                       onClick={() => {
-                        if (window.confirm("Move this exact waiting, owner-approved task back to the queue? Its checkpoint, evidence, and approved scope will be preserved. No other task will be changed.")) {
+                        if (window.confirm("Move this exact waiting, authorized task back to the queue? Its checkpoint, evidence, and approved scope will be preserved. No other task will be changed.")) {
                           void perform(task.id, "/v1/tasks/" + task.id + "/owner-control", "POST", { action: "resume" });
                         }
                       }}

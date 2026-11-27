@@ -5,7 +5,7 @@ import { validateHtmlArtifact } from "../../../agent/lib/artifact-policy.mjs";
 import { validateCsvArtifact } from "../../../agent/lib/csv-artifact-policy.mjs";
 import { prepareResourceCandidate } from "../../../agent/resources/intake.mjs";
 import { ensureExperienceExternalIdColumn, findExperienceByExternalId } from "../../../agent/lib/memory-schema.mjs";
-import { createTaskRecord, isMissionAuthorizedTask, isTaskLeaseExpired, selectNextTask, TASK_STATUS_VALUES, transitionTask } from "../../../agent/lib/task-lifecycle.mjs";
+import { createTaskRecord, isMissionAuthorizedTask, isTaskAuthorized, isApprovedGoalTaskInput, getApprovedGoal, isTaskLeaseExpired, selectNextTask, TASK_STATUS_VALUES, transitionTask } from "../../../agent/lib/task-lifecycle.mjs";
 
 interface Env {
   MEMORY: DurableObjectNamespace<MemoryStore>;
@@ -26,7 +26,7 @@ type MemoryRow = {
   id: string; kind: string; content: string; source: string;
   confidence: number; status: string; created_at: string; updated_at: string;
 };
-type TaskRow = { id: string; idempotency_key: string; task_type: string; title: string; goal: string; approved_scope: string; scope_id: string; status: string; owner_approved: number; mission_authorized: number; created_at: string; updated_at: string; attempt_count: number; max_attempts: number; step_count: number; max_steps: number; next_run_at: string | null; checkpoint_summary: string | null; result_summary: string | null; evidence_refs: string; started_at: string | null; finished_at: string | null; };
+type TaskRow = { id: string; idempotency_key: string; task_type: string; title: string; goal: string; approved_scope: string; scope_id: string; goal_id: string | null; status: string; owner_approved: number; mission_authorized: number; created_at: string; updated_at: string; attempt_count: number; max_attempts: number; step_count: number; max_steps: number; next_run_at: string | null; checkpoint_summary: string | null; result_summary: string | null; evidence_refs: string; started_at: string | null; finished_at: string | null; };
 type ResourceRow = { id: string; resource_json: string; trust_state: string; created_at: string; updated_at: string; reviewer: string | null; reviewed_at: string | null; review_evidence: string; };
 type ExperienceRow = {
   id: string; external_id: string | null; task: string; outcome: string; result: string;
@@ -120,6 +120,9 @@ export class MemoryStore extends DurableObject<Env> {
       if (!taskColumns.some(column => column.name === "scope_id")) {
         ctx.storage.sql.exec("ALTER TABLE tasks ADD COLUMN scope_id TEXT NOT NULL DEFAULT 'owner_review_required'");
       }
+      if (!taskColumns.some(column => column.name === "goal_id")) {
+        ctx.storage.sql.exec("ALTER TABLE tasks ADD COLUMN goal_id TEXT");
+      }
       // Revoke all legacy mission authorization until trusted owner delegation exists.
       // Preserve history; stop every nonterminal unapproved task by returning it to proposed.
       ctx.storage.sql.exec(
@@ -162,7 +165,7 @@ export class MemoryStore extends DurableObject<Env> {
       return;
     }
     const next = this.ctx.storage.sql.exec<{ next_run_at: string }>(
-      "SELECT MIN(t.next_run_at) AS next_run_at FROM tasks t WHERE t.status='waiting' AND t.owner_approved=1 AND t.mission_authorized=0 AND t.attempt_count<t.max_attempts AND t.step_count<t.max_steps AND t.next_run_at IS NOT NULL AND NOT EXISTS (SELECT 1 FROM task_wakeup_attempts w WHERE w.task_id=t.id AND w.next_run_at=t.next_run_at)"
+      "SELECT MIN(t.next_run_at) AS next_run_at FROM tasks t WHERE t.status='waiting' AND t.mission_authorized=0 AND (t.owner_approved=1 OR (t.goal_id='ebay-inventory-audit-development' AND t.scope_id='ebay_inventory_audit_development' AND t.task_type IN ('research','planning','development','testing','documentation','maintenance') AND t.approved_scope LIKE '%products/ebay-inventory-audit/%')) AND t.attempt_count<t.max_attempts AND t.step_count<t.max_steps AND t.next_run_at IS NOT NULL AND NOT EXISTS (SELECT 1 FROM task_wakeup_attempts w WHERE w.task_id=t.id AND w.next_run_at=t.next_run_at)"
     ).toArray()[0];
     if (!next?.next_run_at) {
       await this.ctx.storage.deleteAlarm();
@@ -185,7 +188,7 @@ export class MemoryStore extends DurableObject<Env> {
       return;
     }
     const due = this.ctx.storage.sql.exec<TaskRow>(
-      "SELECT t.* FROM tasks t WHERE t.status='waiting' AND t.owner_approved=1 AND t.mission_authorized=0 AND t.attempt_count<t.max_attempts AND t.step_count<t.max_steps AND t.next_run_at IS NOT NULL AND t.next_run_at<=? AND NOT EXISTS (SELECT 1 FROM task_wakeup_attempts w WHERE w.task_id=t.id AND w.next_run_at=t.next_run_at) ORDER BY t.next_run_at ASC LIMIT 1",
+      "SELECT t.* FROM tasks t WHERE t.status='waiting' AND t.mission_authorized=0 AND (t.owner_approved=1 OR (t.goal_id='ebay-inventory-audit-development' AND t.scope_id='ebay_inventory_audit_development' AND t.task_type IN ('research','planning','development','testing','documentation','maintenance') AND t.approved_scope LIKE '%products/ebay-inventory-audit/%')) AND t.attempt_count<t.max_attempts AND t.step_count<t.max_steps AND t.next_run_at IS NOT NULL AND t.next_run_at<=? AND NOT EXISTS (SELECT 1 FROM task_wakeup_attempts w WHERE w.task_id=t.id AND w.next_run_at=t.next_run_at) ORDER BY t.next_run_at ASC LIMIT 1",
       now
     ).toArray()[0];
     if (!due) {
@@ -249,7 +252,7 @@ export class MemoryStore extends DurableObject<Env> {
       const row = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE id=? LIMIT 1", taskId).toArray()[0];
       const task = row ? taskFromRow(row) : null;
       const eligible = control.queue_paused === 0 && running === 0 && !!task &&
-        task.status === "waiting" && task.owner_approved === true && task.mission_authorized === false &&
+        task.status === "waiting" && isTaskAuthorized(task) && task.mission_authorized === false &&
         task.attempt_count < task.max_attempts && task.step_count < task.max_steps &&
         task.next_run_at === expectedNextRunAt && Date.parse(expectedNextRunAt) <= Date.parse(now);
       return json({ eligible, queue_paused: control.queue_paused === 1, running_tasks: running });
@@ -555,19 +558,31 @@ export class MemoryStore extends DurableObject<Env> {
 
     if (request.method === "POST" && ["/v1/tasks", "/v1/owner/tasks"].includes(url.pathname)) {
       const body = await readBody(request);
-      const allowed = new Set(["idempotency_key", "task_type", "title", "goal", "approved_scope"]);
+      const allowed = new Set(["idempotency_key", "task_type", "title", "goal", "approved_scope", "goal_id"]);
       if (!body || Object.keys(body).some(key => !allowed.has(key)) ||
           !isSafeMemoryText(body.idempotency_key, 200) || !isSafeMemoryText(body.task_type, 80) ||
           !isSafeMemoryText(body.title, 200) || !isSafeMemoryText(body.goal, 1000) ||
-          !isSafeMemoryText(body.approved_scope, 2000)) return json({ error: "Invalid task proposal." }, 400);
+          !isSafeMemoryText(body.approved_scope, 2000) ||
+          (body.goal_id !== undefined && typeof body.goal_id !== "string")) return json({ error: "Invalid task proposal." }, 400);
       const key = String(body.idempotency_key).trim();
       const existing = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE idempotency_key = ? LIMIT 1", key).toArray()[0];
       if (existing) return json({ task: taskFromRow(existing), created: false });
-      const taskInput = { idempotency_key: key, task_type: String(body.task_type).trim(), title: String(body.title).trim(), goal: String(body.goal).trim(), approved_scope: String(body.approved_scope).trim(), scope_id: "owner_review_required" };
-      const missionAuthorized = false;
+      const goalId = body.goal_id === undefined ? null : String(body.goal_id);
+      const approvedGoal = goalId === null ? null : getApprovedGoal(goalId);
+      if (goalId !== null && !approvedGoal) return json({ error: "The requested goal is not owner-authorized.", reason_code: "goal_not_approved" }, 403);
+      const taskInput = {
+        idempotency_key: key, task_type: String(body.task_type).trim(),
+        title: String(body.title).trim(), goal: String(body.goal).trim(),
+        approved_scope: String(body.approved_scope).trim(),
+        scope_id: approvedGoal?.scope_id ?? "owner_review_required", goal_id: goalId,
+      };
+      if (goalId !== null && !isApprovedGoalTaskInput(taskInput)) {
+        return json({ error: "The task does not fit the approved goal's task types and project path.", reason_code: "goal_scope_mismatch" }, 403);
+      }
       const task = createTaskRecord({ id: crypto.randomUUID(), ...taskInput }, { now, missionAuthorized: false });
-      this.ctx.storage.sql.exec("INSERT INTO tasks (id,idempotency_key,task_type,title,goal,approved_scope,scope_id,status,owner_approved,mission_authorized,created_at,updated_at,attempt_count,max_attempts,step_count,max_steps,next_run_at,checkpoint_summary,result_summary,evidence_refs,started_at,finished_at) VALUES (?,?,?,?,?,?,?,?,0,?,?,?,0,?,0,?,NULL,NULL,NULL,'[]',NULL,NULL)", task.id, task.idempotency_key, task.task_type, task.title, task.goal, task.approved_scope, task.scope_id, task.status, missionAuthorized ? 1 : 0, task.created_at, task.updated_at, task.max_attempts, task.max_steps);
-      return json({ task, created: true, mission_authorized: missionAuthorized }, 201);
+      this.ctx.storage.sql.exec("INSERT INTO tasks (id,idempotency_key,task_type,title,goal,approved_scope,scope_id,goal_id,status,owner_approved,mission_authorized,created_at,updated_at,attempt_count,max_attempts,step_count,max_steps,next_run_at,checkpoint_summary,result_summary,evidence_refs,started_at,finished_at) VALUES (?,?,?,?,?,?,?,?,?,0,0,?,?,0,?,0,?,NULL,NULL,NULL,'[]',NULL,NULL)", task.id, task.idempotency_key, task.task_type, task.title, task.goal, task.approved_scope, task.scope_id, task.goal_id, task.status, task.created_at, task.updated_at, task.max_attempts, task.max_steps);
+      await this.scheduleTaskWakeup();
+      return json({ task, created: true, mission_authorized: false }, 201);
     }
 
     if (request.method === "GET" && url.pathname === "/v1/tasks") {
@@ -579,7 +594,7 @@ export class MemoryStore extends DurableObject<Env> {
     if (request.method === "GET" && url.pathname === "/v1/owner/status") {
       const control = this.ctx.storage.sql.exec<{ queue_paused: number; reason: string | null; updated_at: string }>("SELECT queue_paused,reason,updated_at FROM task_control WHERE id=1").one();
       const running = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='running'").one().count;
-      const queued = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='queued' AND owner_approved=1 AND mission_authorized=0").one().count;
+      const queued = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='queued' AND mission_authorized=0 AND (owner_approved=1 OR (goal_id='ebay-inventory-audit-development' AND scope_id='ebay_inventory_audit_development' AND task_type IN ('research','planning','development','testing','documentation','maintenance') AND approved_scope LIKE '%products/ebay-inventory-audit/%'))").one().count;
       return json({ queue_paused: control.queue_paused === 1, reason: control.reason, updated_at: control.updated_at, running_tasks: running, queued_tasks: queued });
     }
 
@@ -725,13 +740,13 @@ export class MemoryStore extends DurableObject<Env> {
       const stillRunning = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM tasks WHERE status='running'").one().count;
       if (stillRunning > 0) return json({ task: null });
       const rows = this.ctx.storage.sql.exec<TaskRow>(
-        "SELECT * FROM tasks WHERE owner_approved=1 AND mission_authorized=0 AND attempt_count<max_attempts AND step_count<max_steps AND ((status='queued' AND (next_run_at IS NULL OR next_run_at<=?)) OR (status='waiting' AND next_run_at IS NOT NULL AND next_run_at<=?)) ORDER BY COALESCE(next_run_at,created_at) ASC LIMIT 500",
+        "SELECT * FROM tasks WHERE mission_authorized=0 AND (owner_approved=1 OR (goal_id='ebay-inventory-audit-development' AND scope_id='ebay_inventory_audit_development' AND task_type IN ('research','planning','development','testing','documentation','maintenance') AND approved_scope LIKE '%products/ebay-inventory-audit/%')) AND attempt_count<max_attempts AND step_count<max_steps AND ((status='queued' AND (next_run_at IS NULL OR next_run_at<=?)) OR (status='waiting' AND next_run_at IS NOT NULL AND next_run_at<=?)) ORDER BY COALESCE(next_run_at,created_at) ASC LIMIT 500",
         now, now
       ).toArray();
       const selected = selectNextTask(rows.map(taskFromRow), { now: Date.parse(now) });
       if (!selected) return json({ task: null });
       const claimed = transitionTask(selected, "running", { now });
-      const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status='running', step_count=?, updated_at=?, started_at=COALESCE(started_at,?), next_run_at=NULL WHERE id=? AND status=? AND owner_approved=1 AND mission_authorized=0 AND attempt_count<max_attempts AND step_count<max_steps RETURNING id", claimed.step_count, now, now, selected.id, selected.status).toArray();
+      const updated = this.ctx.storage.sql.exec<{ id: string }>("UPDATE tasks SET status='running', step_count=?, updated_at=?, started_at=COALESCE(started_at,?), next_run_at=NULL WHERE id=? AND status=? AND mission_authorized=0 AND (owner_approved=1 OR (goal_id='ebay-inventory-audit-development' AND scope_id='ebay_inventory_audit_development' AND task_type IN ('research','planning','development','testing','documentation','maintenance') AND approved_scope LIKE '%products/ebay-inventory-audit/%')) AND attempt_count<max_attempts AND step_count<max_steps RETURNING id", claimed.step_count, now, now, selected.id, selected.status).toArray();
       if (updated.length !== 1) return json({ error: "Task claim state conflict." }, 409);
       await this.scheduleTaskWakeup();
       return json({ task: claimed });
@@ -741,11 +756,16 @@ export class MemoryStore extends DurableObject<Env> {
     if (request.method === "POST" && heartbeatMatch) {
       const body = await readBody(request);
       if (body && Object.keys(body).length > 0) return json({ error: "Heartbeat body must be empty." }, 400);
+      const row = this.ctx.storage.sql.exec<TaskRow>("SELECT * FROM tasks WHERE id=? LIMIT 1", heartbeatMatch[1]).toArray()[0];
+      const task = row ? taskFromRow(row) : null;
+      if (!task || task.status !== "running" || task.mission_authorized !== false || !isTaskAuthorized(task)) {
+        return json({ error: "Only an actively running owner-approved or approved-goal task can heartbeat." }, 409);
+      }
       const updated = this.ctx.storage.sql.exec<{ id: string }>(
-        "UPDATE tasks SET updated_at=? WHERE id=? AND status='running' AND owner_approved=1 AND mission_authorized=0 RETURNING id",
+        "UPDATE tasks SET updated_at=? WHERE id=? AND status='running' AND mission_authorized=0 AND (owner_approved=1 OR (goal_id='ebay-inventory-audit-development' AND scope_id='ebay_inventory_audit_development' AND task_type IN ('research','planning','development','testing','documentation','maintenance') AND approved_scope LIKE '%products/ebay-inventory-audit/%')) RETURNING id",
         now, heartbeatMatch[1]
       ).toArray();
-      if (updated.length !== 1) return json({ error: "Only an actively running owner-approved task can heartbeat." }, 409);
+      if (updated.length !== 1) return json({ error: "Task heartbeat state conflict." }, 409);
       return json({ heartbeat: true, updated_at: now });
     }
 

@@ -3,6 +3,8 @@ import test from "node:test";
 import {
   createTaskRecord,
   isMissionAuthorizedTask,
+  isGoalAuthorizedTask,
+  isTaskAuthorized,
   findIdempotentTask,
   isTaskLeaseExpired,
   selectNextTask,
@@ -197,4 +199,46 @@ test("the final stale-lease recovery exhausts retries, records failure time, and
   assert.equal(failed.next_run_at, null);
   assert.equal(selectNextTask([failed], { now: Date.parse(failedAt) + 60 * 60 * 1000 }), null);
   assert.throws(() => transitionTask(failed, "running", { now: failedAt }), /invalid_task_transition/);
+});
+
+test("only the exact owner-approved eBay goal can authorize autonomous task records", () => {
+  const goalTask = createTaskRecord({
+    id: "ebay-goal-001", idempotency_key: "ebay-goal-request-001",
+    task_type: "development", title: "Implement CSV reconciliation",
+    goal: "Improve the eBay inventory audit utility",
+    approved_scope: "Modify and test files only under products/ebay-inventory-audit/.",
+    scope_id: "ebay_inventory_audit_development",
+    goal_id: "ebay-inventory-audit-development",
+  }, { now });
+  assert.equal(goalTask.status, "queued");
+  assert.equal(goalTask.owner_approved, false);
+  assert.equal(goalTask.mission_authorized, false);
+  assert.equal(isGoalAuthorizedTask(goalTask), true);
+  assert.equal(isTaskAuthorized(goalTask), true);
+  assert.equal(selectNextTask([goalTask], { now: Date.parse(now) }).id, goalTask.id);
+  const running = transitionTask(goalTask, "running", { now });
+  assert.equal(running.owner_approved, false);
+  const waiting = transitionTask(running, "waiting", { now, nextRunAt: "2026-11-13T00:05:00.000Z" });
+  const resumed = transitionTask(waiting, "queued", { now });
+  assert.equal(resumed.status, "queued");
+  assert.equal(resumed.owner_approved, false);
+});
+
+test("goal ID alone cannot authorize another goal, scope, task type, or project path", () => {
+  const invalid = [
+    { goal_id: "general-revenue-mission", scope_id: "ebay_inventory_audit_development", task_type: "development", approved_scope: "products/ebay-inventory-audit/" },
+    { goal_id: "ebay-inventory-audit-development", scope_id: "product_development", task_type: "development", approved_scope: "products/ebay-inventory-audit/" },
+    { goal_id: "ebay-inventory-audit-development", scope_id: "ebay_inventory_audit_development", task_type: "outreach", approved_scope: "products/ebay-inventory-audit/" },
+    { goal_id: "ebay-inventory-audit-development", scope_id: "ebay_inventory_audit_development", task_type: "development", approved_scope: "modify the whole repository" },
+  ];
+  for (const [index, metadata] of invalid.entries()) {
+    assert.throws(() => createTaskRecord({
+      id: `invalid-goal-${index}`, idempotency_key: `invalid-goal-request-${index}`,
+      title: "Invalid goal task", goal: "Attempt to expand scope", ...metadata,
+    }, { now }), /Invalid approved-goal task scope/);
+  }
+  assert.equal(isGoalAuthorizedTask({
+    goal_id: "ebay-inventory-audit-development", scope_id: "ebay_inventory_audit_development",
+    task_type: "development", approved_scope: "products/ebay-inventory-audit/", mission_authorized: true,
+  }), false);
 });

@@ -18,7 +18,10 @@ test("manual claim instruction does not accidentally suppress stateful task tool
 });
 
 test("manual owner run preserves task approval, scope, and bounded closeout requirements", () => {
-  assert.match(prompt, /owner_approved is exactly true/);
+  assert.match(prompt, /owner_approved exactly true/);
+  assert.match(prompt, /goal_id exactly ebay-inventory-audit-development/);
+  assert.match(prompt, /scope_id exactly ebay_inventory_audit_development/);
+  assert.match(prompt, /products\/ebay-inventory-audit\//);
   assert.match(prompt, /mission_authorized is not true/);
   assert.match(prompt, /strictly within that task's approved_scope/);
   assert.match(prompt, /task_transition exactly once/);
@@ -32,7 +35,7 @@ test("manual owner run cannot treat one completed step as completion of the full
   assert.match(prompt, /hold_without_schedule: true only when blocked on owner input or an external dependency/);
   assert.match(prompt, /If any substantive work tool failed, do not schedule a resume/);
   assert.match(prompt, /hold_without_schedule: true only when blocked on owner input or an external dependency/);
-  assert.match(prompt, /Never ask the owner to re-approve a task that is already individually owner-approved/);
+  assert.match(prompt, /Never ask the owner to re-approve a task that is already individually owner-approved or authorized by the exact active goal registry/);
   assert.match(prompt, /Evidence references must identify concrete supporting records/);
 });
 

@@ -7,7 +7,7 @@ const policy = await readFile(new URL("../docs/eve-earn-before-spend-policy.md",
 const efficiency = await readFile(new URL("../docs/eve-work-efficiency-standard.md", import.meta.url), "utf8");
 
 test("Eve's work loop keeps revenue primary while requiring evidence-based learning", () => {
-  assert.match(prompt, /first cleared dollar remain the primary near-term outcome/);
+  assert.match(prompt, /first cleared dollar remains the primary near-term outcome/);
   assert.match(prompt, /CONTINUOUS SELF-IMPROVEMENT/);
   assert.match(prompt, /compare intended outcome with observed evidence/);
   assert.match(prompt, /memory_record_experience/);
