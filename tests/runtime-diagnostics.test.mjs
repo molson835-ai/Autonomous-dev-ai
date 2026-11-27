@@ -19,11 +19,12 @@ test("latest user message excludes prior read-only instructions", () => {
 });
 
 test("source inventory is explicit and contains unique tool names", () => {
-  assert.equal(SOURCE_DEFINED_TOOL_NAMES.length, 28);
+  assert.equal(SOURCE_DEFINED_TOOL_NAMES.length, 29);
   assert.equal(new Set(SOURCE_DEFINED_TOOL_NAMES).size, SOURCE_DEFINED_TOOL_NAMES.length);
   assert.ok(SOURCE_DEFINED_TOOL_NAMES.includes("runtime_diagnostics"));
   assert.ok(SOURCE_DEFINED_TOOL_NAMES.includes("get_artifact"));
   assert.ok(SOURCE_DEFINED_TOOL_NAMES.includes("repository_readonly"));
+  assert.ok(SOURCE_DEFINED_TOOL_NAMES.includes("ebay_project_write"));
 });
 
 test("source inventory exactly matches the tool modules in agent/tools", async () => {
@@ -88,5 +89,6 @@ test("read-only sessions report gated tools withheld and never claim runtime enu
   assert.ok(result.permissions.dynamicallyGatedTools.every(item => item.status === "withheld-by-gate"));
   assert.equal(result.inventory.effectiveRuntimeToolManifest, "unavailable-through-documented-ToolContext");
   assert.equal(result.integrations.status, "not-tested");
-  assert.equal(DYNAMICALLY_GATED_TOOL_NAMES.length, 9);
+  assert.equal(DYNAMICALLY_GATED_TOOL_NAMES.length, 10);
+  assert.ok(DYNAMICALLY_GATED_TOOL_NAMES.includes("ebay_project_write"));
 });

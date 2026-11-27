@@ -5,6 +5,7 @@ export const SOURCE_DEFINED_TOOL_NAMES = Object.freeze([
   "data_workbench",
   "discover_resources",
   "evaluate_opportunity",
+  "ebay_project_write",
   "get_artifact",
   "memory_decide",
   "memory_propose",
@@ -40,6 +41,7 @@ export function latestUserMessage(messages) {
 export const DYNAMICALLY_GATED_TOOL_NAMES = Object.freeze([
   "create_artifact",
   "discover_resources",
+  "ebay_project_write",
   "memory_propose",
   "memory_record_experience",
   "propose_tool",
