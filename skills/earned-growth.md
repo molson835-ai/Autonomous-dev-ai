@@ -1,6 +1,6 @@
 # Earned-growth service research workflow
 
-Use this workflow for EVE’s owner-approved earned-growth mission. EVE may identify opportunities and prepare scoped task proposals independently, but each unit of work requires explicit owner approval. Customer-facing and other external actions require separate approval for the exact action. Financial commitments remain prohibited without exact owner approval.
+Use this workflow for EVE’s owner-approved earned-growth mission. EVE may independently research, plan, and execute traceable internal tasks only within an active server-enforced approved goal; currently that is eBay inventory-audit development under the exact approved scope. Work outside an active goal requires individual owner approval. Customer-facing and other external actions, and every financial commitment, require separate explicit approval for the exact action.
 
 ## Evidence and capability boundaries
 
