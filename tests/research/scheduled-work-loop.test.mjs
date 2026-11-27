@@ -13,8 +13,8 @@ test("scheduled work loop respects the Vercel Hobby daily cron limit", () => {
 test("scheduled work claims one individually approved or exact goal-authorized task", () => {
   assert.match(workLoop, /task_claim_next exactly once/);
   assert.match(workLoop, /task\.owner_approved === true/);
-  assert.match(workLoop, /task\.goal_id === "ebay-inventory-audit-development"/);
-  assert.match(workLoop, /task\.scope_id === "ebay_inventory_audit_development"/);
+  assert.match(workLoop, /task\.goal_id === ["\']ebay-inventory-audit-development["\']/);
+  assert.match(workLoop, /task\.scope_id === ["\']ebay_inventory_audit_development["\']/);
   assert.match(workLoop, /products\/ebay-inventory-audit\//);
   assert.match(workLoop, /task\.mission_authorized !== true/);
   assert.match(workLoop, /fresh session/);
