@@ -110,7 +110,7 @@ Implemented on isolated branch `feat/privacy-safe-model-usage-instrumentation` a
 
 ### New evidence
 
-- The Production deployment containing numeric-only model-input instrumentation is READY. No Production Agent Runs were returned in the first hour after this deployment, and no matching `EVE_MODEL_INPUT_PROFILE` runtime logs were found in the most recent 30-minute window. Eve remains paused, so the new instrumentation has not yet produced a live model-call sample.
+- The Production deployment containing numeric-only model-input instrumentation is READY. A one-hour Production Agent Runs lookback immediately after deployment returned no runs, and no matching `EVE_MODEL_INPUT_PROFILE` runtime logs were found in the most recent 30-minute window. Eve remains paused, so the new instrumentation has not yet produced a live model-call sample.
 - The instrumentation normalizes AI SDK cache-read fields such as `inputTokenDetails.cacheReadTokens` and preserves missing cache values as null. It does not infer a cache miss when the provider omits cache metadata.
 - Cloudflare's Workers AI prompt-caching documentation says prefix caching is enabled by default for selected models, requires matching prompt prefixes, recommends stable `x-session-affinity`, and says cache-read counts appear in provider usage. The GLM-4.7-Flash model page does not currently mention prompt-caching compatibility. Therefore support for this exact model is unverified; no affinity header or provider configuration was changed.
 - The static scheduled work-loop prompt was 11,084 characters; the manual-run prompt was 2,982 characters. Both repeated policies already present in the permanent instructions and had grown into large, mostly static request prefixes.
