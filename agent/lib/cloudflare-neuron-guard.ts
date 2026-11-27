@@ -2,7 +2,7 @@ import type { LanguageModelV4Middleware } from "@ai-sdk/provider";
 import { memoryRequest } from "./memory-client";
 import { buildQuotaSettlement } from "./neuron-budget.mjs";
 import { handleStreamReadFailure } from "./stream-quota-error.mjs";
-import { summarizeModelInput } from "./model-input-profile.mjs";
+import { summarizeModelInput, summarizeModelUsage } from "./model-input-profile.mjs";
 const MODEL_ID = "@cf/zai-org/glm-4.7-flash";
 const MAX_OUTPUT_TOKENS = 1024;
 const RESERVATION_NEURONS = 200;
@@ -30,14 +30,13 @@ async function reserve() {
 }
 function logInputProfile(
   params: { prompt?: unknown[]; tools?: unknown[] },
-  usage?: { inputTokens?: { total?: number }; outputTokens?: { total?: number } },
+  usage?: unknown,
 ) {
   console.info("EVE_MODEL_INPUT_PROFILE", {
     model: MODEL_ID,
     environment: process.env.VERCEL_ENV ?? "unknown",
     ...summarizeModelInput(params as Parameters<typeof summarizeModelInput>[0]),
-    provider_input_tokens: usage?.inputTokens?.total ?? null,
-    provider_output_tokens: usage?.outputTokens?.total ?? null,
+    ...summarizeModelUsage(usage),
   });
 }
 async function settle(
@@ -57,7 +56,7 @@ async function circuit(id: string) {
 }
 function isQuotaError(error: unknown) {
   const e = error as any;
-  return /\b4006\b|daily free allocation|neurons? (?:allocation|limit|quota|exhausted)/i
+  return /\\b4006\\b|daily free allocation|neurons? (?:allocation|limit|quota|exhausted)/i
     .test([e?.code,e?.message,e?.cause?.code,e?.cause?.message].join(" "));
 }
 export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
@@ -82,7 +81,7 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
       catch (error) { logInputProfile(params); if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id, undefined, "provider_error"); throw error; }
       let settled = false;
       let profiled = false;
-      const profileOnce = (usage?: { inputTokens?: { total?: number }; outputTokens?: { total?: number } }) => {
+      const profileOnce = (usage?: unknown) => {
         if (profiled) return;
         profiled = true;
         logInputProfile(params, usage);
