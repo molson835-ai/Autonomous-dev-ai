@@ -140,7 +140,7 @@ jobs:
   publish-web-chat-scaffold:
     name: Publish generated Web Chat scaffold
     needs: verify
-    if: (github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || github.head_ref == 'docs/android-web-chat-design'
+    if: (github.event_name == 'workflow_dispatch' && github.ref_name == 'docs/android-web-chat-design') || (github.event_name == 'pull_request' && github.head_ref == 'docs/android-web-chat-design' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     permissions:
       contents: write
