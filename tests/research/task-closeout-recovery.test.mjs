@@ -101,6 +101,29 @@ test("recovers a failed task_transition attempt after completed work", () => {
   assert.equal(result.resumeAfterSeconds, 5);
 });
 
+test("includes safe tool names, states, and error classes without persisting raw error text", () => {
+  const result = scenario({
+    outcome: "failed",
+    calls: [
+      call("task_claim_next", { output: { task } }),
+      call("runtime_diagnostics", { output: { toolCount: 27 } }),
+      call("research_sources", {
+        state: "failed",
+        error: { name: "FetchTimeoutError", message: "Authorization: Bearer do-not-store-this-secret" },
+      }),
+    ],
+  });
+
+  assert.equal(result.status, "paused");
+  assert.match(result.checkpointSummary, /turn_outcome=failed/);
+  assert.match(result.checkpointSummary, /task_claim_next\[completed\]/);
+  assert.match(result.checkpointSummary, /research_sources\[failed\]\{FetchTimeoutError\}/);
+  assert.match(result.checkpointSummary, /substantive_work_completed=0/);
+  assert.match(result.checkpointSummary, /substantive_work_failed=1/);
+  assert.doesNotMatch(result.checkpointSummary, /do-not-store-this-secret|Authorization|Bearer/);
+  assert.match(result.checkpointSummary, /arguments, outputs, raw error messages/);
+});
+
 test("does not recover when task_transition completed successfully", () => {
   const result = scenario({
     calls: [

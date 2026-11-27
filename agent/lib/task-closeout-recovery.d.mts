@@ -4,6 +4,8 @@ export interface TaskCloseoutCall {
   readonly state?: string;
   readonly turnId?: string;
   readonly output?: unknown;
+  readonly error?: { readonly name?: string } | null;
+  readonly errorName?: string;
 }
 
 export interface TaskCloseoutInput {

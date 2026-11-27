@@ -10,9 +10,40 @@ const NON_WORK_TOOLS = new Set([
   "memory_record_experience",
 ]);
 
+const SAFE_LABEL = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/;
+
+function safeLabel(value, fallback) {
+  return typeof value === "string" && SAFE_LABEL.test(value) ? value : fallback;
+}
+
+function recoveryDiagnostics(turnCalls, outcome) {
+  const calls = turnCalls.slice(0, 12).map(call => {
+    const name = safeLabel(call?.name, "unknown_tool");
+    const state = safeLabel(call?.state, "unknown");
+    const errorName = call?.state === "failed"
+      ? safeLabel(call?.error?.name ?? call?.errorName, "error_details_unavailable")
+      : null;
+    return name + "[" + state + "]" + (errorName ? "{" + errorName + "}" : "");
+  });
+  const workCalls = turnCalls.filter(call => !NON_WORK_TOOLS.has(call?.name));
+  const completedWork = workCalls.filter(call => call?.state === "completed").length;
+  const failedWork = workCalls.filter(call => call?.state === "failed").length;
+  const outcomeLabel = safeLabel(outcome, "unknown");
+  return [
+    "Recovery diagnostics (safe metadata only):",
+    "turn_outcome=" + outcomeLabel + ";",
+    "tool_calls=" + (calls.length ? calls.join(", ") : "none") + ";",
+    "substantive_work_completed=" + completedWork + ";",
+    "substantive_work_failed=" + failedWork + ".",
+    "Tool arguments, outputs, raw error messages, credentials, and user content are intentionally excluded.",
+  ].join(" ");
+}
+
 /**
  * Decide whether a settled Eve turn needs a deterministic task checkpoint.
  * The helper never infers task success and never retries an attempted transition.
+ * Recovery metadata contains tool names/states and error class names only; it
+ * never persists tool arguments, outputs, or raw error messages.
  */
 export function recoverableTaskCloseout({
   calls,
@@ -51,6 +82,7 @@ export function recoverableTaskCloseout({
     "Automatic safety checkpoint: the Eve turn settled after claiming this individually owner-approved task but before calling task_transition.",
     "This is not evidence of task completion and does not certify the preceding work; inspect the prior tool results before continuing.",
     `Recovery trace: session ${sessionId}, turn ${turnId}.`,
+    recoveryDiagnostics(turnCalls, outcome),
     canContinue
       ? "A completed work call was recorded and no work-call failure was recorded; schedule the next bounded step."
       : "Automatic continuation was withheld because the turn failed or was cancelled, no completed work call was recorded, a work call failed, or a task budget was exhausted. Owner review is required.",
