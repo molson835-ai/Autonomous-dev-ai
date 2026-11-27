@@ -244,7 +244,7 @@ describe("shared daily neuron quota coordinator", () => {
   });
   it("does not claim approved work when the local neuron target is already reached", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-11-27T12:00:00.000Z"));
+    vi.setSystemTime(new Date("2099-11-27T12:00:00.000Z"));
     const create = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
       idempotency_key: `TASK-QUOTA-PREFLIGHT-LOCAL-${crypto.randomUUID()}`,
       task_type: "verification", title: "Quota preflight local-budget test",
