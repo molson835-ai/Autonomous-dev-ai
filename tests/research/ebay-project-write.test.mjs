@@ -110,7 +110,7 @@ test("file write uses expected head, Git Data API, and a non-force ref update", 
       assert.equal(body.tree, NEW_TREE);
       return response({ sha: COMMIT }, 201);
     }
-    if (url.endsWith("/git/ref/heads/" + BRANCH) && options.method === "PATCH") {
+    if (url.endsWith("/git/refs/heads/" + BRANCH) && options.method === "PATCH") {
       const body = JSON.parse(options.body);
       assert.equal(body.force, false);
       return response({ object: { sha: COMMIT } });
