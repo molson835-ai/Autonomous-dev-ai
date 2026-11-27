@@ -644,12 +644,12 @@ export default function OwnerConsole() {
                       Pause
                     </button>
                   )}
-                  {task.status === "waiting" && task.owner_approved && !task.mission_authorized && (
+                  {task.status === "waiting" && !task.mission_authorized && (task.owner_approved || (task.goal_id === "ebay-inventory-audit-development" && task.scope_id === "ebay_inventory_audit_development")) && (
                     <button
                       type="button"
                       disabled={busy !== null}
                       onClick={() => {
-                        if (window.confirm("Move this exact waiting, owner-approved task back to the queue? Its checkpoint, evidence, and approved scope will be preserved. No other task will be changed.")) {
+                        if (window.confirm("Move this exact waiting, authorized task back to the queue? Its checkpoint, evidence, and approved scope will be preserved. No other task will be changed.")) {
                           void perform(task.id, "/v1/tasks/" + task.id + "/owner-control", "POST", { action: "resume" });
                         }
                       }}
