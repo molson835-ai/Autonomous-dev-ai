@@ -1,4 +1,4 @@
-import { validateTaskRecord } from "./task-lifecycle.mjs";
+import { validateTaskRecord, isTaskAuthorized } from "./task-lifecycle.mjs";
 import { evaluateProviderExecutionPreflight } from "./provider-execution-preflight.mjs";
 
 // Only owner-defined scopes with no external side effects may enter a provider preflight.
@@ -7,10 +7,11 @@ const PROVIDER_ELIGIBLE_SCOPES = new Set([
   "testing",
   "documentation",
   "market_research",
+  "ebay_inventory_audit_development",
 ]);
 
 /**
- * Bind a provider preflight to one already-claimed, individually owner-approved task.
+ * Bind a provider preflight to one already-claimed, individually owner-approved or server-authorized goal task.
  * This is assessment only: it never claims, transitions, resumes, or executes a task.
  */
 export function evaluateTaskProviderPreflight(input) {
@@ -26,8 +27,8 @@ export function evaluateTaskProviderPreflight(input) {
   if (task.status !== "running") {
     return blocked("Task must already be claimed and running before provider preflight.");
   }
-  if (task.owner_approved !== true || task.mission_authorized !== false) {
-    return blocked("An individually owner-approved task is required; standing mission authorization is not accepted.");
+  if (!isTaskAuthorized(task) || task.mission_authorized !== false) {
+    return blocked("An individually owner-approved or server-authorized goal task is required; standing mission authorization is not accepted.");
   }
   if (!PROVIDER_ELIGIBLE_SCOPES.has(task.scope_id)) {
     return blocked("Task scope is not eligible for isolated provider execution.");
