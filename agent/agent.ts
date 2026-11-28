@@ -2,6 +2,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { wrapLanguageModel } from "ai";
 import { defineAgent } from "eve";
 import { createCloudflareNeuronGuard } from "./lib/cloudflare-neuron-guard";
+import { isGeminiFreeTierFallbackEnabled, GEMINI_FREE_TIER_MODEL } from "./lib/gemini-fallback-policy.mjs";
 import { env } from "node:process";
 
 const accountId = env.CLOUDFLARE_ACCOUNT_ID ?? "missing-account-id";
@@ -13,6 +14,23 @@ const cloudflare = createOpenAICompatible({
   apiKey: apiToken,
   includeUsage: true,
 });
+
+// A Gemini key is insufficient by itself. The owner must explicitly enable
+// the fallback and attest that the Google project has no billing account.
+const geminiEnabled = isGeminiFreeTierFallbackEnabled({
+  apiKey: env.GEMINI_API_KEY,
+  enabled: env.GEMINI_FREE_TIER_ENABLED,
+  billingAccountAttached: env.GEMINI_BILLING_ACCOUNT_ATTACHED,
+});
+const gemini = geminiEnabled
+  ? createOpenAICompatible({
+      name: "google-gemini-free-tier",
+      baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+      apiKey: env.GEMINI_API_KEY!,
+      includeUsage: true,
+    })
+  : undefined;
+const geminiFallbackModel = gemini?.chatModel(GEMINI_FREE_TIER_MODEL);
 
 // Production Agent Run telemetry recorded 71,883 uncached input tokens in a
 // fresh first turn. Eve checks this cap before each subsequent model call, so
@@ -28,7 +46,10 @@ export default defineAgent({
   defaultTools: false,
   // Prevent model-initiated root-copy delegation while authorization is reviewed.
   tool: false,
-  model: wrapLanguageModel({ model: cloudflare.chatModel("@cf/zai-org/glm-4.7-flash"), middleware: createCloudflareNeuronGuard() }),
+  model: wrapLanguageModel({
+    model: cloudflare.chatModel("@cf/zai-org/glm-4.7-flash"),
+    middleware: createCloudflareNeuronGuard(geminiFallbackModel),
+  }),
   modelContextWindowTokens: 131_072,
   limits: {
     sessionUsage: ({ window }) =>

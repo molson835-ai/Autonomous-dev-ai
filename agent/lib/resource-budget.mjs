@@ -42,6 +42,8 @@ export function classifyResourceFailure(error) {
   const status = Number(error?.status ?? error?.statusCode ?? error?.cause?.status ?? 0);
   const code = String(error?.code ?? error?.cause?.code ?? "");
   if (error?.name === "EVEQuotaGuardError") return "quota_exhausted";
+  // Gemini free-tier failures must pause immediately; never retry a possibly billable request.
+  if (error?.name === "EVEGeminiFallbackError") return "provider_fallback_failed";
   // Cloudflare Workers AI uses error code 4006 for exhausted daily free neurons.
   // Check this before generic HTTP 429 handling: it is not a transient rate limit.
   if (code === "4006" || /\b4006\b/.test(message) || QUOTA_TERMS.test(message) || status === 402) {
@@ -122,6 +124,9 @@ export function evaluateResourceBudget({
   const failure = error ? classifyResourceFailure(error) : null;
   if (usage.quotaExceeded === true || failure === "quota_exhausted") {
     return { action: "pause", status: "paused", reason: "quota_exhausted", providerFallbackAllowed: false, retryAllowed: false };
+  }
+  if (failure === "provider_fallback_failed") {
+    return { action: "pause", status: "paused", reason: "provider_fallback_failed", providerFallbackAllowed: false, retryAllowed: false };
   }
   if (failure === "authorization" || failure === "permanent") {
     return { action: "stop", status: "failed", reason: failure };

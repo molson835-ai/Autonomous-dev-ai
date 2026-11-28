@@ -18,7 +18,8 @@ Keep Eve productive within the existing no-cost Workers AI allowance by charging
 - On successful generation or stream completion, middleware settles the estimate derived from provider-reported input/output token usage.
 - Valid low usage is not floored to 200. Missing or invalid usage settles conservatively at 200.
 - Interrupted streams settle conservatively at 200 rather than leaving the reservation stranded.
-- Provider error 4006 opens the daily circuit and is never retried.
+- Provider error 4006 opens the daily circuit and is never retried or sent to another provider.
+- The local 7,000-neuron safety-target response may use the separately approved Gemini free-tier fallback only when its explicit enable flag, API key, and no-billing-account attestation are all present. Provider quota circuits and telemetry failures never use this fallback.
 - Local-budget and provider-circuit HTTP 429 responses have distinct safe reason codes.
 
 ## Diagnostics
@@ -37,7 +38,7 @@ Keep Eve productive within the existing no-cost Workers AI allowance by charging
 - Reuse cached results and compact summaries.
 - Retrieve only the exact memory needed for the current task.
 - Use deterministic code for calculations, validation, formatting, status checks, and predictable workflow steps.
-- Do not retry quota failures, switch providers, or use paid fallback.
+- Do not retry provider quota failures, switch providers after Cloudflare error 4006, or use a paid fallback. The only exception is the exact local safety-target response, which may use the separately documented, owner-approved Gemini free-tier fallback when all opt-in and no-billing conditions are met.
 
 ## Zero-neuron operating mode: current boundary
 
@@ -51,7 +52,7 @@ A future deterministic dispatcher must use an explicit allowlist of operations, 
 - The local ledger cannot account for other Workers AI consumers in the Cloudflare account. The 3,000-neuron buffer reduces risk but is not a guarantee against external usage.
 - If Cloudflare rejects a request with daily quota error 4006, local accounting cannot override that provider restriction.
 - Historical fixed 1,200-neuron settlements remain in the current UTC day's local ledger. New calls use the smaller reservation and actual-usage estimate; no ledger reset or bypass is performed.
-- No paid model, plan upgrade, billing change, Production deployment, or Worker deployment is authorized by this change.
+- No paid model, plan upgrade, billing change, Production deployment, or Worker deployment is authorized by this change. Gemini fallback details and required owner setup are documented in `docs/gemini-free-tier-fallback.md`.
 
 ## Acceptance criteria
 

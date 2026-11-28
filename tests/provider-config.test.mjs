@@ -7,19 +7,28 @@ const packageJson = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),
 );
 
-test("Cloudflare Workers AI is the only configured model provider", () => {
-  assert.match(agent, /createOpenAICompatible/);
+test("Cloudflare Workers AI remains the primary provider; Gemini is separately gated", () => {
   assert.match(agent, /cloudflare\.chatModel\("@cf\/zai-org\/glm-4\.7-flash"\)/);
   assert.match(agent, /env\.CLOUDFLARE_ACCOUNT_ID/);
   assert.match(agent, /env\.CLOUDFLARE_API_TOKEN/);
-  assert.doesNotMatch(agent, /openai\/|anthropic\/|gateway/i);
+  assert.match(agent, /"missing-account-id"/);
+  assert.match(agent, /"missing-api-token"/);
+  assert.match(agent, /env\.GEMINI_API_KEY/);
+  assert.match(agent, /env\.GEMINI_FREE_TIER_ENABLED/);
+  assert.match(agent, /env\.GEMINI_BILLING_ACCOUNT_ATTACHED/);
+  assert.match(agent, /createCloudflareNeuronGuard\(geminiFallbackModel\)/);
+  assert.doesNotMatch(agent, /createOpenAI\(|createAnthropic\(|gateway\.ai/i);
   assert.equal(packageJson.dependencies["@ai-sdk/openai-compatible"], "^3.0.87");
 });
 
-test("provider configuration cannot silently use a real credential when unset", () => {
+test("Gemini fallback is explicitly opt-in and requires a no-billing attestation", () => {
+  const policy = readFileSync(new URL("../agent/lib/gemini-fallback-policy.mjs", import.meta.url), "utf8");
   assert.match(agent, /"missing-account-id"/);
   assert.match(agent, /"missing-api-token"/);
-  assert.doesNotMatch(agent, /fallback|backup|secondary/i);
+  assert.match(policy, /enabled === "true"/);
+  assert.match(policy, /billingAccountAttached === "false"/);
+  assert.match(policy, /typeof apiKey === "string"/);
+  assert.match(policy, /apiKey\.trim\(\)\.length > 0/);
 });
 
 test("provider context matches GLM-4.7-Flash while session usage remains independently bounded", () => {
@@ -31,7 +40,6 @@ test("provider context matches GLM-4.7-Flash while session usage remains indepen
   assert.match(agent, /createCloudflareNeuronGuard/);
 });
 
-
 test("provider quota exhaustion is converted to a non-retryable error for generate and stream", () => {
   const guard = readFileSync(new URL("../agent/lib/cloudflare-neuron-guard.ts", import.meta.url), "utf8");
   assert.match(guard, /export function nonRetryableQuotaError\(cause: unknown\): Error/);
@@ -40,7 +48,6 @@ test("provider quota exhaustion is converted to a non-retryable error for genera
   assert.equal((guard.match(/throw nonRetryableQuotaError\(error\)/g) ?? []).length, 2);
   assert.doesNotMatch(guard, /catch \(error\) \{ if \(isQuotaError\(error\)\) await circuit\(id\);/);
 });
-
 
 test("session input budget clears the observed first-turn prompt and permits task closeout", () => {
   const match = agent.match(/const MAX_SESSION_INPUT_TOKENS = ([0-9_]+)/);
