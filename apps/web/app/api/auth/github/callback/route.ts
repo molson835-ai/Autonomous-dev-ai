@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { EVE_AGENT_OWNER_COOKIE, isConfiguredOwnerId, OWNER_OAUTH_STATE_COOKIE, OWNER_SESSION_COOKIE } from "@/lib/owner-github";
+import { EVE_AGENT_OWNER_COOKIE, isConfiguredOwnerId, OWNER_OAUTH_RETURN_COOKIE, OWNER_OAUTH_STATE_COOKIE, OWNER_SESSION_COOKIE } from "@/lib/owner-github";
 
 export const runtime = "nodejs";
 
@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
   if (!state || !savedState || state !== savedState || !code) {
     const response = redirectToOwner();
     response.cookies.set(OWNER_OAUTH_STATE_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
+    response.cookies.set(OWNER_OAUTH_RETURN_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
     return response;
   }
 
@@ -43,7 +44,8 @@ export async function GET(request: NextRequest) {
       return response;
     }
 
-    const response = NextResponse.redirect(new URL("/owner", request.url));
+    const returnTo = request.cookies.get(OWNER_OAUTH_RETURN_COOKIE)?.value === "/" ? "/" : "/owner";
+    const response = NextResponse.redirect(new URL(returnTo, request.url));
     response.cookies.set(OWNER_SESSION_COOKIE, accessToken, {
       httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax",
       path: "/api/owner", maxAge: 8 * 60 * 60,
