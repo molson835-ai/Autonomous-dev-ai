@@ -50,5 +50,6 @@ test("OAuth return target is restricted to Eve chat or the Owner Console", () =>
   assert.match(authCallback, /request\.cookies\.get\(OWNER_OAUTH_RETURN_COOKIE\)/);
   assert.match(authCallback, /isConfiguredOwnerId\(user\.id\)/);
   assert.match(authCallback, /new URL\(returnTo, request\.url\)/);
+  assert.equal((authCallback.match(/set\(OWNER_OAUTH_RETURN_COOKIE/g) ?? []).length, 4);
   assert.doesNotMatch(authCallback, /searchParams\.get\("return_to"\)/);
 });
