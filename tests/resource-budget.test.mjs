@@ -148,3 +148,15 @@ test("daily neuron gate preserves reserve and reports 50, 70, and 85 percent thr
   assert.equal(check(7000).reason, "daily_neuron_budget_reached");
   assert.equal(check(6000).remainingBudget, 1000);
 });
+
+test("Gemini fallback failures pause immediately without retry or another provider", () => {
+  const error = Object.assign(new Error("safe Gemini fallback failure"), { name: "EVEGeminiFallbackError", status: 429 });
+  assert.equal(classifyResourceFailure(error), "provider_fallback_failed");
+  assert.deepEqual(evaluateResourceBudget({ task: { status: "running" }, error }), {
+    action: "pause",
+    status: "paused",
+    reason: "provider_fallback_failed",
+    providerFallbackAllowed: false,
+    retryAllowed: false
+  });
+});
