@@ -3,7 +3,7 @@ import { memoryRequest } from "./memory-client";
 import { buildQuotaSettlement } from "./neuron-budget.mjs";
 import { handleStreamReadFailure } from "./stream-quota-error.mjs";
 import { summarizeModelInput, summarizeModelUsage } from "./model-input-profile.mjs";
-import { reserveOrRunWithGeminiFallback } from "./gemini-fallback-runner.mjs";
+import { createGeminiFallbackError, reserveOrRunWithGeminiFallback } from "./gemini-fallback-runner.mjs";
 const MODEL_ID = "@cf/zai-org/glm-4.7-flash";
 const GEMINI_MODEL_ID = "gemini-3.8-flash";
 const MAX_OUTPUT_TOKENS = 1024;
@@ -111,12 +111,7 @@ export function createCloudflareNeuronGuard(fallbackModel?: LanguageModelV4): La
               controller.enqueue(next.value);
             } catch (streamError) {
               try { reader.releaseLock(); } catch { /* Reader may already be released. */ }
-              controller.error(new Error("EVE's Gemini free-tier fallback failed or reached its limit. Model work is paused; no retry or paid provider will be attempted.", {
-                cause: streamError,
-              }));
-              // Preserve the stable classification used by the resource-budget gate.
-              // The error is deliberately a plain Error, not a retryable provider error.
-              (controller as ReadableStreamDefaultController & { __eveGeminiFailure?: boolean }).__eveGeminiFailure = true;
+              controller.error(createGeminiFallbackError(streamError));
             }
           },
           async cancel(reason) {
