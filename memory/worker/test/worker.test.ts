@@ -281,7 +281,8 @@ describe("shared daily neuron quota coordinator", () => {
 
   it("does not claim approved work when the provider quota circuit is already open", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-11-28T12:00:00.000Z"));
+    // Keep this simulated circuit day separate from the real date after fake timers reset.
+    vi.setSystemTime(new Date("2035-11-28T12:00:00.000Z"));
     const create = await request("/v1/tasks", { method: "POST", body: JSON.stringify({
       idempotency_key: `TASK-QUOTA-PREFLIGHT-CIRCUIT-${crypto.randomUUID()}`,
       task_type: "verification", title: "Quota preflight circuit test",

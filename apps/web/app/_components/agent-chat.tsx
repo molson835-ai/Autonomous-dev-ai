@@ -169,9 +169,7 @@ export function AgentChat({
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
-      {showConversationLayout ? (
-        <ChatHeader canStartNewChat={activeSessionId !== undefined} />
-      ) : null}
+      <ChatHeader canStartNewChat={activeSessionId !== undefined} />
 
       {showConversationLayout ? (
         <Conversation
@@ -225,6 +223,9 @@ export function AgentChat({
         {showConversationLayout ? null : (
           <div className="flex flex-col items-center gap-3 text-center">
             <h1 className="font-medium text-5xl tracking-tighter">{AGENT_NAME}</h1>
+            <p className="max-w-sm text-sm text-muted-foreground">
+              Talk directly with Eve. Sign in to let her start work covered by your approved goals.
+            </p>
           </div>
         )}
         <div className="w-full">{composer}</div>
@@ -287,19 +288,27 @@ function ChatHeader({ canStartNewChat }: { readonly canStartNewChat: boolean }) 
     <header className="pointer-events-none fixed top-0 right-0 left-0 z-20 h-14">
       <div className="relative mx-auto flex h-full w-full max-w-3xl items-center justify-center bg-background px-24">
         <span className="truncate text-muted-foreground text-sm">{AGENT_NAME}</span>
-        {canStartNewChat ? (
-          <Button
-            aria-label="Start a new chat"
-            className="pointer-events-auto fixed top-3 right-6 pr-4"
-            onClick={() => window.location.assign("/s")}
-            size="sm"
-            type="button"
-            variant="ghost"
+        <div className="pointer-events-auto fixed top-3 right-4 flex items-center gap-1">
+          <a
+            className="rounded-lg border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted"
+            href="/api/auth/github?return_to=%2F"
           >
-            <PlusIcon className="size-4" />
-            <span className="hidden font-normal text-sm sm:inline">New chat</span>
-          </Button>
-        ) : null}
+            Owner sign-in
+          </a>
+          {canStartNewChat ? (
+            <Button
+              aria-label="Start a new chat"
+              className="pr-3"
+              onClick={() => window.location.assign("/s")}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              <PlusIcon className="size-4" />
+              <span className="hidden font-normal text-sm sm:inline">New chat</span>
+            </Button>
+          ) : null}
+        </div>
       </div>
     </header>
   );
