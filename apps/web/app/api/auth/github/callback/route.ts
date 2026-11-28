@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
     const response = redirectToOwner();
     response.cookies.set(OWNER_OAUTH_STATE_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
     response.cookies.set(OWNER_OAUTH_RETURN_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
+    response.cookies.set(OWNER_OAUTH_RETURN_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
     return response;
   }
 
@@ -41,6 +42,7 @@ export async function GET(request: NextRequest) {
     if (!user || typeof user !== "object" || !("login" in user) || typeof user.login !== "string" || !("id" in user) || !isConfiguredOwnerId(user.id)) {
       const response = redirectToOwner();
       response.cookies.set(OWNER_OAUTH_STATE_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
+    response.cookies.set(OWNER_OAUTH_RETURN_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
       return response;
     }
 
@@ -58,10 +60,12 @@ export async function GET(request: NextRequest) {
       path: "/eve", maxAge: 8 * 60 * 60,
     });
     response.cookies.set(OWNER_OAUTH_STATE_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
+    response.cookies.set(OWNER_OAUTH_RETURN_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
     return response;
   } catch {
     const response = redirectToOwner();
     response.cookies.set(OWNER_OAUTH_STATE_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
+    response.cookies.set(OWNER_OAUTH_RETURN_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
     return response;
   }
 }
