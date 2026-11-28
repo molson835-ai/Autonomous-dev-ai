@@ -12,7 +12,6 @@ export async function GET(request: NextRequest) {
     const response = redirectToOwner();
     response.cookies.set(OWNER_OAUTH_STATE_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
     response.cookies.set(OWNER_OAUTH_RETURN_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
-    response.cookies.set(OWNER_OAUTH_RETURN_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/github/callback", maxAge: 0 });
     return response;
   }
 
