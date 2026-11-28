@@ -77,3 +77,10 @@ change.
 - If any precondition is missing, Gemini is not called.
 - This change does not change task authorization, owner approval, spending,
   memory approval, external-action, merge, or deployment controls.
+
+## Official references
+
+- [Gemini Developer API pricing and free-tier model eligibility](https://ai.google.dev/gemini-api/docs/pricing)
+- [Gemini API rate limits](https://ai.google.dev/gemini-api/docs/rate-limits)
+- [Gemini API OpenAI compatibility](https://ai.google.dev/gemini-api/docs/openai)
+- [Create an API key in Google AI Studio](https://aistudio.google.com/apikey)
