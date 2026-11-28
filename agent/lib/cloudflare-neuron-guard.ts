@@ -1,9 +1,11 @@
-import type { LanguageModelV4Middleware } from "@ai-sdk/provider";
+import type { LanguageModelV4, LanguageModelV4Middleware } from "@ai-sdk/provider";
 import { memoryRequest } from "./memory-client";
 import { buildQuotaSettlement } from "./neuron-budget.mjs";
 import { handleStreamReadFailure } from "./stream-quota-error.mjs";
 import { summarizeModelInput, summarizeModelUsage } from "./model-input-profile.mjs";
+import { isLocalNeuronBudgetFallback } from "./gemini-fallback-policy.mjs";
 const MODEL_ID = "@cf/zai-org/glm-4.7-flash";
+const GEMINI_MODEL_ID = "gemini-3.8-flash";
 const MAX_OUTPUT_TOKENS = 1024;
 const RESERVATION_NEURONS = 200;
 function stop(reason: string): never { throw new Error("EVE quota guard paused model work: " + reason); }
@@ -14,6 +16,13 @@ function stop(reason: string): never { throw new Error("EVE quota guard paused m
 export function nonRetryableQuotaError(cause: unknown): Error {
   const error = new Error("EVE stopped this model request because the Cloudflare daily neuron allocation is exhausted.");
   error.name = "EVEQuotaExhaustedError";
+  (error as Error & { cause?: unknown }).cause = cause;
+  return error;
+}
+
+function nonRetryableGeminiError(cause: unknown): Error {
+  const error = new Error("EVE's Gemini free-tier fallback failed or reached its limit. Model work is paused; no retry or paid provider will be attempted.");
+  error.name = "EVEGeminiFallbackError";
   (error as Error & { cause?: unknown }).cause = cause;
   return error;
 }
@@ -31,9 +40,10 @@ async function reserve() {
 function logInputProfile(
   params: { prompt?: unknown[]; tools?: unknown[] },
   usage?: unknown,
+  model = MODEL_ID,
 ) {
   console.info("EVE_MODEL_INPUT_PROFILE", {
-    model: MODEL_ID,
+    model,
     environment: process.env.VERCEL_ENV ?? "unknown",
     ...summarizeModelInput(params as Parameters<typeof summarizeModelInput>[0]),
     ...summarizeModelUsage(usage),
@@ -59,14 +69,32 @@ function isQuotaError(error: unknown) {
   return /\b4006\b|daily free allocation|neurons? (?:allocation|limit|quota|exhausted)/i
     .test([e?.code,e?.message,e?.cause?.code,e?.cause?.message].join(" "));
 }
-export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
+
+export function createCloudflareNeuronGuard(fallbackModel?: LanguageModelV4): LanguageModelV4Middleware {
   return {
     specificationVersion: "v4",
     transformParams: async ({ params }) => ({
       ...params, maxOutputTokens: Math.min(params.maxOutputTokens ?? MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS),
     }),
     wrapGenerate: async ({ doGenerate, params }) => {
-      const id = await reserve();
+      let id: string;
+      try {
+        id = await reserve();
+      } catch (error) {
+        // Gemini is eligible only for Eve's local safety-target block. Actual
+        // Cloudflare quota exhaustion and every other reservation failure stop.
+        if (fallbackModel && isLocalNeuronBudgetFallback(error)) {
+          console.warn("EVE_MODEL_FALLBACK", { from: MODEL_ID, to: GEMINI_MODEL_ID, reason: "local_neuron_budget_reached" });
+          try {
+            const result = await fallbackModel.doGenerate(params);
+            logInputProfile(params, result.usage, GEMINI_MODEL_ID);
+            return result;
+          } catch (fallbackError) {
+            throw nonRetryableGeminiError(fallbackError);
+          }
+        }
+        throw error;
+      }
       let result;
       try { result = await doGenerate(); }
       catch (error) { logInputProfile(params); if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id, undefined, "provider_error"); throw error; }
@@ -75,7 +103,44 @@ export function createCloudflareNeuronGuard(): LanguageModelV4Middleware {
       return result;
     },
     wrapStream: async ({ doStream, params }) => {
-      const id = await reserve();
+      let id: string;
+      try {
+        id = await reserve();
+      } catch (error) {
+        if (fallbackModel && isLocalNeuronBudgetFallback(error)) {
+          console.warn("EVE_MODEL_FALLBACK", { from: MODEL_ID, to: GEMINI_MODEL_ID, reason: "local_neuron_budget_reached" });
+          try {
+            const result = await fallbackModel.doStream(params);
+            logInputProfile(params, undefined, GEMINI_MODEL_ID);
+            const reader = result.stream.getReader();
+            const stream = new ReadableStream({
+              async pull(controller) {
+                try {
+                  const next = await reader.read();
+                  if (next.done) {
+                    reader.releaseLock();
+                    controller.close();
+                    return;
+                  }
+                  controller.enqueue(next.value);
+                } catch (streamError) {
+                  try { reader.releaseLock(); } catch { /* Reader may already be released. */ }
+                  controller.error(nonRetryableGeminiError(streamError));
+                }
+              },
+              async cancel(reason) {
+                try { await reader.cancel(reason); }
+                finally { try { reader.releaseLock(); } catch { /* Reader may already be released. */ } }
+              },
+            }) as typeof result.stream;
+            return { ...result, stream };
+          } catch (fallbackError) {
+            if ((fallbackError as Error)?.name === "EVEGeminiFallbackError") throw fallbackError;
+            throw nonRetryableGeminiError(fallbackError);
+          }
+        }
+        throw error;
+      }
       let result;
       try { result = await doStream(); }
       catch (error) { logInputProfile(params); if (isQuotaError(error)) { await circuit(id); throw nonRetryableQuotaError(error); } await settle(id, undefined, "provider_error"); throw error; }
